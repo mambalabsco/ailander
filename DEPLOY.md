@@ -250,15 +250,14 @@ ufw --force enable
 
 El 3000 **no se abre**: solo lo usa Caddy desde la propia máquina.
 
-## 7. El App Proxy de Shopify
+## 7. Shopify
 
-En la app personalizada de la tienda, apartado **App proxy**:
+Está en [docs/shopify.md](docs/shopify.md), con los pasos completos.
 
-- Subpath prefix: `apps`
-- Subpath: `lp`
-- Proxy URL: `https://tu-dominio.com/api/lp`
-
-A partir de ahí, `tutienda.com/apps/lp/<prueba>` sirve la variante que toque.
+Un aviso que costó descubrir: **las apps ya no se crean desde el panel de la
+tienda**. Shopify retiró esa opción y ahora se hacen en el Dev Dashboard, con una
+cuenta de socio gratuita. Las apps antiguas siguen funcionando, pero una nueva no
+se puede crear por ahí.
 
 ## 8. Las URLs de Auth
 
