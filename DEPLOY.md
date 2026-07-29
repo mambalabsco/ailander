@@ -273,10 +273,24 @@ los correos no vuelve a la aplicación.
 
 ## Actualizar después
 
+Un solo comando:
+
 ```bash
-cd ~/plataforma-ia && git pull && npm ci && npm run build
-sudo systemctl restart plataforma
+cd /home/plataforma/plataforma-ia && sudo ./actualizar.sh
 ```
+
+Hace solo lo que hace falta: trae los cambios, reinstala dependencias **solo si
+cambiaron**, aplica migraciones **solo si hay nuevas**, compila, reinicia y
+comprueba que la aplicación responde de verdad —no solo que el proceso viva—.
+
+Si no hay nada nuevo, lo dice y sale en un segundo.
+
+Dos cosas que avisa pero no hace:
+
+- **Si cambió `supabase/config.toml`**, te recuerda subirlo desde tu Mac: el CLI
+  de Supabase necesita un token personal que no está en el servidor.
+- **Si el arranque falla**, imprime las últimas líneas del registro en vez de
+  dejarte adivinando.
 
 ## Lo que hay que vigilar
 
