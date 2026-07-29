@@ -146,7 +146,11 @@ export async function GET(
 (function(){
   var v = ${JSON.stringify(visitor)};
   document.cookie = "lp_v=" + v + ";path=/;max-age=" + (60*60*24*90) + ";SameSite=Lax";
-  try { localStorage.setItem("lp_variant", ${JSON.stringify(chosen.id)}); } catch (e) {}
+  try {
+    localStorage.setItem("lp_variant", ${JSON.stringify(chosen.id)});
+    // El pixel de Shopify corre en otra página y necesita los dos.
+    localStorage.setItem("lp_experiment", ${JSON.stringify(experiment.id)});
+  } catch (e) {}
 
   window.__lpTrack = function(kind, value, currency){
     try {
