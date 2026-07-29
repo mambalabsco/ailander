@@ -71,6 +71,10 @@ export interface Store {
    * token. Nunca viaja al navegador; en la interfaz solo se sabe si está puesto.
    */
   shopifyAdminToken?: string;
+  /** Clave pública de la app de Shopify de esta tienda. */
+  shopifyApiKey?: string;
+  /** Secreto de esa app. Nunca viaja al navegador. */
+  shopifyApiSecret?: string;
   createdAt: string;
 }
 

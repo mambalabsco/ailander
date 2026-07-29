@@ -99,7 +99,14 @@ export async function updateStore(
   patch: Partial<
     Pick<
       Store,
-      "name" | "brand" | "domain" | "platform" | "mentionBrandInCopy" | "shopifyAdminToken"
+      | "name"
+      | "brand"
+      | "domain"
+      | "platform"
+      | "mentionBrandInCopy"
+      | "shopifyAdminToken"
+      | "shopifyApiKey"
+      | "shopifyApiSecret"
     >
   >,
 ): Promise<Store | null> {
@@ -124,6 +131,8 @@ export async function updateStore(
   if (patch.shopifyAdminToken) {
     changes.shopify_admin_token = patch.shopifyAdminToken;
   }
+  if (patch.shopifyApiKey) changes.shopify_api_key = patch.shopifyApiKey;
+  if (patch.shopifyApiSecret) changes.shopify_api_secret = patch.shopifyApiSecret;
 
   if (Object.keys(changes).length === 0) return findStore(id);
 

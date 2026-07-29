@@ -15,7 +15,7 @@ import {
   addMarketAction,
   createStoreAction,
   deleteStoreAction,
-  saveStoreTokenAction,
+  saveStoreAppAction,
   removeMarketAction,
   updateStoreAction,
 } from "@/app/stores/actions";
@@ -57,8 +57,9 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
   const [newStore, setNewStore] = useState(emptyStore);
   const [marketDrafts, setMarketDrafts] = useState<Record<string, typeof emptyMarket>>({});
   const [openMarketForm, setOpenMarketForm] = useState<string | null>(null);
-  // Un borrador por tienda: el guardado nunca vuelve del servidor.
-  const [tokenDrafts, setTokenDrafts] = useState<Record<string, string>>({});
+  // Borradores por tienda: lo guardado nunca vuelve del servidor.
+  const [appDrafts, setAppDrafts] = useState<Record<string, { key?: string; secret?: string }>>({});
+  const [shopDrafts, setShopDrafts] = useState<Record<string, string>>({});
 
   const run = (task: () => Promise<unknown>, onDone?: () => void) => {
     setError(null);
@@ -275,33 +276,85 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                         {store.shopifyAdminToken ? "Con token" : "Sin token"}
                       </span>
                     </div>
-                    <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
-                      Ajustes → Apps → Desarrollar apps, con permisos{" "}
-                      <code>write_content</code> y <code>write_files</code>. No pasa por revisión de
-                      Shopify.
+                    <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+                      Crea una app en el Dev Dashboard de Shopify, pega aquí su clave y su secreto, y
+                      pulsa Conectar. El token lo consigue la plataforma sola.
                     </p>
-                    <div className="flex flex-wrap gap-2">
+
+                    <div className="mb-2 grid gap-2 md:grid-cols-2">
+                      <TextField
+                        value={appDrafts[store.id]?.key ?? ""}
+                        onChange={(event) =>
+                          setAppDrafts({
+                            ...appDrafts,
+                            [store.id]: { ...(appDrafts[store.id] ?? {}), key: event.target.value },
+                          })
+                        }
+                        placeholder={store.shopifyApiKey ? "Guardada — escribe otra" : "Client ID"}
+                      />
                       <TextField
                         type="password"
-                        value={tokenDrafts[store.id] ?? ""}
+                        value={appDrafts[store.id]?.secret ?? ""}
                         onChange={(event) =>
-                          setTokenDrafts({ ...tokenDrafts, [store.id]: event.target.value })
+                          setAppDrafts({
+                            ...appDrafts,
+                            [store.id]: {
+                              ...(appDrafts[store.id] ?? {}),
+                              secret: event.target.value,
+                            },
+                          })
                         }
-                        placeholder={
-                          store.shopifyAdminToken ? "Guardado — escribe uno nuevo" : "shpat_..."
-                        }
+                        placeholder={store.shopifyApiSecret ? "Guardado" : "Client secret"}
                       />
+                    </div>
+
+                    <div className="mb-3 flex flex-wrap gap-2">
                       <Button
-                        disabled={isPending || !tokenDrafts[store.id]}
+                        disabled={
+                          isPending ||
+                          !appDrafts[store.id]?.key ||
+                          !appDrafts[store.id]?.secret
+                        }
                         onClick={() =>
-                          run(() =>
-                            saveStoreTokenAction(store.id, tokenDrafts[store.id] ?? ""),
-                          () => setTokenDrafts({ ...tokenDrafts, [store.id]: "" }))
+                          run(
+                            () =>
+                              saveStoreAppAction(
+                                store.id,
+                                appDrafts[store.id]?.key ?? "",
+                                appDrafts[store.id]?.secret ?? "",
+                              ),
+                            () => setAppDrafts({ ...appDrafts, [store.id]: {} }),
+                          )
                         }
                       >
-                        Guardar token
+                        Guardar credenciales
                       </Button>
                     </div>
+
+                    {/* El dominio .myshopify.com, no el propio: OAuth solo
+                        reconoce el primero. */}
+                    {store.shopifyApiKey ? (
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="text-sm">
+                          <span className="mb-1 block text-slate-500 dark:text-slate-400">
+                            Dominio .myshopify.com
+                          </span>
+                          <TextField
+                            value={shopDrafts[store.id] ?? ""}
+                            onChange={(event) =>
+                              setShopDrafts({ ...shopDrafts, [store.id]: event.target.value })
+                            }
+                            placeholder="mitienda.myshopify.com"
+                          />
+                        </label>
+                        <a
+                          href={`/api/shopify/instalar?tienda=${store.id}&shop=${encodeURIComponent(shopDrafts[store.id] ?? "")}`}
+                          className={`rounded-full px-4 py-2 text-sm font-medium ${shopDrafts[store.id] ? "bg-violet-600 text-white" : "pointer-events-none bg-slate-200 text-slate-400 dark:bg-slate-800"}`}
+                        >
+                          Conectar con Shopify
+                        </a>
+                      </div>
+                    ) : null}
                   </div>
 
                   <label className="flex cursor-pointer items-start gap-3">

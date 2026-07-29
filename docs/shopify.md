@@ -22,6 +22,16 @@ Suena a más de lo que es: son cinco minutos y se hace una sola vez por tienda.
 
 ## Parte 1 · La app y el token
 
+**El token no aparece en pantalla.** Las apps del Dev Dashboard no lo enseñan:
+hay que conseguirlo con OAuth, y de eso se encarga la plataforma. Tú solo pegas
+la clave y el secreto de la app y pulsas un botón.
+
+Ojo con confundirlos: en la misma pantalla de Shopify verás un valor que empieza
+por `shpss_`. **Ese es el secreto, no el token.** El token de acceso empieza por
+`shpat_` y solo aparece después del intercambio.
+
+### Los pasos
+
 1. Entra en [partners.shopify.com](https://partners.shopify.com) y crea la cuenta
    si no la tienes.
 2. **Apps → Create app → Create app manually.** Ponle un nombre, por ejemplo
@@ -38,12 +48,25 @@ Suena a más de lo que es: son cinco minutos y se hace una sola vez por tienda.
    - `write_files` — subir las imágenes
    - `read_orders` — leer los pedidos para las pruebas A/B
 
-5. Genera el enlace de instalación y ábrelo. Instala la app en la tienda.
-6. Al terminar, Shopify te da el **Admin API access token** (empieza por
-   `shpat_`). **Se enseña una sola vez**: cópialo ahora.
-7. En la plataforma: **Tiendas** → la tienda → pega el token → **Guardar token**.
+5. En **Configuration → URLs**, pon:
+
+   - **App URL:** `https://aitools.mambalabs.co`
+   - **Allowed redirection URL:** `https://aitools.mambalabs.co/api/shopify/callback`
+
+6. Copia la **Client ID** y el **Client secret** de la app.
+7. En la plataforma: **Tiendas** → la tienda → pega los dos → **Guardar
+   credenciales**.
+8. Escribe el dominio `.myshopify.com` de la tienda y pulsa **Conectar con
+   Shopify**. Apruebas los permisos y vuelves solo.
 
 Con eso el botón «Publicar en Shopify» ya funciona.
+
+### Una app por organización
+
+Una app pertenece a la organización donde la creaste y **no se puede instalar en
+tiendas de otra**. Si Naturox México y Naturox Chile están en organizaciones
+distintas, hacen falta dos apps, una por cada una. La plataforma guarda las
+credenciales por tienda justamente por eso.
 
 ## Parte 2 · El App Proxy
 

@@ -177,6 +177,21 @@ export async function deleteStoreAction(storeId: string) {
  * resto de campos, cada edición de cualquier otro dato lo sobrescribiría con la
  * cadena vacía y lo borraría sin que nadie se diera cuenta.
  */
+/** Guarda la clave y el secreto de la app de Shopify de una tienda. */
+export async function saveStoreAppAction(storeId: unknown, apiKey: unknown, apiSecret: unknown) {
+  const id = typeof storeId === "string" ? storeId.trim() : "";
+  const key = typeof apiKey === "string" ? apiKey.trim() : "";
+  const secret = typeof apiSecret === "string" ? apiSecret.trim() : "";
+
+  if (!id) throw new Error("Falta la tienda.");
+  if (!key || !secret) throw new Error("Hacen falta la clave y el secreto de la app.");
+
+  const { updateStore } = await import("@/lib/data/stores");
+  await updateStore(id, { shopifyApiKey: key, shopifyApiSecret: secret });
+
+  revalidatePath("/stores");
+}
+
 export async function saveStoreTokenAction(storeId: unknown, token: unknown) {
   const id = typeof storeId === "string" ? storeId.trim() : "";
   const value = typeof token === "string" ? token.trim() : "";
