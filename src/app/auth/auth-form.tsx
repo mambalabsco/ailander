@@ -102,6 +102,17 @@ export function AuthForm({ mode, action, next, notice }: AuthFormProps) {
           <Button type="submit" variant="primary" disabled={isPending} className="w-full justify-center">
             {isPending ? copy.pending : copy.submit}
           </Button>
+
+      {mode === "login" ? (
+        <p className="text-sm">
+          <a
+            href="/auth/recuperar"
+            className="text-slate-500 hover:underline dark:text-slate-400"
+          >
+            ¿Olvidaste la contraseña?
+          </a>
+        </p>
+      ) : null}
         </form>
 
         <p className="mt-5 text-center text-sm text-slate-500 dark:text-slate-400">

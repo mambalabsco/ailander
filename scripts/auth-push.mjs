@@ -64,6 +64,10 @@ if (!siteUrl) {
 env.SUPABASE_AUTH_CALLBACK_URL =
   env.SUPABASE_AUTH_CALLBACK_URL || `${siteUrl.replace(/\/$/, "")}/auth/callback`;
 
+// Cubre el callback con parámetros, que es como vuelve el enlace de recuperación.
+env.SUPABASE_AUTH_WILDCARD =
+  env.SUPABASE_AUTH_WILDCARD || `${siteUrl.replace(/\/$/, "")}/auth/**`;
+
 // Se enseña antes de subir: es el valor que acabará en los correos que reciben
 // tus usuarios, y conviene mirarlo una vez.
 console.log(`site_url que se va a subir: ${siteUrl}`);

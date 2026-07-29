@@ -78,3 +78,66 @@ export async function signOut() {
   revalidatePath("/", "layout");
   redirect("/auth/login");
 }
+
+/* ---------------------------- Recuperar la contraseña ---------------------------- */
+
+/**
+ * Manda el correo con el enlace para poner una contraseña nueva.
+ *
+ * **Responde lo mismo exista o no la cuenta.** Decir «ese correo no está
+ * registrado» convertiría el formulario en un comprobador de qué cuentas hay
+ * dadas de alta, que es justo lo que se evita en el resto del archivo.
+ */
+export async function requestPasswordReset(
+  _prev: AuthResult | null,
+  formData: FormData,
+): Promise<AuthResult & { sent?: boolean }> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) return { error: "Escribe un correo válido." };
+
+  const supabase = await createClient();
+
+  /*
+   * El enlace vuelve a `/auth/callback` con `next` apuntando al formulario de
+   * cambio: es el mismo camino que usa la confirmación de registro, así que
+   * basta con que esa URL esté en la lista blanca de Supabase.
+   */
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${site.replace(/\/$/, "")}/auth/callback?next=/auth/nueva-clave`,
+  });
+
+  return { sent: true };
+}
+
+/**
+ * Guarda la contraseña nueva.
+ *
+ * Solo funciona con la sesión temporal que abre el enlace del correo. Sin ella
+ * Supabase rechaza el cambio, que es lo que impide que alguien cambie la clave
+ * de otro entrando por esta ruta.
+ */
+export async function updatePassword(
+  _prev: AuthResult | null,
+  formData: FormData,
+): Promise<AuthResult> {
+  const password = String(formData.get("password") ?? "");
+  const repeat = String(formData.get("repeat") ?? "");
+
+  if (password.length < 8) return { error: "La contraseña debe tener al menos 8 caracteres." };
+  if (password !== repeat) return { error: "Las dos contraseñas no coinciden." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return {
+      error:
+        "No se pudo cambiar la contraseña. El enlace del correo caduca en una hora: pide otro.",
+    };
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/");
+}

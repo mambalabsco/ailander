@@ -29,6 +29,11 @@ additional_redirect_urls = [
   # dentro de una cadena: escrito así, el callback quedaría literalmente mal.
   # `npm run auth:push` la calcula sola a partir de NEXT_PUBLIC_SITE_URL.
   "env(SUPABASE_AUTH_CALLBACK_URL)",
+  # El enlace de recuperación vuelve al callback **con parámetros**
+  # (`?next=/auth/nueva-clave`), y la lista blanca compara la URL entera. El
+  # comodín cubre esos casos sin abrir la puerta a otros dominios: sigue atado
+  # al tuyo, así que no se puede usar para redirigir a una página de phishing.
+  "env(SUPABASE_AUTH_WILDCARD)",
 ]
 
 enable_signup = true
