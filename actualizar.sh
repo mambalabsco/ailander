@@ -37,10 +37,38 @@ como git pull --ff-only
 
 DESPUES=$(como git rev-parse HEAD)
 
+# ---------------------------------------------------------------------------
+# ¿Está compilado lo que hay en el disco?
+#
+# `next start` sirve un paquete **ya compilado**: traer código con `git pull` y
+# reiniciar el servicio no cambia nada de lo que ve el visitante. Es el fallo
+# más desconcertante posible —la versión correcta en el disco, la interfaz vieja
+# en pantalla— y pasó de verdad.
+#
+# Se compara la fecha del último commit con la del build.
+# ---------------------------------------------------------------------------
+
+build_viejo() {
+  [ -f .next/BUILD_ID ] || return 0
+  local commit build
+  commit=$(como git log -1 --format=%ct)
+  build=$(stat -c %Y .next/BUILD_ID 2>/dev/null || echo 0)
+  [ "$build" -lt "$commit" ]
+}
+
 if [ "$ANTES" = "$DESPUES" ]; then
-  verde "Ya estaba al día."
+  if build_viejo; then
+    rojo "No hay cambios nuevos, pero lo compilado es más antiguo que el código."
+    rojo "Seguramente se hizo un «git pull» sin compilar. Se arregla ahora."
+    como npm run build
+    systemctl restart plataforma
+    sleep 4
+    verde "Recompilado."
+  else
+    verde "Ya estaba al día."
+  fi
+
   gris "Versión: $(como git rev-parse --short HEAD) — $(como git log -1 --pretty=%s)"
-  gris "Si esperabas un cambio y no está, comprueba que se subió: git log origin/main -1"
   exit 0
 fi
 

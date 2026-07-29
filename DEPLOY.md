@@ -292,6 +292,21 @@ Dos cosas que avisa pero no hace:
 - **Si el arranque falla**, imprime las últimas líneas del registro en vez de
   dejarte adivinando.
 
+## Nunca actualices a mano
+
+```bash
+git pull && systemctl restart plataforma   # ← esto NO actualiza nada
+```
+
+`next start` sirve un paquete **ya compilado**. Traer el código y reiniciar deja
+la aplicación exactamente igual que estaba, y el resultado es el fallo más
+desconcertante posible: la versión correcta en el disco y la interfaz vieja en
+pantalla.
+
+Usa siempre `sudo ./actualizar.sh`, que compila. Y si alguna vez se cuela un
+`git pull` suelto, el actualizador lo detecta —compara la fecha del build con la
+del último commit— y recompila solo.
+
 ## Lo que hay que vigilar
 
 - **Los trabajos en marcha mueren al reiniciar.** El panel los marca como
