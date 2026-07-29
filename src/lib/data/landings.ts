@@ -1,0 +1,161 @@
+import "server-only";
+
+import { requireContext } from "@/lib/supabase/session";
+import type {
+  LandingAuthor,
+  LandingComment,
+  LandingHeader,
+  LandingImageSlot,
+  LandingPage,
+  LandingSection,
+} from "@/types/landing";
+
+/** Publirreportajes guardados como página, no como texto plano. */
+
+function toLanding(row: {
+  id: string;
+  product_id: string;
+  copy_id: string | null;
+  title: string;
+  slug: string;
+  method_id: string | null;
+  header: unknown;
+  author: unknown;
+  sections: unknown;
+  image_slots: unknown;
+  comments: unknown;
+  hide_theme_chrome: boolean;
+  utm_campaign: string | null;
+  shopify_page_id: string | null;
+  shopify_url: string | null;
+  published_at: string | null;
+  created_at: string;
+}): LandingPage {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    copyId: row.copy_id ?? undefined,
+    title: row.title,
+    slug: row.slug,
+    methodId: row.method_id ?? undefined,
+    header: (row.header as LandingHeader) ?? undefined,
+    author: (row.author as LandingAuthor) ?? undefined,
+    sections: (row.sections as LandingSection[]) ?? [],
+    imageSlots: (row.image_slots as LandingImageSlot[]) ?? [],
+    comments: (row.comments as LandingComment[]) ?? [],
+    hideThemeChrome: row.hide_theme_chrome,
+    utmCampaign: row.utm_campaign ?? undefined,
+    shopifyPageId: row.shopify_page_id ?? undefined,
+    shopifyUrl: row.shopify_url ?? undefined,
+    publishedAt: row.published_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+export async function saveLanding(input: {
+  productId: string;
+  copyId?: string;
+  title: string;
+  slug: string;
+  methodId?: string;
+  header?: LandingHeader;
+  author?: LandingAuthor;
+  sections: LandingSection[];
+  imageSlots: LandingImageSlot[];
+  comments: LandingComment[];
+}): Promise<LandingPage> {
+  const { supabase, userId } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("landing_pages")
+    .insert({
+      user_id: userId,
+      product_id: input.productId,
+      copy_id: input.copyId ?? null,
+      title: input.title,
+      slug: input.slug,
+      method_id: input.methodId ?? null,
+      header: (input.header ?? null) as never,
+      author: (input.author ?? null) as never,
+      sections: input.sections as never,
+      image_slots: input.imageSlots as never,
+      comments: input.comments as never,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`No se pudo guardar la página: ${error.message}`);
+  return toLanding(data);
+}
+
+export async function listLandings(productId: string): Promise<LandingPage[]> {
+  const { supabase } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("landing_pages")
+    .select("*")
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`No se pudieron leer las páginas: ${error.message}`);
+  return (data ?? []).map(toLanding);
+}
+
+export async function readLanding(id: string): Promise<LandingPage | null> {
+  const { supabase } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("landing_pages")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw new Error(`No se pudo leer la página: ${error.message}`);
+  return data ? toLanding(data) : null;
+}
+
+export async function deleteLanding(id: string): Promise<void> {
+  const { supabase } = await requireContext();
+  await supabase.from("landing_pages").delete().eq("id", id);
+}
+
+/** Anota la URL de Shopify de una imagen, para no volver a subirla. */
+export async function setShopifyUrl(imageId: string, url: string): Promise<void> {
+  const { supabase } = await requireContext();
+  await supabase.from("product_images").update({ shopify_url: url }).eq("id", imageId);
+}
+
+/** Deja constancia de dónde quedó publicada la página. */
+export async function markLandingPublished(
+  id: string,
+  shopifyPageId: string,
+  url: string,
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  await supabase
+    .from("landing_pages")
+    .update({
+      shopify_page_id: shopifyPageId,
+      shopify_url: url,
+      published_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+}
+
+/** Cambia los ajustes de una página sin tocar su contenido. */
+export async function updateLandingSettings(
+  id: string,
+  patch: { hideThemeChrome?: boolean; utmCampaign?: string },
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const changes: { hide_theme_chrome?: boolean; utm_campaign?: string | null } = {};
+  if (patch.hideThemeChrome !== undefined) changes.hide_theme_chrome = patch.hideThemeChrome;
+  if (patch.utmCampaign !== undefined) changes.utm_campaign = patch.utmCampaign || null;
+
+  if (Object.keys(changes).length === 0) return;
+
+  const { error } = await supabase.from("landing_pages").update(changes).eq("id", id);
+  if (error) throw new Error(`No se pudieron guardar los ajustes: ${error.message}`);
+}

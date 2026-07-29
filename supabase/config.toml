@@ -1,0 +1,67 @@
+# Configuración del proyecto.
+#
+# Lo que aquí se declara deja de ser un ajuste que alguien tiene que recordar
+# tocar en el panel: se versiona con el código y se aplica con
+# `supabase config push`. Referencia completa:
+# https://supabase.com/docs/guides/local-development/cli/config
+
+project_id = "plataforma-ia"
+
+[auth]
+enabled = true
+
+# La URL desde la que se sirve la aplicación. Auth la usa como lista blanca de
+# redirecciones y para construir los enlaces de los correos.
+site_url = "env(NEXT_PUBLIC_SITE_URL)"
+
+# URLs exactas a las que Auth puede redirigir después de autenticar.
+#
+# Sin `/auth/callback` aquí, el enlace de confirmación del correo no vuelve a la
+# aplicación: Supabase lo rechaza y el usuario acaba en una página de error sin
+# entender por qué.
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://127.0.0.1:3000/auth/callback",
+  # El dominio de producción, cuando lo haya.
+  #
+  # Va en su propia variable y no como `env(NEXT_PUBLIC_SITE_URL)/auth/callback`
+  # porque la sustitución de Supabase reemplaza el **valor entero**, no un trozo
+  # dentro de una cadena: escrito así, el callback quedaría literalmente mal.
+  # `npm run auth:push` la calcula sola a partir de NEXT_PUBLIC_SITE_URL.
+  "env(SUPABASE_AUTH_CALLBACK_URL)",
+]
+
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+# Ocho caracteres, que es lo que valida también el formulario. Si aquí se
+# dejara el mínimo de seis, el servidor aceptaría contraseñas que la interfaz
+# rechaza, y la incoherencia se descubre en el peor momento.
+minimum_password_length = 8
+
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+
+[auth.email]
+enable_signup = true
+
+# Confirmación por correo activada.
+#
+# Sin ella, cualquiera puede registrarse con un correo que no es suyo. El coste
+# es que después de registrarse hay que ir al buzón antes de poder entrar; la
+# pantalla de login ya lo avisa.
+#
+# En desarrollo, con el proyecto en la nube, los correos van por el SMTP de
+# cortesía de Supabase, que tiene un límite bajo por hora. Si molesta mientras
+# pruebas, ponlo en `false` aquí y vuelve a subirlo antes de producción.
+enable_confirmations = true
+double_confirm_changes = true
+secure_password_change = true
+
+[storage]
+enabled = true
+
+# Los buckets se crean en la migración `20260727000300_storage.sql`, con sus
+# políticas. Aquí solo queda el techo global de subida.
+file_size_limit = "25MiB"

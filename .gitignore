@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# la plantilla sí se versiona: no lleva ningún valor real
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +41,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# datos locales de la plataforma (modo demo)
+/data
+/generated-products
+
+# configuración de proveedores: contiene API keys en claro
+/settings
+
+# imágenes subidas en modo demo
+/public/uploads

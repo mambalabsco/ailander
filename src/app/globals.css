@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Tailwind v4 activa `dark:` con prefers-color-scheme por defecto.
+   La plataforma controla el tema manualmente, así que enganchamos el
+   variante a la clase `.dark` que LayoutShell escribe en <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ---------------------------------------------------------------------------
+   Tokens de visualización de datos.
+
+   Los valores están validados con el script de la skill de dataviz contra las
+   superficies reales de la app (#ffffff en claro, #0f172a en oscuro):
+   la rampa ordinal pasa monotonía, salto mínimo de luminosidad, contraste del
+   extremo claro y tono único; el par categórico pasa banda de luminosidad,
+   suelo de croma, separación para daltonismo y contraste.
+
+   El tema lo decide la clase `.dark` del <html>, que ThemeScript aplica antes
+   del primer pintado, así que una sola regla cubre el toggle y la preferencia
+   del sistema.
+--------------------------------------------------------------------------- */
+.viz {
+  --viz-surface: #ffffff;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+
+  /* Rampa ordinal azul — niveles de conciencia y mapas de calor (claro→oscuro) */
+  --viz-ramp-1: #86b6ef;
+  --viz-ramp-2: #5598e7;
+  --viz-ramp-3: #2a78d6;
+  --viz-ramp-4: #1c5cab;
+  --viz-ramp-5: #104281;
+
+  /* Categórico — solo para identidades distintas (género) */
+  --viz-cat-1: #2a78d6;
+  --viz-cat-2: #eb6834;
+
+  /* Serie única y su versión atenuada, para gráficos de énfasis */
+  --viz-series: #2a78d6;
+  --viz-series-muted: #b7d3f6;
+}
+
+.dark .viz {
+  --viz-surface: #0f172a;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+
+  --viz-ramp-1: #9ec5f4;
+  --viz-ramp-2: #6da7ec;
+  --viz-ramp-3: #3987e5;
+  --viz-ramp-4: #256abf;
+  --viz-ramp-5: #184f95;
+
+  --viz-cat-1: #3987e5;
+  --viz-cat-2: #d95926;
+
+  --viz-series: #3987e5;
+  --viz-series-muted: #1c5cab;
 }

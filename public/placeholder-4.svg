@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Hydra">
+  <defs>
+    <linearGradient id="g4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#a7f3d0"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#g4)"/>
+  <circle cx="320" cy="70" r="120" fill="#ffffff" opacity="0.12"/>
+  <circle cx="80" cy="250" r="90" fill="#ffffff" opacity="0.10"/>
+  <text x="32" y="160" font-family="system-ui, sans-serif" font-size="34" font-weight="600" fill="#ffffff">Hydra</text>
+  <text x="32" y="192" font-family="system-ui, sans-serif" font-size="16" fill="#ffffff" opacity="0.75">Imagen de ejemplo</text>
+</svg>
