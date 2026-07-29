@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -14,6 +15,32 @@ import { createClient } from "@/lib/supabase/server";
 
 interface AuthResult {
   error?: string;
+}
+
+/**
+ * El origen público de la aplicación, sacado de la propia petición.
+ *
+ * **No se lee de `NEXT_PUBLIC_SITE_URL`, y es a propósito.** Las variables con
+ * ese prefijo las incrusta Next **al compilar**: si el build corrió antes de
+ * fijar el dominio, queda `localhost` grabado dentro y los correos de
+ * recuperación llevan ahí para siempre, aunque la variable ya esté bien. Pasó
+ * exactamente eso.
+ *
+ * La cabecera la pone el servidor que atiende cada petición, así que acierta sin
+ * depender de cuándo se compiló ni de qué había en el entorno entonces.
+ */
+async function siteOrigin(): Promise<string> {
+  const incoming = await headers();
+
+  // Detrás de Caddy y Cloudflare, el esquema real viaja en `x-forwarded-proto`:
+  // la conexión que ve Next es HTTP plano aunque el visitante vaya por HTTPS.
+  const host = incoming.get("x-forwarded-host") ?? incoming.get("host");
+  const proto = incoming.get("x-forwarded-proto") ?? "https";
+
+  if (host) return `${proto}://${host}`;
+
+  // Sin cabeceras no queda más que la variable, que es mejor que nada.
+  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
 function readCredentials(formData: FormData) {
@@ -102,10 +129,8 @@ export async function requestPasswordReset(
    * cambio: es el mismo camino que usa la confirmación de registro, así que
    * basta con que esa URL esté en la lista blanca de Supabase.
    */
-  const site = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${site.replace(/\/$/, "")}/auth/callback?next=/auth/nueva-clave`,
+    redirectTo: `${await siteOrigin()}/auth/callback?next=/auth/nueva-clave`,
   });
 
   return { sent: true };
