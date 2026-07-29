@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { findStore } from "@/lib/store-registry";
 import { updateStore } from "@/lib/data/stores";
 import { exchangeCode, isShopifyDomain, verifyHmac } from "@/lib/shopify-oauth";
+import { siteOrigin } from "@/lib/site-url";
 
 /**
  * La vuelta de Shopify: valida y guarda el token.
@@ -69,5 +70,6 @@ export async function GET(request: Request) {
   // La cookie ya no sirve para nada y es de un solo uso.
   jar.delete("shopify_oauth");
 
-  return NextResponse.redirect(new URL("/stores?shopify=conectada", url.origin));
+  // El origen del proxy, no el del socket: `url.origin` es localhost aquí.
+  return NextResponse.redirect(new URL("/stores?shopify=conectada", await siteOrigin()));
 }

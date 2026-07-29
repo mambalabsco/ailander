@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderLandingHtml } from "@/lib/landing-html";
 import { pickVariant } from "@/types/experiment";
+import { siteOrigin } from "@/lib/site-url";
 import type { LandingPage } from "@/types/landing";
 
 /**
@@ -135,6 +136,11 @@ export async function GET(
 
   const html = renderLandingHtml(page, { urls, avatars, embedUrls: true });
 
+  // El origen público, no el del socket: con `url.origin` los avisos del embudo
+  // se mandarían a localhost desde el navegador del visitante y se perderían
+  // todos en silencio.
+  const origen = await siteOrigin();
+
   /*
    * El script hace tres cosas que el servidor no puede.
    *
@@ -154,7 +160,7 @@ export async function GET(
 
   window.__lpTrack = function(kind, value, currency){
     try {
-      navigator.sendBeacon(${JSON.stringify(`${url.origin}/api/track`)}, new Blob([JSON.stringify({
+      navigator.sendBeacon(${JSON.stringify(`${origen}/api/track`)}, new Blob([JSON.stringify({
         experiment: ${JSON.stringify(experiment.id)},
         variant: ${JSON.stringify(chosen.id)},
         visitor: v, kind: kind, value: value, currency: currency

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/site-url";
 
 /**
  * Vuelta del enlace de confirmación de correo y del flujo PKCE.
@@ -9,7 +10,10 @@ import { createClient } from "@/lib/supabase/server";
  * servidor y no en el navegador.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  // No `origin`: detrás del proxy sería localhost y el enlace del correo
+  // acabaría llevando ahí.
+  const origin = await siteOrigin();
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
 
