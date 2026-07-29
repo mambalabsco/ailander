@@ -15,6 +15,18 @@ set -euo pipefail
 REPO="git@github.com:mambalabsco/ailander.git"
 USUARIO="plataforma"
 CARPETA="/home/$USUARIO/plataforma-ia"
+CLAVE="/home/$USUARIO/.ssh/id_ed25519"
+
+# La clave se indica **explícitamente**, no se deja que ssh la busque.
+#
+# `sudo -u usuario` no cambia HOME de forma fiable entre versiones: ssh acababa
+# mirando en /root/.ssh, no encontraba nada, y GitHub rechazaba la conexión sin
+# haber visto siquiera la clave del servidor —que en GitHub aparecía como «nunca
+# usada», que era la pista—.
+export GIT_SSH_COMMAND="ssh -i $CLAVE -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+# Igual que arriba, pero para invocar ssh a mano.
+como_usuario() { sudo -u "$USUARIO" -H env GIT_SSH_COMMAND="$GIT_SSH_COMMAND" "$@"; }
 
 rojo()  { printf "\033[31m%s\033[0m\n" "$*"; }
 verde() { printf "\033[32m%s\033[0m\n" "$*"; }
@@ -45,14 +57,20 @@ preparar() {
   if [ ! -f "/home/$USUARIO/.ssh/id_ed25519" ]; then
     echo "== Clave de despliegue =="
     sudo -u "$USUARIO" mkdir -p "/home/$USUARIO/.ssh"
+    # ssh se niega a usar un directorio que otros puedan leer.
+    chmod 700 "/home/$USUARIO/.ssh"
     sudo -u "$USUARIO" ssh-keygen -t ed25519 -N "" -q \
-      -C "servidor-$(hostname)" -f "/home/$USUARIO/.ssh/id_ed25519"
+      -C "servidor-$(hostname)" -f "$CLAVE"
   fi
+  chmod 700 "/home/$USUARIO/.ssh"
+  chmod 600 "$CLAVE"
+  chown -R "$USUARIO:$USUARIO" "/home/$USUARIO/.ssh"
 
   # Se acepta la huella de GitHub de antemano, para que el clonado no se quede
   # esperando una confirmación interactiva.
-  sudo -u "$USUARIO" bash -c "ssh-keyscan -t ed25519 github.com 2>/dev/null >> /home/$USUARIO/.ssh/known_hosts"
-  sudo -u "$USUARIO" sort -u -o "/home/$USUARIO/.ssh/known_hosts" "/home/$USUARIO/.ssh/known_hosts"
+  ssh-keyscan -t ed25519 github.com 2>/dev/null >> "/home/$USUARIO/.ssh/known_hosts"
+  sort -u -o "/home/$USUARIO/.ssh/known_hosts" "/home/$USUARIO/.ssh/known_hosts"
+  chown "$USUARIO:$USUARIO" "/home/$USUARIO/.ssh/known_hosts"
 
   echo
   verde "Listo. Ahora pega esta clave en GitHub:"
@@ -67,19 +85,27 @@ preparar() {
 
 desplegar() {
   echo "== Comprobando el acceso a GitHub =="
-  if ! sudo -u "$USUARIO" ssh -o StrictHostKeyChecking=no -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-    rojo "GitHub todavía no reconoce la clave del servidor."
-    rojo "Pégala en Deploy keys y vuelve a intentarlo."
+  # Una clave de despliegue responde «Hi organizacion/repo!», no «Hi usuario!»,
+  # así que se busca la parte común de las dos respuestas.
+  respuesta=$(como_usuario ssh -i "$CLAVE" -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 || true)
+
+  if ! grep -q "successfully authenticated" <<<"$respuesta"; then
+    rojo "GitHub no aceptó la clave del servidor. Respondió:"
+    echo "  $respuesta"
+    echo
+    aviso "Comprueba que esta clave está en Deploy keys del repositorio:"
+    cat "/home/$USUARIO/.ssh/id_ed25519.pub"
     exit 1
   fi
-  verde "Acceso confirmado."
+  verde "Acceso confirmado: ${respuesta%%,*}"
 
   if [ ! -d "$CARPETA/.git" ]; then
     echo "== Clonando =="
-    sudo -u "$USUARIO" git clone "$REPO" "$CARPETA"
+    como_usuario git clone "$REPO" "$CARPETA"
   else
     echo "== Actualizando =="
-    sudo -u "$USUARIO" git -C "$CARPETA" pull --ff-only
+    como_usuario git -C "$CARPETA" pull --ff-only
   fi
 
   if [ ! -f "$CARPETA/.env.local" ]; then
@@ -92,7 +118,7 @@ desplegar() {
   fi
 
   echo "== Dependencias y compilación =="
-  sudo -u "$USUARIO" bash -c "cd '$CARPETA' && npm ci --no-audit --no-fund && npm run build"
+  sudo -u "$USUARIO" -H bash -c "cd '$CARPETA' && npm ci --no-audit --no-fund && npm run build"
 
   echo "== Servicio =="
   cat > /etc/systemd/system/plataforma.service <<UNIT
