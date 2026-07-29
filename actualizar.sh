@@ -38,7 +38,9 @@ como git pull --ff-only
 DESPUES=$(como git rev-parse HEAD)
 
 if [ "$ANTES" = "$DESPUES" ]; then
-  verde "Ya estaba al día. No hay nada que hacer."
+  verde "Ya estaba al día."
+  gris "Versión: $(como git rev-parse --short HEAD) — $(como git log -1 --pretty=%s)"
+  gris "Si esperabas un cambio y no está, comprueba que se subió: git log origin/main -1"
   exit 0
 fi
 
@@ -106,6 +108,9 @@ CODIGO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 http://localhost:3
 
 if [ "$CODIGO" = "200" ]; then
   verde "Listo. La aplicación responde."
+  # Se imprime la versión desplegada: sin esto, «actualicé» y «no se ve el
+  # cambio» son indistinguibles y hay que investigar a ciegas.
+  gris "Versión desplegada: $(como git rev-parse --short HEAD) — $(como git log -1 --pretty=%s)"
 else
   rojo "El servicio arrancó pero /auth/login devolvió $CODIGO."
   rojo "Mira:  journalctl -u plataforma -n 40"
