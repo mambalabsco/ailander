@@ -39,13 +39,26 @@ function credentials(store: Store): ShopifyCredentials {
     );
   }
 
-  // El dominio se guarda con protocolo y a veces con barra final.
-  const domain = store.domain
+  /*
+   * **El `.myshopify.com`, no el dominio propio.**
+   *
+   * La Admin API solo responde en el primero; con `naturoxchile.com` devuelve
+   * 404 «Not Found», que se lee como un problema de permisos y no lo es. El
+   * dominio propio sigue sirviendo para los enlaces de cara al público.
+   */
+  const raw = store.shopifyShopDomain || store.domain;
+  const domain = raw
     .trim()
     .replace(/^https?:\/\//, "")
     .replace(/\/.*$/, "");
 
   if (!domain) throw new Error(`La tienda «${store.name}» no tiene dominio.`);
+
+  if (!domain.endsWith(".myshopify.com")) {
+    throw new Error(
+      `Falta el dominio .myshopify.com de «${store.name}». Vuelve a conectarla en Tiendas: la Admin API no responde en el dominio propio.`,
+    );
+  }
 
   return { domain, token: store.shopifyAdminToken.trim() };
 }

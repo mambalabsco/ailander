@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { findStore } from "@/lib/store-registry";
 import { updateStore } from "@/lib/data/stores";
-import { exchangeCode, isShopifyDomain, verifyHmac } from "@/lib/shopify-oauth";
+import { exchangeCode, isShopifyDomain, shopDomain, verifyHmac } from "@/lib/shopify-oauth";
 import { siteOrigin } from "@/lib/site-url";
 
 /**
@@ -62,7 +62,17 @@ export async function GET(request: Request) {
       code,
     });
 
-    await updateStore(store.id, { shopifyAdminToken: token });
+    /*
+     * Se guarda también el dominio `.myshopify.com`.
+     *
+     * Es el único en el que responde la Admin API: con el dominio propio de la
+     * tienda devuelve 404, que parece un problema de permisos y no lo es. La
+     * primera versión pedía este dato para el OAuth y luego lo tiraba.
+     */
+    await updateStore(store.id, {
+      shopifyAdminToken: token,
+      shopifyShopDomain: shopDomain(shop),
+    });
   } catch (error) {
     return fallo(error instanceof Error ? error.message : "No se pudo obtener el token.");
   }

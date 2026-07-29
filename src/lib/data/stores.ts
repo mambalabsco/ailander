@@ -105,6 +105,7 @@ export async function updateStore(
       | "platform"
       | "mentionBrandInCopy"
       | "shopifyAdminToken"
+      | "shopifyShopDomain"
       | "shopifyApiKey"
       | "shopifyApiSecret"
     >
@@ -131,6 +132,7 @@ export async function updateStore(
   if (patch.shopifyAdminToken) {
     changes.shopify_admin_token = patch.shopifyAdminToken;
   }
+  if (patch.shopifyShopDomain) changes.shopify_shop_domain = patch.shopifyShopDomain;
   if (patch.shopifyApiKey) changes.shopify_api_key = patch.shopifyApiKey;
   if (patch.shopifyApiSecret) changes.shopify_api_secret = patch.shopifyApiSecret;
 

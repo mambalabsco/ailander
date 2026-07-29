@@ -137,6 +137,7 @@ export function toStore(row: Tables<"stores">, markets: Tables<"store_markets">[
     markets: markets.map(toMarket),
     mentionBrandInCopy: row.mention_brand_in_copy,
     shopifyAdminToken: row.shopify_admin_token ?? undefined,
+    shopifyShopDomain: row.shopify_shop_domain ?? undefined,
     shopifyApiKey: row.shopify_api_key ?? undefined,
     shopifyApiSecret: row.shopify_api_secret ?? undefined,
     createdAt: row.created_at,

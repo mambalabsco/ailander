@@ -71,6 +71,13 @@ export interface Store {
    * token. Nunca viaja al navegador; en la interfaz solo se sabe si está puesto.
    */
   shopifyAdminToken?: string;
+  /**
+   * El dominio `.myshopify.com`, no el propio.
+   *
+   * La Admin API **solo responde en este**: con el dominio de cara al público
+   * devuelve 404. Se guarda al conectar la tienda.
+   */
+  shopifyShopDomain?: string;
   /** Clave pública de la app de Shopify de esta tienda. */
   shopifyApiKey?: string;
   /** Secreto de esa app. Nunca viaja al navegador. */

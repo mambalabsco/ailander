@@ -273,7 +273,11 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-semibold ${store.shopifyAdminToken ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}
                       >
-                        {store.shopifyAdminToken ? "Con token" : "Sin token"}
+                        {store.shopifyAdminToken && store.shopifyShopDomain
+                          ? "Conectada"
+                          : store.shopifyAdminToken
+                            ? "Reconectar"
+                            : "Sin conectar"}
                       </span>
                     </div>
                     <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
@@ -340,7 +344,7 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                             Dominio .myshopify.com
                           </span>
                           <TextField
-                            value={shopDrafts[store.id] ?? ""}
+                            value={shopDrafts[store.id] ?? store.shopifyShopDomain ?? ""}
                             onChange={(event) =>
                               setShopDrafts({ ...shopDrafts, [store.id]: event.target.value })
                             }
@@ -348,10 +352,10 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                           />
                         </label>
                         <a
-                          href={`/api/shopify/instalar?tienda=${store.id}&shop=${encodeURIComponent(shopDrafts[store.id] ?? "")}`}
-                          className={`rounded-full px-4 py-2 text-sm font-medium ${shopDrafts[store.id] ? "bg-violet-600 text-white" : "pointer-events-none bg-slate-200 text-slate-400 dark:bg-slate-800"}`}
+                          href={`/api/shopify/instalar?tienda=${store.id}&shop=${encodeURIComponent(shopDrafts[store.id] ?? store.shopifyShopDomain ?? "")}`}
+                          className={`rounded-full px-4 py-2 text-sm font-medium ${shopDrafts[store.id] || store.shopifyShopDomain ? "bg-violet-600 text-white" : "pointer-events-none bg-slate-200 text-slate-400 dark:bg-slate-800"}`}
                         >
-                          Conectar con Shopify
+                          {store.shopifyAdminToken ? "Reconectar" : "Conectar con Shopify"}
                         </a>
                       </div>
                     ) : null}

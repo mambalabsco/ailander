@@ -64,6 +64,7 @@ type ProfileRow = {
 type StoreRow = {
   /** Token de la app personalizada de esta tienda. Nunca sale al navegador. */
   shopify_admin_token: string | null;
+  shopify_shop_domain: string | null;
   shopify_api_key: string | null;
   shopify_api_secret: string | null;
   id: string;
@@ -553,6 +554,7 @@ export type Database = {
       profiles: Table<ProfileRow, Partial<ProfileRow> & { id: string }>;
       stores: Table<StoreRow, Insertable<StoreRow, "brand" | "domain" | "platform" | "mention_brand_in_copy"
           | "shopify_admin_token"
+          | "shopify_shop_domain"
           | "shopify_api_key"
           | "shopify_api_secret">>;
       store_markets: Table<
