@@ -27,7 +27,27 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
  */
 
 /** Rutas accesibles sin sesión. */
-const PUBLIC_PATHS = ["/auth/login", "/auth/signup", "/auth/callback", "/auth/error"];
+/*
+ * Rutas que no exigen sesión.
+ *
+ * **Las de recuperar contraseña tienen que estar aquí**, y olvidarlas producía
+ * el fallo más confuso posible: al pulsar «¿Olvidaste la contraseña?» el guardia
+ * te devolvía a la pantalla de entrada, y parecía que la página se recargaba
+ * sola sin dar ningún error.
+ *
+ * `/auth/nueva-clave` también es pública, aunque parezca que no debería: quien
+ * llega ahí trae una sesión temporal del enlace del correo, y si no la trae,
+ * Supabase rechaza el cambio con un mensaje que lo explica. Guardarla solo
+ * añadiría un rebote antes de ese mensaje.
+ */
+const PUBLIC_PATHS = [
+  "/auth/login",
+  "/auth/signup",
+  "/auth/callback",
+  "/auth/error",
+  "/auth/recuperar",
+  "/auth/nueva-clave",
+];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
