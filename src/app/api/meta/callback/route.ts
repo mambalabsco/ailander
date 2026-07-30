@@ -69,8 +69,16 @@ export async function GET(request: Request) {
      * esta comprobación la conexión se guardaría como buena y el fallo aparecería
      * más tarde, al sincronizar, como un 403 sin relación aparente con lo que se
      * hizo aquí.
+     *
+     * **Solo se bloquea si Meta declara la lista y falta algo.** Con Login for
+     * Business los permisos vienen de la configuración y `/debug_token` a veces
+     * devuelve la lista vacía; tratar eso como «faltan permisos» rechazaría una
+     * conexión perfectamente válida, que es peor que dejar pasar un 403 después.
      */
-    const missing = META_SCOPES.filter((scope) => !token.scopes.includes(scope));
+    const missing = token.scopes.length
+      ? META_SCOPES.filter((scope) => !token.scopes.includes(scope))
+      : [];
+
     if (missing.length > 0) {
       return back(origin, storeId, { meta: "sin-permiso", detalle: missing.join(", ") });
     }

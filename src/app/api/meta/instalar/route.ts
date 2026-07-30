@@ -52,6 +52,7 @@ export async function GET(request: Request) {
       appId: app.appId,
       redirectUri: `${origin}/api/meta/callback`,
       state: signState(store.id, app.appSecret),
+      configId: app.configId,
     }),
   );
 }

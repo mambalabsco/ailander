@@ -44,6 +44,20 @@ function version(): string {
 export interface MetaAppConfig {
   appId: string;
   appSecret: string;
+  /**
+   * Identificador de la «configuración» de Facebook Login for Business.
+   *
+   * Las apps de tipo Empresa usan **Login for Business**, que no pide los
+   * permisos con `scope` sino con `config_id`: la lista de permisos y el tipo de
+   * token se declaran una vez en el panel de Meta y el diálogo se invoca
+   * apuntando a esa configuración.
+   *
+   * Es opcional porque `scope` **sigue funcionando** —Meta solo recomienda no
+   * usarlo— y así una app con Login clásico también sirve. Cuando está, se
+   * prefiere: es el camino que Meta mantiene, y permite elegir un token de
+   * usuario de sistema, que no caduca.
+   */
+  configId?: string;
 }
 
 /**
@@ -59,7 +73,8 @@ export function appConfig(): MetaAppConfig | null {
   const appId = process.env.META_APP_ID?.trim();
   const appSecret = process.env.META_APP_SECRET?.trim();
   if (!appId || !appSecret) return null;
-  return { appId, appSecret };
+
+  return { appId, appSecret, configId: process.env.META_CONFIG_ID?.trim() || undefined };
 }
 
 export function isConfigured(): boolean {
@@ -103,17 +118,29 @@ export function readState(state: string, secret: string): { storeId: string } | 
 
 /* --------------------------------- Diálogo --------------------------------- */
 
+/**
+ * El diálogo, con configuración o con permisos sueltos.
+ *
+ * Los dos caminos llevan al mismo sitio y no se pueden mezclar: si hay
+ * `config_id`, los permisos ya están declarados en la configuración y mandar
+ * además `scope` es lo que Meta desaconseja explícitamente. Por eso es un
+ * o lo uno o lo otro, no los dos.
+ */
 export function authorizeUrl(options: {
   appId: string;
   redirectUri: string;
   state: string;
+  configId?: string;
 }): string {
   const url = new URL(`${DIALOG}/${version()}/dialog/oauth`);
   url.searchParams.set("client_id", options.appId);
   url.searchParams.set("redirect_uri", options.redirectUri);
   url.searchParams.set("state", options.state);
-  url.searchParams.set("scope", META_SCOPES.join(","));
   url.searchParams.set("response_type", "code");
+
+  if (options.configId) url.searchParams.set("config_id", options.configId);
+  else url.searchParams.set("scope", META_SCOPES.join(","));
+
   return url.toString();
 }
 

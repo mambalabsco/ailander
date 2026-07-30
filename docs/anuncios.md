@@ -30,8 +30,8 @@ volumen de llamadas, y para leer gasto diario de unas cuantas cuentas sobra.
 
 ### 2 · Registrar la URL de retorno
 
-En el panel de la app: **Facebook Login** → **Configuración** → *URI de
-redireccionamiento de OAuth válidos*:
+En el panel de la app: **Facebook Login for Business** → **Configuración** →
+*URI de redireccionamiento de OAuth válidos*:
 
 ```
 https://aitools.mambalabs.co/api/meta/callback
@@ -40,15 +40,34 @@ https://aitools.mambalabs.co/api/meta/callback
 Tiene que ser **exacta**. Si no coincide carácter a carácter, Facebook rechaza el
 login con un error que no explica cuál es el problema.
 
-### 3 · Poner las credenciales en el servidor
+### 3 · Crear la configuración de login
 
-De **Configuración de la app → Básica** saca el identificador y la clave secreta, y
-añádelos a `.env.local` en el servidor:
+Las apps de tipo Empresa usan **Facebook Login for Business**, que no pide los
+permisos con `scope`: se declaran una vez en una **configuración** y el diálogo se
+invoca con su identificador.
+
+**Facebook Login for Business → Configuraciones → Crear configuración**:
+
+- **Nombre:** `Leer gasto`
+- **Tipo de token:** **usuario de sistema** si te lo ofrece. Ese no caduca y te
+  ahorra tener que reconectar. Si solo hay «usuario», también sirve.
+- **Permisos:** solo **`ads_read`**. Nada más: la plataforma no necesita poder
+  tocar campañas.
+
+Copia el **identificador de la configuración** que te da al guardar.
+
+### 4 · Poner las credenciales en el servidor
+
+De **Configuración de la app → Básica** saca el identificador y la clave secreta:
 
 ```
 META_APP_ID=...
 META_APP_SECRET=...
+META_CONFIG_ID=...
 ```
+
+`META_CONFIG_ID` es el del paso anterior. Si tu app usara el login clásico en vez
+del de empresa, déjalo vacío: entonces se usa `scope`, que sigue funcionando.
 
 Después, `sudo systemctl restart plataforma`.
 
