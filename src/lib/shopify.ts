@@ -67,6 +67,21 @@ interface GraphqlError {
   message: string;
 }
 
+/**
+ * Se exporta para `shopify-orders.ts`, que necesita el mismo cliente.
+ *
+ * Vive aquí y no allí porque toda la lógica frágil de credenciales —el
+ * `.myshopify.com`, la traducción del 401— es la misma para cualquier consulta,
+ * y duplicarla garantizaría que una de las dos copias se quedase atrás.
+ */
+export async function shopifyGraphql<T>(
+  store: Store,
+  query: string,
+  variables: Record<string, unknown> = {},
+): Promise<T> {
+  return graphql<T>(store, query, variables);
+}
+
 async function graphql<T>(
   store: Store,
   query: string,
