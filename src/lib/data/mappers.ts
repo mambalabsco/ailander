@@ -140,6 +140,8 @@ export function toStore(row: Tables<"stores">, markets: Tables<"store_markets">[
     shopifyShopDomain: row.shopify_shop_domain ?? undefined,
     shopifyApiKey: row.shopify_api_key ?? undefined,
     shopifyApiSecret: row.shopify_api_secret ?? undefined,
+    shopCurrency: row.shop_currency ?? undefined,
+    shopTimeZone: row.shop_time_zone ?? undefined,
     createdAt: row.created_at,
   };
 }

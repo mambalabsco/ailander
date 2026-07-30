@@ -108,6 +108,8 @@ export async function updateStore(
       | "shopifyShopDomain"
       | "shopifyApiKey"
       | "shopifyApiSecret"
+      | "shopCurrency"
+      | "shopTimeZone"
     >
   >,
 ): Promise<Store | null> {
@@ -135,6 +137,11 @@ export async function updateStore(
   if (patch.shopifyShopDomain) changes.shopify_shop_domain = patch.shopifyShopDomain;
   if (patch.shopifyApiKey) changes.shopify_api_key = patch.shopifyApiKey;
   if (patch.shopifyApiSecret) changes.shopify_api_secret = patch.shopifyApiSecret;
+
+  // Estos sí se pueden vaciar: vienen de Shopify, no del formulario, y guardar
+  // una cadena vacía es la forma de decir «ya no lo sabemos».
+  if (patch.shopCurrency !== undefined) changes.shop_currency = patch.shopCurrency;
+  if (patch.shopTimeZone !== undefined) changes.shop_time_zone = patch.shopTimeZone;
 
   if (Object.keys(changes).length === 0) return findStore(id);
 

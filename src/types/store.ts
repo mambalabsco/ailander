@@ -82,6 +82,17 @@ export interface Store {
   shopifyApiKey?: string;
   /** Secreto de esa app. Nunca viaja al navegador. */
   shopifyApiSecret?: string;
+  /**
+   * Moneda en la que la tienda **liquida**, según Shopify.
+   *
+   * No es la del mercado. La tienda de México vende en pesos y liquida en
+   * dólares, y los pedidos llegan por la API en dólares: es esta la moneda de
+   * todos los importes de los informes de beneficio. Etiquetarlos con la del
+   * mercado daría un ticket medio veinte veces menor del real.
+   */
+  shopCurrency?: string;
+  /** Zona horaria de la tienda: decide a qué día pertenece cada pedido. */
+  shopTimeZone?: string;
   createdAt: string;
 }
 

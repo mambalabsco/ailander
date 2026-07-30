@@ -67,6 +67,9 @@ type StoreRow = {
   shopify_shop_domain: string | null;
   shopify_api_key: string | null;
   shopify_api_secret: string | null;
+  /** Moneda y zona horaria que declara Shopify. Base de todos los informes. */
+  shop_currency: string | null;
+  shop_time_zone: string | null;
   id: string;
   user_id: string;
   name: string;
@@ -511,6 +514,152 @@ type LandingEventRow = {
   created_at: string;
 };
 
+/* --------------------------- Beneficio real por tienda -------------------------- */
+
+/**
+ * Los importes son `string`, no `number`.
+ *
+ * Es lo que devuelve PostgREST para `numeric`: se manda como texto para no
+ * perder precisión al pasar por JSON. Tipearlos como número aquí compilaría y
+ * después sumaría cadenas —«5.03» + «8.68» = «5.038.68»—, así que la conversión
+ * es obligatoria y se hace en el mapeador.
+ */
+type ShopOrderRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  shopify_ref: string;
+  name: string;
+  processed_at: string;
+  currency: string;
+  gross_sales: string;
+  discounts: string;
+  returns: string;
+  taxes: string;
+  shipping_charged: string;
+  tips: string;
+  total: string;
+  gateway: string;
+  financial_status: string;
+  test: boolean;
+  customer_ref: string;
+  is_first_order: boolean;
+  landing_page: string;
+  utm: unknown;
+  synced_at: string;
+};
+
+type ShopOrderItemRow = {
+  id: string;
+  order_id: string;
+  product_ref: string;
+  variant_ref: string;
+  sku: string;
+  title: string;
+  quantity: number;
+  unit_price: string;
+  discount: string;
+  refunded_quantity: number;
+};
+
+type AdAccountRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  provider: string;
+  external_id: string;
+  name: string;
+  currency: string;
+  active: boolean;
+  include_filters: string[];
+  exclude_filters: string[];
+  last_synced_at: string | null;
+  created_at: string;
+};
+
+type AdSpendRow = {
+  id: string;
+  account_id: string;
+  day: string;
+  campaign_ref: string;
+  campaign_name: string;
+  spend: string;
+  impressions: number;
+  clicks: number;
+  reported_purchases: number;
+  reported_value: string;
+  currency: string;
+  synced_at: string;
+};
+
+type AdCredentialRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  provider: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  client_id: string | null;
+  client_secret: string | null;
+  developer_token: string | null;
+  login_customer_id: string | null;
+  /** Nulo = no caduca. Es el caso de Google con la app publicada. */
+  token_expires_at: string | null;
+  scopes: string[];
+  account_name: string | null;
+  connected_at: string | null;
+  updated_at: string;
+};
+
+type CostCogsRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  product_ref: string;
+  variant_ref: string;
+  label: string;
+  amount: string;
+  currency: string;
+  updated_at: string;
+};
+
+type CostShippingZoneRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  name: string;
+  countries: string[];
+  is_default: boolean;
+  tiers: unknown;
+  updated_at: string;
+};
+
+type CostGatewayFeeRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  gateway: string;
+  percent: string;
+  fixed: string;
+  updated_at: string;
+};
+
+type CostCustomRow = {
+  id: string;
+  user_id: string;
+  store_id: string;
+  name: string;
+  kind: string;
+  amount: string;
+  basis: string;
+  category: string;
+  starts_on: string;
+  ends_on: string;
+  repeat: string;
+  in_ltv_cac: boolean;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -556,7 +705,9 @@ export type Database = {
           | "shopify_admin_token"
           | "shopify_shop_domain"
           | "shopify_api_key"
-          | "shopify_api_secret">>;
+          | "shopify_api_secret"
+          | "shop_currency"
+          | "shop_time_zone">>;
       store_markets: Table<
         StoreMarketRow,
         Insertable<StoreMarketRow, "domain" | "path_prefix" | "is_primary">,
@@ -733,6 +884,72 @@ export type Database = {
           BackgroundJobRow,
           Exclude<keyof BackgroundJobRow, "user_id" | "kind" | "label">
         >
+      >;
+      shop_orders: Table<
+        ShopOrderRow,
+        Insertable<
+          ShopOrderRow,
+          Exclude<
+            keyof ShopOrderRow,
+            "user_id" | "store_id" | "shopify_ref" | "name" | "processed_at" | "currency"
+          >
+        >,
+        [Belongs<"store_id", "stores">]
+      >;
+      shop_order_items: Table<
+        ShopOrderItemRow,
+        Insertable<ShopOrderItemRow, Exclude<keyof ShopOrderItemRow, "order_id" | "title">>,
+        [Belongs<"order_id", "shop_orders">]
+      >;
+      ad_accounts: Table<
+        AdAccountRow,
+        Insertable<
+          AdAccountRow,
+          Exclude<keyof AdAccountRow, "user_id" | "store_id" | "provider" | "external_id">
+        >,
+        [Belongs<"store_id", "stores">]
+      >;
+      ad_spend: Table<
+        AdSpendRow,
+        Insertable<AdSpendRow, Exclude<keyof AdSpendRow, "account_id" | "day">>,
+        [Belongs<"account_id", "ad_accounts">]
+      >;
+      ad_credentials: Table<
+        AdCredentialRow,
+        Insertable<
+          AdCredentialRow,
+          Exclude<keyof AdCredentialRow, "user_id" | "store_id" | "provider">
+        >,
+        [Belongs<"store_id", "stores">]
+      >;
+      cost_cogs: Table<
+        CostCogsRow,
+        Insertable<CostCogsRow, Exclude<keyof CostCogsRow, "user_id" | "store_id">>,
+        [Belongs<"store_id", "stores">]
+      >;
+      cost_shipping_zones: Table<
+        CostShippingZoneRow,
+        Insertable<
+          CostShippingZoneRow,
+          Exclude<keyof CostShippingZoneRow, "user_id" | "store_id" | "name">
+        >,
+        [Belongs<"store_id", "stores">]
+      >;
+      cost_gateway_fees: Table<
+        CostGatewayFeeRow,
+        Insertable<
+          CostGatewayFeeRow,
+          Exclude<keyof CostGatewayFeeRow, "user_id" | "store_id" | "gateway">
+        >,
+        [Belongs<"store_id", "stores">]
+      >;
+      cost_custom: Table<
+        CostCustomRow,
+        Insertable<
+          CostCustomRow,
+          Exclude<keyof CostCustomRow, "user_id" | "store_id" | "name" | "starts_on" | "ends_on">
+        >,
+        [Belongs<"store_id", "stores">]
       >;
     };
     Views: { [_ in never]: never };
