@@ -10,6 +10,7 @@ import {
   deleteLandingAction,
   generateCommentAvatarsAction,
   publishLandingAction,
+  unlinkLandingAction,
 } from "@/app/products/[id]/landing-actions";
 import { GenerateButton } from "@/components/generate-button";
 import { LandingAb } from "@/components/landing-ab";
@@ -40,6 +41,7 @@ export function LandingViewer({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"vista" | "html" | "imagenes" | "prueba">("vista");
+  const [isUnlinking, startUnlink] = useTransition();
   /*
    * Qué HTML te llevas.
    *
@@ -100,6 +102,33 @@ export function LandingViewer({
             >
               Ver publicada ↗
             </a>
+          ) : null}
+
+          {/*
+            La salida para cuando la página se borró desde el panel de Shopify.
+            Sin esto solo quedaba «Actualizar», que apunta a algo que ya no
+            existe, y la única forma de salir era borrar la página aquí y
+            rehacerla entera.
+          */}
+          {page.shopifyUrl ? (
+            <Button
+              disabled={isUnlinking}
+              onClick={() =>
+                startUnlink(async () => {
+                  if (
+                    !window.confirm(
+                      "¿Olvidar la página de Shopify?\n\nNo se borra nada en tu tienda: solo se suelta el vínculo, y el siguiente «Publicar» creará una página nueva. Úsalo si la borraste desde Shopify.",
+                    )
+                  ) {
+                    return;
+                  }
+                  await unlinkLandingAction({ id: page.id, productId });
+                  router.refresh();
+                })
+              }
+            >
+              {isUnlinking ? "…" : "Ya no está en Shopify"}
+            </Button>
           ) : null}
         </div>
       </div>

@@ -275,7 +275,9 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
     label: `Publicar «${page.title}»`,
     work: async () => {
       const { readProductImages } = await import("@/lib/image-store");
-      const { uploadImages, createPage, updatePage } = await import("@/lib/shopify");
+      const { uploadImages, createPage, updatePage, PageGoneError } = await import(
+        "@/lib/shopify",
+      );
       const { renderLandingHtml } = await import("@/lib/landing-html");
       const { setShopifyUrl, markLandingPublished } = await import("@/lib/data/landings");
       const { AVATAR_POOL_SIZE, avatarSlot } = await import("@/lib/avatar-prompts");
@@ -353,25 +355,47 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
 
       const html = renderLandingHtml(page, { urls, avatars, embedUrls: true });
 
-      const published = page.shopifyPageId
-        ? await updatePage(store, page.shopifyPageId, {
+      const crear = () =>
+        createPage(store, {
+          title: page.title,
+          handle: page.slug,
+          body: html,
+          published: true,
+        });
+
+      /*
+       * Si la página se borró en Shopify, se vuelve a crear en vez de fallar.
+       *
+       * La plataforma guarda su identificador, así que después de borrarla desde
+       * el panel de Shopify seguía intentando actualizar algo que ya no estaba.
+       * La única salida era borrar la página aquí y rehacerla entera, perdiendo
+       * el texto, las imágenes y el reparto de tráfico que colgaran de ella.
+       */
+      let published: Awaited<ReturnType<typeof createPage>>;
+      let recreated = false;
+
+      if (page.shopifyPageId) {
+        try {
+          published = await updatePage(store, page.shopifyPageId, {
             title: page.title,
-            body: html,
-            published: true,
-          })
-        : await createPage(store, {
-            title: page.title,
-            handle: page.slug,
             body: html,
             published: true,
           });
+        } catch (error) {
+          if (!(error instanceof PageGoneError)) throw error;
+          published = await crear();
+          recreated = true;
+        }
+      } else {
+        published = await crear();
+      }
 
       await markLandingPublished(page.id, published.id, published.url);
 
       const missing = relevant.length - relevant.filter((image) => image.shopifyUrl).length;
 
       return {
-        summary: `Publicada en ${published.url}. ${uploaded} imagen(es) subidas${
+        summary: `${recreated ? "Vuelta a crear" : "Publicada"} en ${published.url}. ${uploaded} imagen(es) subidas${
           missing > 0 ? `, ${missing} sin subir y marcadas como hueco` : ""
         }.`,
       };
@@ -525,4 +549,37 @@ export async function readExperimentFunnelsAction(input: unknown) {
   const funnels = await readFunnels(experimentId, days);
 
   return Object.fromEntries(funnels);
+}
+
+/**
+ * Olvida la página de Shopify sin borrar la de aquí.
+ *
+ * Existe para el caso de haber borrado la página desde el panel de Shopify: la
+ * plataforma seguía guardando su identificador, así que solo ofrecía
+ * «Actualizar» sobre algo que ya no estaba.
+ *
+ * La publicación se recupera sola de ese caso —si Shopify dice que no existe,
+ * la vuelve a crear—, pero esto queda como salida manual: no todos los temas ni
+ * todas las versiones devuelven el mismo error, y quedarse encerrado por un
+ * mensaje que no encaja con lo esperado es peor que tener un botón de más.
+ *
+ * **No toca nada en Shopify.** Si la página sigue allí, se quedará; lo único que
+ * se pierde es el vínculo, y la siguiente publicación creará otra.
+ */
+export async function unlinkLandingAction(input: unknown): Promise<{ ok: boolean; message: string }> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const landingId = readText(raw.id);
+  const productId = readText(raw.productId);
+  if (!landingId || !productId) throw new Error("Falta la página.");
+
+  const { markLandingPublished } = await import("@/lib/data/landings");
+  await markLandingPublished(landingId, null, null);
+
+  revalidatePath(`/products/${productId}`);
+
+  return {
+    ok: true,
+    message: "Desvinculada. El siguiente «Publicar» creará una página nueva en Shopify.",
+  };
 }

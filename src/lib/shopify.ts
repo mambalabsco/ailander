@@ -309,11 +309,36 @@ export async function updatePage(
     },
   );
 
+  /*
+   * «La página ya no está» se distingue de cualquier otro fallo.
+   *
+   * Pasa de verdad: se borra la página desde el panel de Shopify y aquí queda
+   * guardado su identificador, así que la plataforma sigue intentando
+   * actualizarla. Sin distinguirlo, el mensaje es un error de validación
+   * críptico y la única salida sería borrar la página en la plataforma y
+   * rehacerla. Quien llama puede volver a crearla.
+   */
+  const notFound = data.pageUpdate.userErrors.some((error) =>
+    /does not exist|not found|no existe/i.test(error.message),
+  );
+  if (notFound) throw new PageGoneError();
+
   assertNoUserErrors(data.pageUpdate.userErrors);
   const page = data.pageUpdate.page;
-  if (!page) throw new Error("Shopify no devolvió la página actualizada.");
+
+  // Sin errores y sin página: Shopify responde así cuando el id no corresponde
+  // a nada suyo, que es el mismo caso.
+  if (!page) throw new PageGoneError();
 
   return { id: page.id, handle: page.handle, url: `https://${domain}/pages/${page.handle}` };
+}
+
+/** La página que se intentaba actualizar ya no existe en Shopify. */
+export class PageGoneError extends Error {
+  constructor() {
+    super("La página ya no existe en Shopify.");
+    this.name = "PageGoneError";
+  }
 }
 
 /** Comprueba que las credenciales sirven, antes de intentar publicar nada. */

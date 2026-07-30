@@ -126,10 +126,17 @@ export async function setShopifyUrl(imageId: string, url: string): Promise<void>
 }
 
 /** Deja constancia de dónde quedó publicada la página. */
+/**
+ * Marca la página como publicada, o la desvincula con `null`.
+ *
+ * Admite `null` porque hace falta poder olvidar la página de Shopify sin borrar
+ * la de aquí: es lo que pasa cuando se borra desde el panel de Shopify y la
+ * plataforma se queda guardando un identificador que ya no apunta a nada.
+ */
 export async function markLandingPublished(
   id: string,
-  shopifyPageId: string,
-  url: string,
+  shopifyPageId: string | null,
+  url: string | null,
 ): Promise<void> {
   const { supabase } = await requireContext();
 
@@ -138,7 +145,9 @@ export async function markLandingPublished(
     .update({
       shopify_page_id: shopifyPageId,
       shopify_url: url,
-      published_at: new Date().toISOString(),
+      // Al desvincular se borra también la fecha: decir «publicada el 3 de
+      // marzo» de algo que ya no existe es peor que no decir nada.
+      published_at: shopifyPageId ? new Date().toISOString() : null,
     })
     .eq("id", id);
 }
