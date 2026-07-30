@@ -8,6 +8,8 @@ import {
   buildBeatExtractionPrompt,
   buildBeatImagePrompt,
   quoteIsReal,
+  INTENSITIES,
+  INTENSITY_META,
   type StoryBeat,
 } from "./story-beats.ts";
 
@@ -78,6 +80,7 @@ test("el prompt de extracción lleva el texto del copy y pide citas literales", 
     body: BODY,
     headline: "El análisis decía que estaba «bien»",
     count: 6,
+    intensity: "crudo",
   });
 
   assert.ok(prompt.includes(BODY), "el cuerpo del copy tiene que ir entero");
@@ -97,6 +100,7 @@ test("lo prohibido va escrito en los dos prompts, no se deja al criterio del mod
     body: BODY,
     headline: "titular",
     count: 5,
+    intensity: "muy-crudo",
   });
 
   const beat: StoryBeat = {
@@ -111,6 +115,7 @@ test("lo prohibido va escrito en los dos prompts, no se deja al criterio del mod
     productName: "Naturox",
     audience: "mujeres de 35 a 55",
     withProduct: false,
+    intensity: "crudo",
   });
 
   for (const prompt of [extraction, image]) {
@@ -135,12 +140,14 @@ test("el prompt de imagen dice explícitamente si el producto sale o no", () => 
     productName: "Naturox",
     audience: "mujeres de 35 a 55",
     withProduct: true,
+    intensity: "crudo",
   });
   const sin = buildBeatImagePrompt({
     beat,
     productName: "Naturox",
     audience: "mujeres de 35 a 55",
     withProduct: false,
+    intensity: "crudo",
   });
 
   // Sin esta frase, el modelo mete el frasco en todas las escenas «por si acaso»
@@ -162,9 +169,66 @@ test("el prompt de imagen se puede leer sin contexto", () => {
     productName: "Naturox",
     audience: "mujeres de 35 a 55 en México",
     withProduct: false,
+    intensity: "crudo",
   });
 
   assert.ok(image.includes("Papel con un valor subrayado"));
   assert.ok(image.includes("mujeres de 35 a 55 en México"));
   assert.ok(image.includes("4:5"), "debe llevar el formato de su tipo de escena");
+});
+
+/* ------------------------------- Intensidad --------------------------------- */
+
+test("ni siquiera la intensidad máxima abre la puerta al gore", () => {
+  /*
+   * Es la prueba que protege la decisión de fondo. «Muy crudo» sube por el eje
+   * de lo incómodo real —agotamiento, desorden, frialdad clínica, una cicatriz
+   * ya curada— y no por el del gore, que hace que el ojo aparte la mirada en vez
+   * de pararse. Si alguien intenta subir por ahí, esto falla.
+   */
+  const maxima = INTENSITY_META["muy-crudo"].direction;
+
+  assert.ok(maxima.includes("cicatriz"), "una cicatriz curada sí puede verse");
+  assert.ok(maxima.includes("Herida, quirófano o sangre: no"), "el gore sigue cerrado");
+  assert.ok(
+    maxima.includes("«yo pasé por esto» contra «te va a pasar esto»"),
+    "tiene que quedar escrita la diferencia entre testimonio y amenaza",
+  );
+});
+
+test("la intensidad viaja a los dos prompts", () => {
+  const extraccion = buildBeatExtractionPrompt({
+    productName: "Naturox",
+    audience: "mujeres de 35 a 55",
+    body: BODY,
+    headline: "titular",
+    count: 5,
+    intensity: "muy-crudo",
+  });
+
+  const imagen = buildBeatImagePrompt({
+    beat: {
+      kind: "momento-cero",
+      quote: "Me senté en el borde de la cama a las tres de la tarde",
+      scene: "Sentada en el borde de la cama, vestida de trabajo",
+      composition: "Habitación con la persiana medio bajada, luz de tarde",
+    },
+    productName: "Naturox",
+    audience: "mujeres de 35 a 55",
+    withProduct: false,
+    intensity: "muy-crudo",
+  });
+
+  for (const prompt of [extraccion, imagen]) {
+    assert.ok(prompt.includes("Angustia real"), "falta la dirección de intensidad");
+  }
+});
+
+test("las tres intensidades tienen dirección propia y distinta", () => {
+  const direcciones = INTENSITIES.map((nivel) => INTENSITY_META[nivel].direction);
+
+  assert.equal(new Set(direcciones).size, 3);
+  for (const direccion of direcciones) {
+    assert.ok(direccion.length > 80, "una dirección corta no cambia el resultado");
+  }
 });

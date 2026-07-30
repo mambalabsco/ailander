@@ -73,18 +73,23 @@ export const HOOKS_SCHEMA = object({
 /* ------------------------------------ Copys ------------------------------------- */
 
 /**
- * Un copy es un anuncio de Facebook: cuerpo, título y descripción.
+ * Un copy es un anuncio de Facebook: cuerpo, título y descripción, **sin
+ * `wordCount`**.
  *
  * `headline` y `description` tienen límites duros en el gestor de anuncios (40
  * y 30 caracteres). El esquema no los puede imponer —`maxLength` no está
- * admitido—, así que el límite se recuerda en el prompt y se comprueba al
- * guardar.
+ * admitido—, así que se recuerdan en el prompt y se recortan al guardar.
+ *
+ * Que el modelo declarara su propia longitud era el fallo: ese número se
+ * guardaba tal cual, así que una pieza de cuatrocientas palabras podía declarar
+ * mil doscientas y nadie lo notaba. El síntoma era «salen copys cortos» sin
+ * ninguna pista de por qué. Ahora lo cuenta el servidor y, si falta, pide una
+ * ampliación.
  */
-export const COPY_SCHEMA = object({
+export const LONG_COPY_SCHEMA = object({
   primaryText: str,
   headline: str,
   description: str,
-  wordCount: num,
 });
 
 /* ------------------------------- Anuncios cortos -------------------------------- */

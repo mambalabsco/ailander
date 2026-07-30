@@ -19,11 +19,11 @@ import {
 import { marketMoney } from "@/lib/money";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { clampToLimit, generateStructured } from "@/lib/generators";
+import { clampToLimit, generateLongCopy, generateStructured } from "@/lib/generators";
 import {
   ANGLES_SCHEMA,
   COMPETITOR_SEARCH_SCHEMA,
-  COPY_SCHEMA,
+  LONG_COPY_SCHEMA,
   HOOKS_SCHEMA,
   IDEAS_SCHEMA,
   PRODUCT_ANALYSIS_SCHEMA,
@@ -461,20 +461,26 @@ export async function generateCopyAction(input: unknown): Promise<LaunchResult> 
 Ningún prompt de este documento los genera, pero el gestor de anuncios los exige. Devuélvelos junto al cuerpo:
 
 - **Título**: máximo ${FACEBOOK_LIMITS.headline} caracteres. Es la promesa o el mecanismo en una línea.
-- **Descripción**: máximo ${FACEBOOK_LIMITS.description} caracteres. Remata el título, no lo repite.
-- **wordCount**: el número de palabras del cuerpo.`;
+- **Descripción**: máximo ${FACEBOOK_LIMITS.description} caracteres. Remata el título, no lo repite.`;
 
   return runInBackground({
     productId: ctx.id,
     kind: "copys",
     label: `Copy · ${method.name}`,
     work: async () => {
-  const { data, inputTokens, outputTokens } = await generateStructured<{
-    primaryText: string;
-    headline: string;
-    description: string;
-    wordCount: number;
-  }>({ prompt, schema: COPY_SCHEMA, role: "copy", maxTokens: 32_000 });
+  /*
+   * Las palabras se cuentan aquí, no las declara el modelo.
+   *
+   * Antes el esquema le pedía un `wordCount` y ese número se guardaba tal cual:
+   * una pieza de cuatrocientas palabras podía declarar mil doscientas y nadie lo
+   * notaba. Si sale corta, `generateLongCopy` pide una ampliación antes de
+   * guardarla.
+   */
+  const { data, inputTokens, outputTokens } = await generateLongCopy({
+    prompt,
+    schema: LONG_COPY_SCHEMA,
+    range: method.wordRange,
+  });
 
   const existing = await readCopies(ctx.id);
 
@@ -513,7 +519,7 @@ Ningún prompt de este documento los genera, pero el gestor de anuncios los exig
         await toggleHookUsed(ctx.id, chosenHook.id).catch(() => null);
       }
 
-      return outcome("copy", "copys", ctx, `${data.wordCount} palabras. Está en borrador.`, {
+      return outcome("copy", "copys", ctx, `${data.note}. Está en borrador.`, {
         inputTokens,
         outputTokens,
       });
@@ -1038,12 +1044,17 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
     kind: "copys",
     label: `Adaptar · ${sourceNote || method.name}`,
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
-        primaryText: string;
-        headline: string;
-        description: string;
-        wordCount: number;
-      }>({ prompt, schema: COPY_SCHEMA, role: "copy", maxTokens: 32_000 });
+      /*
+       * `generateLongCopy` cuenta las palabras en el servidor y, si la pieza
+       * salió corta, pide una ampliación antes de guardarla. Antes se guardaba
+       * el `wordCount` que el modelo declaraba de sí mismo, así que una
+       * adaptación de cuatrocientas palabras podía decir mil doscientas.
+       */
+      const { data, inputTokens, outputTokens } = await generateLongCopy({
+        prompt,
+        schema: LONG_COPY_SCHEMA,
+        range: method.wordRange,
+      });
 
       const existing = await readCopies(ctx.id);
 
@@ -1071,7 +1082,7 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
         "copy",
         "copys",
         ctx,
-        `${data.wordCount} palabras adaptadas. Está en borrador, en la lista del producto.`,
+        `${data.note}. Está en borrador, en la lista del producto.`,
         { inputTokens, outputTokens },
       );
     },

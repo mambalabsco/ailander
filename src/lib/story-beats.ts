@@ -129,6 +129,61 @@ export const BEAT_META: Record<BeatKind, BeatMeta> = {
   },
 };
 
+/* ------------------------------- Intensidad --------------------------------- */
+
+export const INTENSITIES = ["suave", "crudo", "muy-crudo"] as const;
+
+export type Intensity = (typeof INTENSITIES)[number];
+
+export interface IntensityMeta {
+  label: string;
+  description: string;
+  /** Lo que se le añade al prompt de cada escena. */
+  direction: string;
+}
+
+/**
+ * Cuánto se permite que incomode una escena.
+ *
+ * **Lo que sube no es el gore: es la falta de maquillaje.** Una escena cruda es
+ * la que no se ha limpiado para la cámara —la casa desordenada, la cara sin
+ * dormir, la cicatriz que existe— y ese es el eje que de verdad separa una foto
+ * que parece real de una que parece un anuncio.
+ *
+ * Subir por el eje del gore va en la dirección contraria de lo que se busca: una
+ * imagen explícita hace que el ojo **aparte la mirada**, que es lo opuesto a
+ * pararse. Y en salud, además, Meta la rechaza y la creatividad no llega a
+ * existir. Por eso ni siquiera «muy crudo» abre esa puerta: lo que abre es la
+ * puerta de lo incómodo real.
+ */
+export const INTENSITY_META: Record<Intensity, IntensityMeta> = {
+  suave: {
+    label: "Suave",
+    description: "Cotidiano y luminoso. Para públicos que aún no se reconocen en el problema.",
+    direction:
+      "Tono contenido y cotidiano. Luz natural agradable. La emoción se insinúa por el gesto y por el contexto, no por el dramatismo.",
+  },
+  crudo: {
+    label: "Crudo",
+    description: "Sin maquillar. La casa como está, la cara como está.",
+    direction:
+      "**Sin maquillar y sin ordenar.** La habitación como está de verdad: la cama sin hacer, los platos, la ropa en la silla. Cara sin maquillaje, ojeras, pelo sin arreglar. Luz dura o luz fea de bombilla, no de estudio. Encuadre imperfecto, ligeramente torcido, como una foto hecha con prisa desde el móvil. Nada en la escena debe parecer colocado para la foto.",
+  },
+  "muy-crudo": {
+    label: "Muy crudo",
+    description:
+      "Angustia real y frialdad clínica. Cicatrices que existen, agotamiento sin filtro.",
+    direction:
+      `**Angustia real, sin suavizar nada.** Agotamiento visible hasta resultar incómodo: la persona sentada sin hacer nada, la mirada perdida, el cuerpo derrotado en una postura que nadie posaría. Las tres de la madrugada. Desorden acumulado de semanas.
+
+**Frialdad clínica** donde toque: la camilla con el papel arrugado, la luz fluorescente que aplana la cara, el pasillo vacío, la sala de espera a las cuatro de la mañana con las sillas vacías.
+
+**Si la persona de la historia tiene una cicatriz, se ve.** Una cicatriz de tiroidectomía en el cuello, ya curada, es real y es dura, y en un testimonio de alguien que pasó por eso es honesta. Cicatriz curada de alguien que cuenta su historia: sí. Herida, quirófano o sangre: no, nunca — el ojo aparta la mirada en vez de pararse, y Meta lo rechaza antes de que nadie lo vea.
+
+Lo que sigue sin poder aparecer, aunque la intensidad sea la máxima: cualquier imagen que insinúe que a **quien mira** le va a pasar algo. La diferencia es «yo pasé por esto» contra «te va a pasar esto». La primera es un testimonio; la segunda es una amenaza que el producto no puede sostener, y es la que hunde la cuenta.`,
+  },
+};
+
 /* ----------------------------- Lo que devuelve ------------------------------ */
 
 export interface StoryBeat {
@@ -189,6 +244,8 @@ export interface BeatExtractionInput {
   problemMechanism?: string;
   /** Cuántas escenas se piden. */
   count: number;
+  /** Cuánto se permite que incomoden. */
+  intensity: Intensity;
 }
 
 /**
@@ -233,6 +290,10 @@ No hace falta usar todos, ni en orden, ni uno de cada. Usa los que la historia t
 
 ${STOPPING_POWER}
 
+## Intensidad: ${INTENSITY_META[input.intensity].label}
+
+${INTENSITY_META[input.intensity].direction}
+
 ## Lo que no puede aparecer
 
 ${FORBIDDEN}
@@ -260,8 +321,9 @@ export function buildBeatImagePrompt(options: {
   audience: string;
   /** Si el producto tiene que salir en esta escena. */
   withProduct: boolean;
+  intensity: Intensity;
 }): string {
-  const { beat, productName, audience, withProduct } = options;
+  const { beat, productName, audience, withProduct, intensity } = options;
   const meta = BEAT_META[beat.kind];
 
   return [
@@ -274,6 +336,8 @@ export function buildBeatImagePrompt(options: {
       : "El producto NO aparece en esta imagen.",
     "",
     STOPPING_POWER,
+    "",
+    INTENSITY_META[intensity].direction,
     "",
     `Formato ${meta.aspectRatio} para Meta.`,
     `No debe aparecer: ${FORBIDDEN}.`,

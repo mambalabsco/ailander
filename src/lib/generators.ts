@@ -102,6 +102,123 @@ export async function generateStructured<T>(options: {
   throw new Error("La búsqueda web no terminó después de varias reanudaciones.");
 }
 
+/* ------------------------- Piezas largas, con longitud ------------------------- */
+
+export interface LongCopyResult {
+  primaryText: string;
+  headline: string;
+  description: string;
+  /** Contado aquí, no lo que el modelo dijo de sí mismo. */
+  wordCount: number;
+  /** Si hubo que pedir una ampliación, y cómo quedó. */
+  note: string;
+}
+
+/**
+ * Genera una pieza larga y **comprueba que tiene la longitud pedida**.
+ *
+ * ## El fallo que corrige
+ *
+ * El esquema pedía al modelo un campo `wordCount` y ese número se guardaba tal
+ * cual. O sea: el modelo informaba de su propia longitud y se le creía. Una pieza
+ * de cuatrocientas palabras podía declarar mil doscientas y nadie se enteraba.
+ * El síntoma era «salen copys cortos» sin ninguna pista de por qué.
+ *
+ * Ahora se cuenta aquí y, si falta texto, se pide **una** ampliación. Una y no
+ * más: si a la segunda sigue corto, el problema es el prompt o el material de la
+ * investigación, y seguir insistiendo solo gasta dinero. En ese caso se devuelve
+ * lo que haya con la nota puesta, que es más útil que un error —una pieza corta
+ * se puede alargar a mano; una generación perdida, no—.
+ */
+export async function generateLongCopy(options: {
+  prompt: string;
+  schema: Record<string, unknown>;
+  range: [number, number];
+  maxTokens?: number;
+}): Promise<GenerationOutcome<LongCopyResult>> {
+  const { checkLength, expansionPrompt } = await import("@/lib/word-count");
+
+  const first = await generateStructured<{
+    primaryText: string;
+    headline: string;
+    description: string;
+  }>({
+    prompt: options.prompt,
+    schema: options.schema,
+    role: "copy",
+    maxTokens: options.maxTokens ?? 32_000,
+  });
+
+  let inputTokens = first.inputTokens;
+  let outputTokens = first.outputTokens;
+  let result = first.data;
+
+  const check = checkLength(result.primaryText, options.range);
+
+  if (check.verdict === "corto") {
+    /*
+     * Se pide continuar y desarrollar, no reescribir.
+     *
+     * Reescribir devuelve otra pieza igual de corta, porque el modelo repite su
+     * propio criterio de longitud. Decirle **dónde** añadir —más escena, una
+     * objeción más, la prueba que faltó— es lo que produce la ampliación de
+     * verdad.
+     */
+    const expanded = await generateStructured<{
+      primaryText: string;
+      headline: string;
+      description: string;
+    }>({
+      prompt: expansionPrompt({
+        current: result.primaryText,
+        words: check.words,
+        range: options.range,
+      }),
+      schema: options.schema,
+      role: "copy",
+      maxTokens: options.maxTokens ?? 32_000,
+    });
+
+    inputTokens += expanded.inputTokens;
+    outputTokens += expanded.outputTokens;
+
+    const second = checkLength(expanded.data.primaryText, options.range);
+
+    // Solo se acepta la ampliación si de verdad añadió texto. Un modelo que
+    // devuelve algo más corto que el original ha reescrito, no ampliado.
+    if (second.words > check.words) {
+      result = {
+        ...expanded.data,
+        // El titular original se conserva si la ampliación no trajo uno: es el
+        // que se validó contra el marco de escritura.
+        headline: expanded.data.headline || result.headline,
+        description: expanded.data.description || result.description,
+      };
+    }
+
+    const final = checkLength(result.primaryText, options.range);
+
+    return {
+      data: {
+        ...result,
+        wordCount: final.words,
+        note:
+          final.verdict === "corto"
+            ? `Salió corto (${check.words} palabras) y la ampliación lo dejó en ${final.words}. Sigue por debajo de ${options.range[0]}: revísalo a mano.`
+            : `Salió corto (${check.words} palabras) y se amplió a ${final.words}.`,
+      },
+      inputTokens,
+      outputTokens,
+    };
+  }
+
+  return {
+    data: { ...result, wordCount: check.words, note: check.message },
+    inputTokens,
+    outputTokens,
+  };
+}
+
 /**
  * Recorta a los límites del gestor de anuncios de Meta.
  *

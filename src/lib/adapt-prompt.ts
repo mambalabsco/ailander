@@ -1,6 +1,7 @@
 import "server-only";
 
 import { buildProductContext } from "@/lib/copy-prompts";
+import { lengthBrief } from "@/lib/word-count";
 import type { CopyMethod } from "@/types/copy";
 import type { Product } from "@/types";
 import type { AwarenessLevel, ProductResearch } from "@/types/research";
@@ -40,6 +41,12 @@ export function buildAdaptPrompt(options: {
 
   return `${buildProductContext(product, research, store)}
 
+## Antes de empezar: la longitud
+
+${lengthBrief(method.wordRange)}
+
+Está aquí arriba y no al final a propósito. Es una restricción de la pieza entera y hay que tenerla en cuenta **al planificarla**; como nota al pie se cumple mal, y el resultado son adaptaciones que se quedan en un tercio de lo pedido.
+
 ## El copy de partida
 
 ${options.sourceNote ? `Contexto: ${options.sourceNote}\n\n` : ""}---
@@ -63,11 +70,11 @@ Este es el punto donde una adaptación se estropea, así que revísalo antes de 
 3. **Ninguna promesa que la investigación no respalde.** Un copy adaptado que promete lo que el producto no hace es peor que no tener copy: convierte una vez y devuelve el pedido.
 4. Si el original menciona un mecanismo que aquí no aplica, **cámbialo por el mecanismo real de este producto**. No lo dejes «parecido».
 
-### Longitud y forma
+### Forma
 
-Entre ${method.wordRange[0]} y ${method.wordRange[1]} palabras. Nivel de lectura: ${method.readingLevel}.
+Nivel de lectura: ${method.readingLevel}. Recuerda la longitud del principio: entre ${method.wordRange[0]} y ${method.wordRange[1]} palabras.
 
-Devuelve también el **título** y la **descripción** que exige el gestor de anuncios de Meta, más el número de palabras del cuerpo.
+Devuelve también el **título** y la **descripción** que exige el gestor de anuncios de Meta.
 
 Escribe en el español de ${product.country || "México"}.`;
 }

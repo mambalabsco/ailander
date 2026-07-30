@@ -7,6 +7,7 @@ import type { Store } from "@/types/store";
 import { currencyOf } from "@/lib/money";
 import { describeOffers, type ProductOffers } from "@/types/offer";
 import { describeNotes, type ProductNote } from "@/types/note";
+import { lengthBrief } from "@/lib/word-count";
 
 /**
  * Constructores de los prompts de copy, fieles a `longs.md`.
@@ -566,7 +567,9 @@ Escribe para un público **${AWARENESS_LABELS[awarenessLevel].toLowerCase()}**.
 
 ${framework}
 
-Extensión: entre ${method.wordRange[0]} y ${method.wordRange[1]} palabras. Nivel de lectura: ${method.readingLevel}.
+${lengthBrief(method.wordRange)}
+
+Nivel de lectura: ${method.readingLevel}.
 
 Escribe en ${product.language}.
 ${FACEBOOK_OUTPUT_BLOCK}`;
