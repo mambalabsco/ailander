@@ -88,23 +88,44 @@ como git log --oneline "$ANTES..$DESPUES" | sed 's/^/  /'
 cambio() { ! como git diff --quiet "$ANTES" "$DESPUES" -- "$1"; }
 
 # ---------------------------------------------------------------------------
-# Solo lo que haga falta
+# Solo lo que haga falta — pero comparando contra el ESTADO, no contra el pull
+#
+# **Aquí hubo un fallo que dejó la base de datos vieja con el código nuevo.**
+# Estos pasos se decidían con `cambio()`, que solo mira lo que trajo *este*
+# `git pull`. Si el código ya estaba bajado —un `git pull` a mano, o una pasada
+# anterior que falló después— entonces ANTES y DESPUES son iguales, no se
+# detecta ningún cambio y **las migraciones se saltan**. El build sí se rehacía,
+# porque aquel usa una comprobación de estado, así que el resultado era una
+# interfaz nueva consultando tablas que no existían.
+#
+# La lección: comparar contra lo que se acaba de traer supone que el disco
+# estaba sincronizado antes de empezar, y eso no se puede suponer. Cada paso
+# mira ahora si su propio resultado está al día.
 # ---------------------------------------------------------------------------
 
-if cambio package-lock.json || cambio package.json; then
+# npm escribe `node_modules/.package-lock.json` al instalar, así que comparar
+# las dos fechas dice si lo instalado corresponde a lo declarado — venga el
+# cambio de donde venga.
+deps_viejas() {
+  [ -d node_modules ] || return 0
+  [ -f node_modules/.package-lock.json ] || return 0
+  [ package-lock.json -nt node_modules/.package-lock.json ]
+}
+
+if deps_viejas; then
   echo "== Dependencias =="
   como npm ci --no-audit --no-fund
 else
-  gris "Dependencias sin cambios."
+  gris "Dependencias al día."
 fi
 
-if cambio supabase/migrations; then
-  echo "== Migraciones =="
-  # `db:push` solo aplica las que faltan; las ya aplicadas las salta.
-  como npm run db:push
-else
-  gris "Sin migraciones nuevas."
-fi
+# Las migraciones se lanzan **siempre**.
+#
+# `db:push` ya es idempotente: lleva su propio registro y solo aplica las que
+# faltan. Ponerle una condición delante no ahorraba nada —tarda un par de
+# segundos cuando no hay nada que hacer— y era justo lo que permitía saltárselas.
+echo "== Migraciones =="
+como npm run db:push
 
 if cambio supabase/config.toml; then
   # No se sube desde aquí: el CLI de Supabase necesita un token personal que
