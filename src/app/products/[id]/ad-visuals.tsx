@@ -34,7 +34,16 @@ export function AdVisuals({
   copyId,
   generated,
 }: AdVisualsProps) {
-  const [open, setOpen] = useState(false);
+  /*
+   * Abierto de entrada cuando las creatividades salen de la historia.
+   *
+   * Extraer las escenas es una acción deliberada que ya costó una llamada al
+   * modelo: quien acaba de hacerlo quiere ver el resultado y mandarlo, no
+   * encontrarse otro botón que abre otro panel. Con las de plantilla se queda
+   * cerrado, que es como estaba.
+   */
+  const fromStory = visuals.some((visual) => visual.id.includes("-beat-"));
+  const [open, setOpen] = useState(fromStory);
   // Overrides del usuario sobre las decisiones automáticas.
   const [modelOverrides, setModelOverrides] = useState<Record<string, string>>({});
   const [referenceOverrides, setReferenceOverrides] = useState<Record<string, boolean>>({});
@@ -74,6 +83,14 @@ export function AdVisuals({
               concept: visual.concept,
               // El gancho da nombre al archivo: es lo que lo hace reconocible.
               origin: visual.title,
+              /*
+               * Solo las que enseñan el producto reciben su foto.
+               *
+               * Antes se decidía para toda la tanda y siempre que sí, así que a
+               * las escenas que no lo llevan —el desagüe, el análisis— se les
+               * pegaba un frasco de suplemento dentro.
+               */
+              withReference: referenceFor(visual),
             }))}
           />
         </div>
@@ -96,7 +113,12 @@ export function AdVisuals({
           disabled={!hasHiggsfieldKey}
           title={hasHiggsfieldKey ? undefined : "Configura las credenciales de Higgsfield en Configuración"}
         >
-          {open ? "Ocultar" : "Enviar a Higgsfield"}
+          {/*
+            El texto decía «Enviar a Higgsfield» y solo desplegaba el panel: el
+            envío de verdad está en el botón de dentro. Quien lo pulsaba daba por
+            hecho que ya se había mandado y se iba.
+          */}
+          {open ? "Ocultar" : "Preparar el envío"}
         </Button>
       </div>
 

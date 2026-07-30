@@ -29,6 +29,14 @@ interface Visual {
   adId?: string;
   /** Su página, cuando el hueco pertenece a una landing. */
   landingId?: string;
+  /**
+   * Si esta creatividad enseña el producto.
+   *
+   * Va por creatividad y no por tanda porque las escenas sacadas de la historia
+   * casi nunca lo enseñan: mandarles la foto de referencia les mete un frasco de
+   * suplemento en medio del desagüe de la ducha.
+   */
+  withReference?: boolean;
 }
 
 export function AdVisualSender({

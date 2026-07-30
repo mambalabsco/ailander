@@ -333,6 +333,17 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
         // El gancho o el ángulo del que nace: es lo que hace reconocible el
         // archivo cuando lo descargas junto a otros diecinueve.
         origin: readText(visual.origin),
+        /*
+         * Si **esta** creatividad lleva el producto.
+         *
+         * Antes era una decisión de toda la tanda, y con las escenas sacadas de
+         * la historia eso no sirve: de siete escenas, seis no enseñan el frasco
+         * —el desagüe de la ducha, el análisis, el techo a las tres— y mandarles
+         * la foto de referencia les pega un bote de suplemento dentro. Cuando no
+         * viene, se usa la decisión de la tanda, que es como se comportaba.
+         */
+        withReference:
+          typeof visual.withReference === "boolean" ? visual.withReference : undefined,
       };
     })
     .filter((visual) => visual.prompt);
@@ -355,8 +366,16 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
    * fotos del producto en lugar de ocho caras. Una referencia solo ayuda cuando
    * lo que se genera **es** el producto.
    */
+  /*
+   * La foto se baja una sola vez, y se decide por creatividad a quién se le pasa.
+   *
+   * Bajarla dentro del bucle repetiría la descarga en cada imagen; decidir por
+   * tanda pegaría el producto en escenas que no lo llevan.
+   */
+  const anyNeedsReference = visuals.some((visual) => visual.withReference ?? withReference);
+
   const references =
-    withReference && model.acceptsReferences ? await readReferenceBytes(productId) : [];
+    anyNeedsReference && model.acceptsReferences ? await readReferenceBytes(productId) : [];
 
   const existing = await readProductImages(productId);
   const { uploadGeneratedImage } = await import("@/lib/data/images");
@@ -371,7 +390,8 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
         model,
         prompt: visual.prompt,
         aspectRatio: visual.aspectRatio,
-        references,
+        // Solo las que enseñan el producto reciben su foto.
+        references: (visual.withReference ?? withReference) ? references : [],
       });
 
       if ("error" in outcome) {
