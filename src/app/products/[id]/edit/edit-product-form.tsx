@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button, Field, SelectField, TextAreaField, TextField } from "@/components/ui";
 import { updateProductFromForm } from "@/app/products/actions";
 import type { Product } from "@/types";
+import type { Store } from "@/types/store";
+import { marketLabel } from "@/types/store";
 
 const GENDER_OPTIONS = ["Mujeres", "Hombres", "No binario"];
 
@@ -12,9 +14,11 @@ interface EditProductFormProps {
   product: Product;
   /** Moneda del mercado en el que vive, para no rotular euros en México. */
   currency: string;
+  /** Para poder cambiar de tienda o de mercado sin recrear el producto. */
+  stores: Store[];
 }
 
-export function EditProductForm({ product, currency }: EditProductFormProps) {
+export function EditProductForm({ product, currency, stores }: EditProductFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +47,27 @@ export function EditProductForm({ product, currency }: EditProductFormProps) {
     amazonUrl: product.researchInputs?.amazonUrl ?? "",
     targetAgeRange: product.researchInputs?.targetAgeRange ?? "",
     targetGenders: product.researchInputs?.targetGenders ?? [],
+    storeId: product.storeId ?? "",
+    marketId: product.marketId ?? "",
   });
+
+  const selectedStore = stores.find((item) => item.id === form.storeId);
+
+  /*
+   * Cambiar de tienda reinicia el mercado.
+   *
+   * Los mercados son de cada tienda, así que conservar el elegido al cambiar
+   * dejaría el producto apuntando a un mercado de otra: la moneda y el dominio
+   * saldrían de un sitio y el producto de otro, sin que nada avisara.
+   */
+  const selectStore = (storeId: string) => {
+    const next = stores.find((item) => item.id === storeId);
+    setForm((current) => ({
+      ...current,
+      storeId,
+      marketId: next?.markets.find((market) => market.isPrimary)?.id ?? next?.markets[0]?.id ?? "",
+    }));
+  };
 
   const toggleGender = (gender: string) =>
     setForm((current) => ({
@@ -99,6 +123,50 @@ export function EditProductForm({ product, currency }: EditProductFormProps) {
           </SelectField>
         </Field>
       </div>
+
+      {/*
+        Tienda y mercado, que hasta ahora solo se podían elegir al crear el
+        producto. De ellos salen la moneda de los precios, el dominio de los
+        enlaces y a qué tienda se publica la página, así que no poder cambiarlos
+        obligaba a rehacer el producto entero por un clic mal dado.
+      */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Tienda">
+          <SelectField value={form.storeId} onChange={(event) => selectStore(event.target.value)}>
+            <option value="">Sin tienda</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
+            ))}
+          </SelectField>
+        </Field>
+
+        <Field label="Mercado">
+          <SelectField
+            value={form.marketId}
+            onChange={(event) => update("marketId", event.target.value)}
+            disabled={!selectedStore}
+          >
+            {selectedStore ? (
+              selectedStore.markets.map((market) => (
+                <option key={market.id} value={market.id}>
+                  {marketLabel(market)} · {market.currency}
+                </option>
+              ))
+            ) : (
+              <option value="">Elige una tienda primero</option>
+            )}
+          </SelectField>
+        </Field>
+      </div>
+
+      {form.storeId && !form.marketId ? (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          Esta tienda no tiene mercados. Créale uno en Tiendas y mercados: de ahí salen la moneda y
+          el dominio de los enlaces.
+        </p>
+      ) : null}
 
       <Field label="Descripción">
         <TextAreaField

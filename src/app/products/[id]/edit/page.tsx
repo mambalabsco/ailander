@@ -27,7 +27,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   return (
     <div className="space-y-6">
       <SectionCard title={`Editar ${product.name}`} description="Actualiza los datos del producto y sus mensajes clave">
-        <EditProductForm product={product} currency={currency} />
+        <EditProductForm product={product} currency={currency} stores={stores} />
       </SectionCard>
     </div>
   );

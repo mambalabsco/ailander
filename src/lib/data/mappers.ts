@@ -95,10 +95,25 @@ export function fromProduct(product: Partial<Product>): TablesUpdate<"products">
   assign("tone", product.tone);
   assign("status", product.status);
   assign("owner", product.owner);
-  assign("store_id", product.storeId ?? null);
-  assign("market_id", product.marketId ?? null);
-  assign("handle", product.handle ?? "");
-  assign("duplicated_from_id", product.duplicatedFromId ?? null);
+  /*
+   * Estos cuatro se miran con `in`, no con `??`.
+   *
+   * **Aquí hubo un fallo que borraba datos en silencio.** `assign` ignora
+   * `undefined`, pero `product.storeId ?? null` convierte el `undefined` en
+   * `null` *antes* de llegar, así que `assign` lo veía como un valor legítimo y
+   * lo escribía. Resultado: cualquier actualización parcial —cambiar el precio,
+   * corregir una objeción— desvinculaba el producto de su tienda y de su
+   * mercado, y con ellos se iban la moneda y el dominio.
+   *
+   * Con `in` se distingue lo que se quiere borrar de lo que no se ha tocado, que
+   * es exactamente la diferencia que `??` aplasta.
+   */
+  if ("storeId" in product) assign("store_id", product.storeId ?? null);
+  if ("marketId" in product) assign("market_id", product.marketId ?? null);
+  if ("handle" in product) assign("handle", product.handle ?? "");
+  if ("duplicatedFromId" in product) {
+    assign("duplicated_from_id", product.duplicatedFromId ?? null);
+  }
 
   if (product.researchInputs) {
     row.niche = product.researchInputs.niche;

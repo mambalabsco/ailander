@@ -160,6 +160,15 @@ export async function updateProductFromForm(id: string, patch: unknown) {
     objections: readList(raw.objections),
     status: status === "active" || status === "draft" ? (status as ProductStatus) : undefined,
     researchInputs: research,
+    /*
+     * La tienda y el mercado solo se tocan si el formulario los trae.
+     *
+     * Se propagan con `...` condicional y no con `undefined` porque el mapeador
+     * distingue «no viene» de «vacío» con `in`: mandar la clave con `undefined`
+     * la haría existir y borraría el vínculo, que es el fallo que había.
+     */
+    ...(raw.storeId === undefined ? {} : { storeId: readText(raw.storeId) || undefined }),
+    ...(raw.marketId === undefined ? {} : { marketId: readText(raw.marketId) || undefined }),
   });
 
   if (!updated) {
