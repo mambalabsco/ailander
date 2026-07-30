@@ -491,6 +491,14 @@ function renderSection(
  * Si en tu tema quedara algo visible, el arreglo es añadir su selector aquí, no
  * tocar el resto.
  */
+/**
+ * La clase de nuestro contenedor.
+ *
+ * Existe para poder decir «esto es mío» en el CSS. Sin una marca, ocultar el
+ * título que pinta el tema significaría ocultar también el nuestro.
+ */
+const ROOT_CLASS = "lp-root";
+
 const HIDE_CHROME = `<style>
   [id*="shopify-section"][id*="header"],
   [id*="shopify-section"][id*="footer"],
@@ -500,6 +508,26 @@ const HIDE_CHROME = `<style>
   .announcement-bar, .header-wrapper, .footer-wrapper {
     display: none !important;
   }
+
+  /*
+   * El título que pinta el tema.
+   *
+   * **El publirreportaje salía con el titular dos veces**: el del tema, sacado
+   * del nombre de la página, y el nuestro, que forma parte de la pieza. No basta
+   * con quitar el nuestro: es el que lleva el tamaño, el peso y el espaciado que
+   * hacen que parezca un artículo, y sin él la página empieza con la barra de
+   * anuncio flotando sobre nada.
+   *
+   * Primero las clases que usan los temas. Después, por si el tema usa otra, un
+   * barrido de cualquier h1 que no sea el nuestro: en una plantilla de página el
+   * único h1 debería ser el título, y la cabecera ya está oculta.
+   */
+  .main-page-title, .page-title, .page__title, .page-header__title,
+  .article-title, .template-page .page-width > h1, .rte + h1 {
+    display: none !important;
+  }
+  h1:not(.${ROOT_CLASS} h1) { display: none !important; }
+
   /* Los temas suelen dejar hueco para la cabecera fija. */
   main, #MainContent, .main-content { padding-top: 0 !important; margin-top: 0 !important; }
 </style>`;
@@ -518,7 +546,7 @@ export function renderLandingHtml(page: LandingPage, options: RenderOptions = {}
   // Solo al publicar: en la vista previa de la plataforma no hay tema que ocultar.
   const chrome = options.embedUrls && page.hideThemeChrome ? `${HIDE_CHROME}\n` : "";
 
-  return `${chrome}<div style="${FONT};color:${INK};background:#fff">
+  return `${chrome}<div class="${ROOT_CLASS}" style="${FONT};color:${INK};background:#fff">
 ${header}
 <article style="max-width:680px;margin:0 auto;padding:26px 18px 48px">
 ${body}
