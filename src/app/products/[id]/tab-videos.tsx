@@ -1,0 +1,233 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button, EmptyState, SelectField } from "@/components/ui";
+import { SectionCard } from "@/components/section-card";
+import { GenerateButton } from "@/components/generate-button";
+import { VoicePicker } from "@/components/video/voice-picker";
+import { ShotBoard } from "@/components/video/shot-board";
+import {
+  createVideoFromCopyAction,
+  deleteVideoAction,
+} from "@/app/products/[id]/video-actions";
+import { estimate, planDurations } from "@/lib/video/shots";
+import type { Video } from "@/lib/data/videos";
+import type { GeneratedCopy } from "@/types/copy";
+
+/**
+ * Vídeos verticales de un producto.
+ *
+ * La pantalla sigue el orden en que se gasta —guion, voz, imágenes, animación,
+ * montaje— y **enseña el presupuesto antes de cada paso caro**. Es la regla de
+ * control de gasto del pipeline: un lote se cobra entero de golpe, así que nada
+ * se dispara sin que alguien haya visto lo que va a costar.
+ */
+
+const money = (value: number) => `$${value.toFixed(2)}`;
+
+export function VideosTab({
+  productId,
+  videos,
+  copies,
+  providers,
+}: {
+  productId: string;
+  videos: Video[];
+  copies: GeneratedCopy[];
+  providers: { voice: boolean; images: boolean; compose: boolean };
+}) {
+  const router = useRouter();
+  const [copyId, setCopyId] = useState(copies[0]?.id ?? "");
+  const [voiceId, setVoiceId] = useState("");
+  const [shots, setShots] = useState(6);
+  const [seconds, setSeconds] = useState(60);
+  const [isPending, startTransition] = useTransition();
+
+  const missing = [
+    !providers.voice ? "ELEVENLABS_API_KEY" : "",
+    !providers.images ? "KIE_API_KEY" : "",
+    !providers.compose ? "FAL_KEY" : "",
+  ].filter(Boolean);
+
+  return (
+    <div className="space-y-6">
+      {/*
+        Lo que falta se dice arriba y antes de nada. Descubrir a mitad del
+        pipeline que no hay clave, con la voz ya pagada, es el peor momento.
+      */}
+      {missing.length > 0 ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">Faltan credenciales en el servidor</p>
+          <p className="mt-1">
+            {missing.join(", ")}. Sin ellas los pasos que las necesitan no se pueden lanzar.
+          </p>
+        </div>
+      ) : null}
+
+      <SectionCard
+        title="Nuevo vídeo desde un copy"
+        description="El copy se reescribe para el oído y se reparte en tomas: qué se narra, qué se ve y qué se mueve en cada una."
+      >
+        {copies.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Todavía no hay ningún copy. Escribe uno primero: el guion sale de él.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Copy</span>
+                <SelectField
+                  value={copyId}
+                  onChange={(event) => setCopyId(event.target.value)}
+                  className="min-w-64"
+                >
+                  {copies.map((copy) => (
+                    <option key={copy.id} value={copy.id}>
+                      {copy.driverLabel} · {copy.wordCount} palabras
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+
+              <VoicePicker value={voiceId} onChange={setVoiceId} enabled={providers.voice} />
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Duración
+                </span>
+                <SelectField
+                  value={String(seconds)}
+                  onChange={(event) => setSeconds(Number(event.target.value))}
+                  className="w-28"
+                >
+                  {[30, 45, 60, 90, 120].map((value) => (
+                    <option key={value} value={value}>
+                      {value} s
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tomas</span>
+                <SelectField
+                  value={String(shots)}
+                  onChange={(event) => setShots(Number(event.target.value))}
+                  className="w-20"
+                >
+                  {[4, 5, 6, 7, 8, 10, 12].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+            </div>
+
+            {/*
+              El presupuesto, antes de empezar. La animación es casi todo el
+              gasto, y verlo aquí evita descubrirlo cuando ya se pagó.
+            */}
+            <Presupuesto shots={shots} seconds={seconds} />
+
+            <GenerateButton
+              variant="primary"
+              action={() =>
+                createVideoFromCopyAction({ productId, copyId, voiceId, shots, seconds })
+              }
+              label="Escribir el guion"
+              disabled={!copyId || !voiceId}
+              disabledReason={!voiceId ? "Elige una voz" : undefined}
+              hint="El guion es lo barato: unos 0,05 USD. Nada de vídeo se genera todavía."
+            />
+          </div>
+        )}
+      </SectionCard>
+
+      {videos.length === 0 ? (
+        <EmptyState
+          title="Todavía no hay ningún vídeo"
+          description="Se hacen a partir de un copy: se reescribe para el oído, se le pone voz, y de los tiempos de esa voz salen los cortes de cada toma."
+        />
+      ) : (
+        videos.map((video) => (
+          <SectionCard
+            key={video.id}
+            title={video.title}
+            description={`${video.shots.length} tomas · ${video.voiceSeconds.toFixed(1)} s de voz · ${money(video.spentUsd)} gastados`}
+            action={
+              <Button
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    if (!window.confirm(`¿Borrar «${video.title}»? No se puede deshacer.`)) return;
+                    await deleteVideoAction(video.id, productId);
+                    router.refresh();
+                  })
+                }
+              >
+                Borrar
+              </Button>
+            }
+          >
+            <ShotBoard productId={productId} video={video} providers={providers} />
+          </SectionCard>
+        ))
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lo que va a costar, antes de escribir nada.
+ *
+ * Se calcula con las tarifas medidas y suponiendo que las tomas reparten la
+ * duración por igual. Es una estimación y se dice: los cortes reales salen de la
+ * voz, y hasta que exista no se sabe cuántas tomas caben en el clip de cinco.
+ */
+function Presupuesto({ shots, seconds }: { shots: number; seconds: number }) {
+  const perShot = seconds / Math.max(1, shots);
+
+  const plans = planDurations(
+    Array.from({ length: shots }, (_, index) => ({
+      n: String(index + 1),
+      start: 0,
+      end: perShot,
+      guion: "",
+    })),
+  );
+
+  const budget = estimate({
+    shots: Array.from({ length: shots }, () => ({
+      n: "",
+      guion: "x".repeat(Math.round(perShot * 15)),
+      role: "story" as const,
+      scene: "",
+      motion: "",
+      speaking: false,
+    })),
+    plans,
+    lipsyncCount: 0,
+  });
+
+  return (
+    <div className="rounded-2xl border border-slate-200 p-3 text-sm dark:border-slate-800">
+      <p className="font-medium">
+        Estimado: {money(budget.total)}
+        <span className="ml-2 font-normal text-slate-500 dark:text-slate-400">
+          {budget.videoSeconds} s de vídeo generado
+        </span>
+      </p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        voz {money(budget.voice)} · imágenes {money(budget.keyframes)} · animación{" "}
+        {money(budget.video)}. La animación es casi todo: es donde hay que mirar antes de lanzar.
+      </p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        Es una estimación. Los cortes reales salen de la voz, y hasta que exista no se sabe cuántas
+        tomas caben en el clip de cinco segundos.
+      </p>
+    </div>
+  );
+}

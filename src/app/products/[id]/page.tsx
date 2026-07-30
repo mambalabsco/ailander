@@ -42,6 +42,9 @@ import { CompetitorsTab } from "@/app/products/[id]/tab-competitors";
 import { OfferTab } from "@/app/products/[id]/tab-offer";
 import { AnglesTab } from "@/app/products/[id]/tab-angles";
 import { CopysTab } from "@/app/products/[id]/tab-copys";
+import { VideosTab } from "@/app/products/[id]/tab-videos";
+import { listVideos } from "@/lib/data/videos";
+import { videoProvidersReady } from "@/lib/video/providers";
 import { ImagesTab } from "@/app/products/[id]/tab-images";
 import { AdsTab } from "@/app/products/[id]/tab-ads";
 
@@ -57,6 +60,7 @@ const TABS = [
   { id: "angulos", label: "Ángulos" },
   { id: "copys", label: "Copys" },
   { id: "landings", label: "Landings" },
+  { id: "videos", label: "Vídeos" },
   { id: "imagenes", label: "Imágenes" },
   { id: "ads", label: "Ads" },
 ] as const;
@@ -212,13 +216,15 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
    * Se leen aquí con el resto, y sin tumbar la página si fallan: son añadidos y
    * la ficha del producto tiene que aparecer igual.
    */
+  let videos: Awaited<ReturnType<typeof listVideos>> = [];
   let landings: Awaited<ReturnType<typeof listLandings>> = [];
   let swipeCopies: Awaited<ReturnType<typeof listSwipeCopies>> = [];
 
   if (isSupabaseConfigured()) {
-    [landings, swipeCopies] = await Promise.all([
+    [landings, swipeCopies, videos] = await Promise.all([
       listLandings(product.id).catch(() => []),
       listSwipeCopies().catch(() => []),
+      listVideos(product.id).catch(() => []),
     ]);
   }
 
@@ -417,6 +423,15 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           landingCopyIds={
             new Set(landings.map((item) => item.copyId).filter(Boolean) as string[])
           }
+        />
+      ) : null}
+      {activeTab === "videos" ? (
+        <VideosTab
+          productId={product.id}
+          videos={videos}
+          /* Solo los largos: de un anuncio corto no sale una historia que contar. */
+          copies={copies.filter((copy) => copy.format !== "short-ad")}
+          providers={videoProvidersReady()}
         />
       ) : null}
       {activeTab === "landings" ? (

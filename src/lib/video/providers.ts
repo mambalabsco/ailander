@@ -126,6 +126,47 @@ export async function speak(options: {
   };
 }
 
+export interface Voice {
+  id: string;
+  name: string;
+  /** Cómo suena, según las etiquetas del proveedor: acento, edad, uso. */
+  labels: string[];
+  /** Muestra de audio, para poder oírla antes de elegir. */
+  previewUrl?: string;
+}
+
+/**
+ * Las voces de la cuenta.
+ *
+ * Se leen del proveedor en vez de pedir que alguien pegue identificadores. Un
+ * identificador de voz copiado a mano es un campo más donde equivocarse, y el
+ * error no se ve hasta oír el resultado — con la generación ya pagada.
+ */
+export async function listVoices(): Promise<Voice[]> {
+  const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+    headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("ElevenLabs rechazó la clave. Comprueba ELEVENLABS_API_KEY.");
+    }
+    throw new Error(`ElevenLabs respondió ${response.status} al listar las voces.`);
+  }
+
+  const payload = (await response.json()) as {
+    voices?: { voice_id: string; name?: string; labels?: Record<string, string>; preview_url?: string }[];
+  };
+
+  return (payload.voices ?? []).map((voice) => ({
+    id: voice.voice_id,
+    name: voice.name ?? voice.voice_id,
+    labels: Object.values(voice.labels ?? {}).filter(Boolean),
+    previewUrl: voice.preview_url,
+  }));
+}
+
 /* --------------------------------- kie.ai ---------------------------------- */
 
 const KIE_BASE = "https://api.kie.ai/api/v1";

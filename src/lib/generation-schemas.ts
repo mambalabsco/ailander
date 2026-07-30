@@ -323,3 +323,44 @@ export const STORY_BEATS_SCHEMA = object({
     }),
   },
 });
+
+/* ---------------------------- Guion de vídeo ------------------------------- */
+
+/**
+ * El estilo visual, aparte del guion.
+ *
+ * Va idéntico en todas las tomas y es lo único que hace que las imágenes
+ * generadas por separado parezcan del mismo vídeo. Pedido dentro de cada toma,
+ * el modelo lo variaría un poco cada vez y se perdería el efecto.
+ */
+export const STYLE_SCHEMA = object({
+  render: str,
+  accent: str,
+});
+
+/**
+ * Las tomas.
+ *
+ * `sub` es obligatorio en el esquema —la salida estructurada no admite campos
+ * opcionales— pero puede venir vacío, y así se guarda. `motion` existe porque un
+ * guion sin «qué se mueve» produce animaciones que flotan en el vacío, que es el
+ * defecto característico del vídeo generado.
+ */
+export const SCRIPT_SCHEMA = object({
+  title: str,
+  shots: {
+    type: "array",
+    items: object({
+      n: str,
+      guion: str,
+      sub: str,
+      role: {
+        type: "string",
+        enum: ["story", "science", "emotion", "concept", "producto"],
+      },
+      scene: str,
+      motion: str,
+      speaking: { type: "boolean" },
+    }),
+  },
+});

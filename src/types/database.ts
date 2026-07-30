@@ -663,6 +663,49 @@ type CostCustomRow = {
   created_at: string;
 };
 
+/* ---------------------------------- Vídeos -------------------------------------- */
+
+type VideoRow = {
+  id: string;
+  user_id: string;
+  product_id: string;
+  copy_id: string | null;
+  title: string;
+  status: string;
+  style_render: string;
+  style_accent: string;
+  voice_id: string;
+  voice_url: string | null;
+  /** Palabras con sus tiempos, tal y como llegaron del generador de voz. */
+  words: unknown;
+  voice_seconds: string;
+  final_url: string | null;
+  thumbnail_url: string | null;
+  spent_usd: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type VideoShotRow = {
+  id: string;
+  video_id: string;
+  n: string;
+  position: number;
+  guion: string;
+  sub: string | null;
+  role: string;
+  scene: string;
+  motion: string;
+  speaking: boolean;
+  cut_start: string | null;
+  cut_end: string | null;
+  keyframe_url: string | null;
+  clip_url: string | null;
+  lipsync_url: string | null;
+  error: string | null;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -947,6 +990,16 @@ export type Database = {
           Exclude<keyof CostGatewayFeeRow, "user_id" | "store_id" | "gateway">
         >,
         [Belongs<"store_id", "stores">]
+      >;
+      videos: Table<
+        VideoRow,
+        Insertable<VideoRow, Exclude<keyof VideoRow, "user_id" | "product_id" | "title">>,
+        [Belongs<"product_id", "products">]
+      >;
+      video_shots: Table<
+        VideoShotRow,
+        Insertable<VideoShotRow, Exclude<keyof VideoShotRow, "video_id" | "n">>,
+        [Belongs<"video_id", "videos">]
       >;
       cost_custom: Table<
         CostCustomRow,
