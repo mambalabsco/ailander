@@ -19,6 +19,7 @@ import { combinationKey } from "@/lib/copy-coverage";
 import { AdVisuals } from "@/app/products/[id]/ad-visuals";
 import { generateLandingAction } from "@/app/products/[id]/landing-actions";
 import { CopyToLanding } from "@/components/copy-to-landing";
+import { StoryBeatsControl } from "@/components/story-beats-control";
 import { SwipeFile } from "@/components/swipe-file";
 import { AdaptCopy } from "@/components/adapt-copy";
 import type { SwipeCopy } from "@/types/swipe";
@@ -696,6 +697,20 @@ export function CopysTab({
                       />
                     </div>
                   ) : null}
+
+                  {/*
+                    Las escenas van antes que las creatividades porque las
+                    alimentan: en cuanto existen, los prompts de abajo salen de
+                    ellas en vez de las plantillas.
+                  */}
+                  <StoryBeatsControl
+                    productId={productId}
+                    copyId={copy.id}
+                    beats={copy.storyBeats ?? []}
+                    intensity={copy.beatsIntensity}
+                    hasApiKey={hasApiKey}
+                    tooShort={copy.content.primaryText.length < 300}
+                  />
 
                   {visualsByCopy[copy.id]?.length ? (
                     <AdVisuals

@@ -1,4 +1,5 @@
 import type { AwarenessLevel } from "@/types/research";
+import type { Intensity, StoryBeat } from "@/lib/story-beats";
 
 /**
  * Ángulos y textos publicitarios.
@@ -101,6 +102,15 @@ export interface GeneratedCopy {
   adsetId?: string;
   adNumber?: number;
   adName?: string;
+  /**
+   * Escenas sacadas del propio texto, para las creatividades.
+   *
+   * Se guardan las escenas y no los prompts: extraerlas cuesta una llamada al
+   * modelo, convertirlas en prompt es una función pura. Así una mejora en las
+   * reglas de composición se aplica a todo el histórico sin volver a pagar.
+   */
+  storyBeats?: StoryBeat[];
+  beatsIntensity?: Intensity;
   createdAt: string;
 }
 

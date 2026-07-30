@@ -9,6 +9,11 @@ import type {
   ProductImagePattern,
 } from "@/types/visuals";
 import {
+  BEAT_META,
+  FORBIDDEN,
+  buildBeatImagePrompt,
+} from "@/lib/story-beats";
+import {
   AD_VISUAL_CONCEPT_LABELS,
   HIGGSFIELD_MODELS,
   PRODUCT_IMAGE_PATTERN_META,
@@ -200,8 +205,59 @@ export function buildAdVisualPrompts(options: {
     "oferta",
   ];
 
-  const concepts = order.slice(0, Math.max(minimum, 5));
   const createdAt = new Date().toISOString();
+
+  /*
+   * Si el copy tiene escenas sacadas de su propio texto, mandan ellas.
+   *
+   * Las plantillas —gancho, reseña, comparativa— sirven para un anuncio corto,
+   * donde no hay historia de la que tirar. En un long copy son un desperdicio:
+   * el texto ya contiene sus imágenes, y una plantilla produce la misma
+   * creatividad para dos historias completamente distintas.
+   */
+  if (copy.storyBeats?.length) {
+    return copy.storyBeats.map((beat, index) => {
+      const meta = BEAT_META[beat.kind];
+      const withProduct = meta.showsProduct;
+
+      return {
+        id: `${copy.id}-beat-${index + 1}`,
+        productId: product.id,
+        copyId: copy.id,
+        // La escena se mapea al concepto más cercano para no romper lo que ya
+        // lee este campo; el prompt de verdad viene de la escena.
+        concept: withProduct ? "producto-en-contexto" : "gancho-visual",
+        title: `${meta.label} · «${beat.quote.slice(0, 40)}${beat.quote.length > 40 ? "…" : ""}»`,
+        prompt: buildBeatImagePrompt({
+          beat,
+          productName: product.name,
+          audience: context.audience,
+          withProduct,
+          intensity: copy.beatsIntensity ?? "crudo",
+        }),
+        negativePrompt: FORBIDDEN,
+        aspectRatio: meta.aspectRatio,
+        // Soul para las escenas con personas —el realismo humano manda— y Nano
+        // Banana Pro para objetos, documentos y diagramas, donde importa la
+        // composición y la fidelidad al envase.
+        recommendedModelId:
+          beat.kind === "retrato" || beat.kind === "momento-cero"
+            ? "soul-v2"
+            : NANO_BANANA_PRO,
+        modelReason:
+          beat.kind === "retrato" || beat.kind === "momento-cero"
+            ? "Hay una persona en la escena y lo que la hace creíble es el realismo humano, no la precisión de composición."
+            : "Objeto, documento o diagrama: manda el control de la composición y del encuadre.",
+        needsProductReference: withProduct,
+        referenceReason: withProduct
+          ? "El producto sale reconocible, así que necesita la foto real: sin referencia el modelo se inventa el envase."
+          : "El producto no aparece en esta escena.",
+        createdAt,
+      } satisfies AdVisualPrompt;
+    });
+  }
+
+  const concepts = order.slice(0, Math.max(minimum, 5));
 
   return concepts.map((concept, index) => {
     const { model, reason } = recommendModel(concept);

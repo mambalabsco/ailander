@@ -304,6 +304,9 @@ type CopyRow = {
   word_count: number;
   status: DbCopyStatus;
   model: string;
+  /** Escenas sacadas del texto: `[{kind, quote, scene, composition}]`. */
+  story_beats: unknown;
+  beats_intensity: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -790,6 +793,8 @@ export type Database = {
           | "adset_id"
           | "ad_number"
           | "ad_name"
+          | "story_beats"
+          | "beats_intensity"
           | "primary_text"
           | "headline"
           | "description"

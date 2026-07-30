@@ -3,6 +3,7 @@ import "server-only";
 import { requireContext } from "@/lib/supabase/session";
 import type { GeneratedCopy, MarketingAngle } from "@/types/copy";
 import type { Tables } from "@/types/database";
+import { BEAT_KINDS, type StoryBeat } from "@/lib/story-beats";
 
 /**
  * Ángulos y textos en Supabase.
@@ -123,8 +124,41 @@ function toCopy(row: Tables<"copies">): GeneratedCopy {
     adsetId: row.adset_id ?? undefined,
     adNumber: row.ad_number ?? undefined,
     adName: row.ad_name || undefined,
+    // La columna es `jsonb`, así que puede traer cualquier cosa: se valida en
+    // vez de confiar. Una escena a medias produciría un prompt roto.
+    storyBeats: parseBeats(row.story_beats),
+    beatsIntensity: (row.beats_intensity as GeneratedCopy["beatsIntensity"]) ?? undefined,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * Valida las escenas que vienen de la columna `jsonb`.
+ *
+ * Se descartan las incompletas en silencio en vez de romper la lectura del copy:
+ * una escena mal formada es una creatividad menos, no un producto que no se
+ * puede abrir.
+ */
+function parseBeats(value: unknown): StoryBeat[] {
+  if (!Array.isArray(value)) return [];
+
+  const beats: StoryBeat[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) continue;
+    const record = item as Record<string, unknown>;
+
+    if (!BEAT_KINDS.includes(record.kind as never)) continue;
+    if (typeof record.composition !== "string" || !record.composition) continue;
+
+    beats.push({
+      kind: record.kind as StoryBeat["kind"],
+      quote: typeof record.quote === "string" ? record.quote : "",
+      scene: typeof record.scene === "string" ? record.scene : "",
+      composition: record.composition,
+    });
+  }
+
+  return beats;
 }
 
 export async function readCopies(productId: string): Promise<GeneratedCopy[]> {
@@ -229,4 +263,26 @@ export async function deleteCopy(copyId: string): Promise<boolean> {
 
   if (error) throw new Error(`No se pudo borrar el copy: ${error.message}`);
   return (count ?? 0) > 0;
+}
+
+/**
+ * Guarda las escenas extraídas de un copy.
+ *
+ * Reemplaza las anteriores en vez de acumular: volver a extraer es lo que se
+ * hace cuando las primeras no convencieron, y quedarse con las dos tandas
+ * mezcladas daría creatividades repetidas sin que se note de dónde salieron.
+ */
+export async function saveStoryBeats(
+  copyId: string,
+  beats: StoryBeat[],
+  intensity: string,
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("copies")
+    .update({ story_beats: beats, beats_intensity: intensity })
+    .eq("id", copyId);
+
+  if (error) throw new Error(`No se pudieron guardar las escenas: ${error.message}`);
 }

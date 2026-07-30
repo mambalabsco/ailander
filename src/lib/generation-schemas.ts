@@ -290,3 +290,36 @@ export const LANDING_PAGE_SCHEMA = object({
     }),
   },
 });
+
+/* --------------------------- Escenas de la historia ----------------------------- */
+
+/**
+ * Las escenas visuales que se sacan de un copy.
+ *
+ * `quote` es el campo que hace honesto todo lo demás: obliga al modelo a citar
+ * la frase del texto de la que sale cada escena. Sin él escribe siete escenas
+ * genéricas de suplemento, que es lo que hace cuando no encuentra material.
+ * El servidor comprueba después que la cita esté de verdad en el copy.
+ */
+export const STORY_BEATS_SCHEMA = object({
+  beats: {
+    type: "array",
+    items: object({
+      kind: {
+        type: "string",
+        enum: [
+          "momento-cero",
+          "objeto-testigo",
+          "documento",
+          "descubrimiento",
+          "mecanismo",
+          "vida-despues",
+          "retrato",
+        ],
+      },
+      quote: str,
+      scene: str,
+      composition: str,
+    }),
+  },
+});
