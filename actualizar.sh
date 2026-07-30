@@ -113,6 +113,18 @@ if cambio supabase/config.toml; then
   rojo "Súbelo desde tu Mac:  NEXT_PUBLIC_SITE_URL=https://aitools.mambalabs.co npm run auth:push"
 fi
 
+# Las pruebas van antes de compilar, y frenan el despliegue si fallan.
+#
+# Son las del motor de beneficio y de los rangos de fecha: pura aritmética, sin
+# red ni base de datos, así que tardan menos de un segundo. Y cubren justo la
+# clase de fallo que no se nota mirando la pantalla — una cifra equivocada sigue
+# pareciendo una cifra.
+echo "== Pruebas =="
+if ! npm test --silent; then
+  rojo "Las pruebas fallan. NO se despliega: alguna cifra saldría mal."
+  exit 1
+fi
+
 echo "== Compilando =="
 como npm run build
 
