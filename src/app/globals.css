@@ -46,6 +46,26 @@ body {
   /* Serie única y su versión atenuada, para gráficos de énfasis */
   --viz-series: #2a78d6;
   --viz-series-muted: #b7d3f6;
+
+  /* ---------------------------------------------------------------------------
+     Estado — reservados para veredictos, nunca reutilizados como «serie 4».
+
+     Estos cuatro pasaron el validador de paletas en pares adyacentes: banda de
+     luminosidad, suelo de croma, separación para daltonismo y contraste sobre la
+     superficie.
+
+     **El par rojo–verde falla si se comparan todos los pares entre sí**, y eso no
+     se arregla cambiando el tono: la insensibilidad al rojo y al verde es
+     exactamente esa. Como el significado está fijado por convención —verde bien,
+     rojo mal— la única salida correcta es la codificación redundante: cada uno de
+     estos colores va **siempre** con su icono y su palabra, y las formas de los
+     iconos son distintas entre sí (▲ = ! ✕). El color no lleva nunca la
+     información solo.
+  --------------------------------------------------------------------------- */
+  --viz-good: #0f7b4f;
+  --viz-warning: #b58900;
+  --viz-critical: #c2183f;
+  --viz-neutral: #3f5fa8;
 }
 
 .dark .viz {
@@ -64,4 +84,10 @@ body {
 
   --viz-series: #3987e5;
   --viz-series-muted: #1c5cab;
+
+  /* Elegidos para el modo oscuro, no invertidos: validados contra #0f172a. */
+  --viz-good: #1aa375;
+  --viz-warning: #ab8a2a;
+  --viz-critical: #dc4f70;
+  --viz-neutral: #5c86d8;
 }

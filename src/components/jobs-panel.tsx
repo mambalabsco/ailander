@@ -4,6 +4,7 @@ import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { clearJobsAction } from "@/app/products/[id]/job-actions";
+import { clearDataJobsAction } from "@/app/datos/actions";
 import { JOB_KIND_LABELS, isStale, type BackgroundJob } from "@/types/jobs";
 
 /**
@@ -32,10 +33,17 @@ export function JobsPanel({
   productId,
   jobs,
   intervalMs = 6000,
+  storeLevel = false,
 }: {
   productId: string;
   jobs: BackgroundJob[];
   intervalMs?: number;
+  /**
+   * Los trabajos de tienda —las sincronizaciones— no cuelgan de ningún producto,
+   * así que se limpian con otra acción. Sin esto el botón no haría nada, porque
+   * `clearJobsAction` filtra por un `product_id` que aquí está vacío.
+   */
+  storeLevel?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -73,7 +81,8 @@ export function JobsPanel({
             disabled={isPending}
             onClick={() =>
               startTransition(async () => {
-                await clearJobsAction(productId);
+                if (storeLevel) await clearDataJobsAction();
+                else await clearJobsAction(productId);
                 router.refresh();
               })
             }

@@ -18,6 +18,7 @@ export const JOB_KINDS = [
   "ficha",
   "landing",
   "shopify",
+  "datos",
 ] as const;
 
 export type JobKind = (typeof JOB_KINDS)[number];
@@ -35,6 +36,7 @@ export const JOB_KIND_LABELS: Record<JobKind, string> = {
   ficha: "Ficha del producto",
   landing: "Página",
   shopify: "Shopify",
+  datos: "Datos de tienda",
 };
 
 export interface BackgroundJob {

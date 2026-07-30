@@ -10,6 +10,7 @@ const navigation = [
   { href: "/", label: "Dashboard", icon: "◉" },
   { href: "/products", label: "Productos propios", icon: "◌" },
   { href: "/stores", label: "Tiendas y mercados", icon: "⌂" },
+  { href: "/datos", label: "Datos y beneficio", icon: "◈" },
   { href: "/competitors", label: "Competidores", icon: "◎" },
   { href: "/ads", label: "Biblioteca de anuncios", icon: "⬢" },
   { href: "/analyzer", label: "Analizador", icon: "◍" },

@@ -131,6 +131,30 @@ export async function listJobs(productId: string, limit = 12): Promise<Backgroun
   return (data ?? []).map(toJob);
 }
 
+/**
+ * Trabajos que no cuelgan de ningún producto.
+ *
+ * La sincronización de una tienda no pertenece a un producto: es de la tienda
+ * entera. `listJobs` filtra por `product_id`, así que estos nunca aparecerían en
+ * ninguna parte y una sincronización fallida se perdería en silencio, que es el
+ * modo exacto en que un dato mal sale sin que nadie se entere.
+ */
+export async function listJobsByKind(kind: JobKind, limit = 12): Promise<BackgroundJob[]> {
+  const { supabase } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("background_jobs")
+    .select("*")
+    .eq("kind", kind)
+    .is("product_id", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`No se pudieron leer los trabajos: ${error.message}`);
+
+  return (data ?? []).map(toJob);
+}
+
 export async function readJob(jobId: string): Promise<BackgroundJob | null> {
   const { supabase } = await requireContext();
 
@@ -154,14 +178,21 @@ export async function readJob(jobId: string): Promise<BackgroundJob | null> {
  * llevó por delante cuatro candidatos que habían costado casi un dólar.
  *
  * Los que siguen en marcha tampoco se tocan.
+ *
+ * `null` limpia los que no cuelgan de ningún producto —las sincronizaciones de
+ * tienda—. Hace falta la distinción porque `.eq("product_id", null)` en
+ * PostgREST **no encuentra nada**: en SQL nada es igual a nulo, y hay que usar
+ * `is`. Sin esto el botón de limpiar no haría nada y parecería roto.
  */
-export async function clearFinishedJobs(productId: string): Promise<void> {
+export async function clearFinishedJobs(productId: string | null): Promise<void> {
   const { supabase } = await requireContext();
 
-  await supabase
-    .from("background_jobs")
-    .delete()
-    .eq("product_id", productId)
+  const query = supabase.from("background_jobs").delete();
+
+  await (productId === null
+    ? query.is("product_id", null)
+    : query.eq("product_id", productId)
+  )
     .neq("status", "running")
     .is("result", null);
 }
