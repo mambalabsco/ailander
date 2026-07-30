@@ -246,7 +246,7 @@ export function LandingViewer({
             </p>
             <GenerateButton
               variant="secondary"
-              action={() => generateCommentAvatarsAction({ productId })}
+              action={() => generateCommentAvatarsAction({ productId, landingId: page.id })}
               label="Generar los retratos"
               hint="Ocho imágenes. Solo genera las que falten."
             />

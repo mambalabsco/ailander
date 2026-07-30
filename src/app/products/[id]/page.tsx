@@ -237,11 +237,25 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   const landingViews = landings.map((page) => {
     const own = images.filter((image) => image.landingId === page.id);
 
-    // Los retratos son del producto, no de la página: las mismas caras sirven
-    // en todas las landings.
-    const avatars = Array.from({ length: AVATAR_POOL_SIZE }, (_, index) =>
-      images.find((image) => image.concept === avatarSlot(index))?.url,
-    ).filter((url): url is string => Boolean(url));
+    /*
+     * Los retratos son **de esta página**.
+     *
+     * Antes se buscaban por concepto en todo el producto, con la idea de que las
+     * mismas caras sirvieran en todas las landings. No sirven —cada página tiene
+     * sus propios comentaristas— y además, con dos juegos generados, la búsqueda
+     * devolvía uno cualquiera: las caras de una página cambiaban al generar las
+     * de otra.
+     *
+     * El respaldo a los huérfanos es para las páginas anteriores al cambio, cuyos
+     * retratos se guardaron sin `landingId`.
+     */
+    const avatars = Array.from({ length: AVATAR_POOL_SIZE }, (_, index) => {
+      const slot = avatarSlot(index);
+      return (
+        own.find((image) => image.concept === slot)?.url ??
+        images.find((image) => !image.landingId && image.concept === slot)?.url
+      );
+    }).filter((url): url is string => Boolean(url));
 
     const urls: Record<string, string> = {};
     for (const image of own) {

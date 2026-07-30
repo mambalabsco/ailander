@@ -202,13 +202,28 @@ export async function generateCommentAvatarsAction(input: unknown): Promise<Laun
   const productId = readText(raw.productId);
   if (!productId) throw new Error("Falta el producto.");
 
+  /*
+   * Los retratos son **de cada página**, no del producto.
+   *
+   * Antes se guardaban solo con su concepto —`avatar-0`, `avatar-1`— sin atarse
+   * a ninguna landing, con la idea de que las mismas caras sirvieran en todas.
+   * No sirven: cada página tiene sus propios comentaristas, con otros nombres.
+   * Y al generarlos desde una segunda página aparecían dos imágenes con el mismo
+   * concepto, así que la búsqueda por concepto devolvía una cualquiera y **las
+   * caras de la primera landing cambiaban solas**.
+   */
+  const landingId = readText(raw.landingId);
+  if (!landingId) throw new Error("Falta la página a la que pertenecen los retratos.");
+
   const product = await findProductAnywhere(productId);
   if (!product) throw new Error("No se encontró el producto.");
 
   const modelSlug = readText(raw.modelSlug) || "text2image_soul_v2";
 
-  // Solo los que faltan: repetir los que ya están es gastar dos veces.
+  // Solo los que faltan **en esta página**: repetir los que ya están es gastar
+  // dos veces, y mirar los de otra página los daría por hechos sin estarlo.
   const existing = (await import("@/lib/image-store").then((m) => m.readProductImages(productId)))
+    .filter((image) => image.landingId === landingId)
     .map((image) => image.concept)
     .filter(Boolean);
 
@@ -217,13 +232,14 @@ export async function generateCommentAvatarsAction(input: unknown): Promise<Laun
   );
 
   if (pending.length === 0) {
-    return { started: false, message: "Ya están los ocho retratos generados." };
+    return { started: false, message: "Esta página ya tiene todos sus retratos." };
   }
 
   const { generateAdVisualsAction } = await import("@/app/products/[id]/image-generate-actions");
 
   return generateAdVisualsAction({
     productId,
+    landingId,
     modelSlug,
     // Sin la foto del producto: aquí se generan caras, no envases.
     withReference: false,
@@ -299,15 +315,36 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
 
       const images = await readProductImages(productId);
 
-      // Las de esta página, más los retratos, que son del producto.
-      const relevant = images.filter(
-        (image) =>
-          image.landingId === page.id ||
-          (image.concept &&
-            Array.from({ length: AVATAR_POOL_SIZE }, (_, index) => avatarSlot(index)).includes(
-              image.concept,
-            )),
+      /*
+       * Las de esta página, y solo las suyas.
+       *
+       * Antes entraban también los retratos de cualquier página, porque se
+       * consideraban del producto. Con dos landings eso mezclaba las caras: la
+       * segunda tanda de retratos se colaba en la primera página al republicarla.
+       */
+      const avatarConcepts = Array.from({ length: AVATAR_POOL_SIZE }, (_, index) =>
+        avatarSlot(index),
       );
+
+      const mine = images.filter((image) => image.landingId === page.id);
+
+      /*
+       * Respaldo para las páginas de antes del cambio.
+       *
+       * Sus retratos se guardaron sin `landingId`, así que sin esto una página ya
+       * publicada perdería las caras al republicarla. Solo se usan los huérfanos
+       * —los que no pertenecen a ninguna página— y solo para los huecos que esta
+       * no tenga cubiertos.
+       */
+      const orphans = images.filter(
+        (image) => !image.landingId && image.concept && avatarConcepts.includes(image.concept),
+      );
+
+      const covered = new Set(mine.map((image) => image.concept));
+      const relevant = [
+        ...mine,
+        ...orphans.filter((image) => !covered.has(image.concept)),
+      ];
 
       const toUpload = relevant.filter((image) => !image.shopifyUrl);
 
