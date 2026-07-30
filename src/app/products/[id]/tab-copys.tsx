@@ -18,6 +18,7 @@ import type { CopyCombination } from "@/lib/copy-coverage";
 import { combinationKey } from "@/lib/copy-coverage";
 import { AdVisuals } from "@/app/products/[id]/ad-visuals";
 import { generateLandingAction } from "@/app/products/[id]/landing-actions";
+import { CopyToLanding } from "@/components/copy-to-landing";
 import { SwipeFile } from "@/components/swipe-file";
 import { AdaptCopy } from "@/components/adapt-copy";
 import type { SwipeCopy } from "@/types/swipe";
@@ -46,6 +47,14 @@ interface CopysTabProps {
   productId: string;
   performance: Map<string, PerformanceRecord>;
   hasHiggsfieldKey: boolean;
+  /**
+   * Copys que ya tienen una página hecha.
+   *
+   * Solo sirve para avisar, no para bloquear: dos páginas del mismo copy es un
+   * caso legítimo —se reparte tráfico entre ellas en una prueba A/B— y prohibirlo
+   * obligaría a borrar la primera para poder probar una segunda.
+   */
+  landingCopyIds: Set<string>;
 }
 
 /**
@@ -71,6 +80,7 @@ export function CopysTab({
   productId,
   performance,
   hasHiggsfieldKey,
+  landingCopyIds,
 }: CopysTabProps) {
   const [format, setFormat] = useState<CopyFormat>("long-copy");
   const [methodId, setMethodId] = useState<string>("long-copy-discovery");
@@ -664,6 +674,28 @@ export function CopysTab({
                       record={performance.get(`copy::${copy.id}`)}
                     />
                   </div>
+
+                  {/*
+                    Convertir en página va aquí, en el copy, y no en el panel de
+                    crear uno nuevo: la decisión de «esto merece una página» se
+                    toma leyendo el texto, no antes de escribirlo.
+                  */}
+                  {copy.format !== "short-ad" ? (
+                    <div className="mt-4">
+                      <CopyToLanding
+                        productId={productId}
+                        copyId={copy.id}
+                        methodId={copy.methodId}
+                        angleId={copy.angleId}
+                        references={swipeCopies.map((item) => ({
+                          id: item.id,
+                          title: item.title,
+                        }))}
+                        hasApiKey={hasApiKey}
+                        alreadyHasLanding={landingCopyIds.has(copy.id)}
+                      />
+                    </div>
+                  ) : null}
 
                   {visualsByCopy[copy.id]?.length ? (
                     <AdVisuals

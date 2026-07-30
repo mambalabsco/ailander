@@ -56,13 +56,30 @@ export function Tag({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description?: string }) {
+/**
+ * Un hueco vacío, con la salida puesta.
+ *
+ * `action` no es decorativo: un estado vacío que solo dice «no hay nada» es un
+ * callejón sin salida, y obliga a buscar por la interfaz cuál era el botón que
+ * llenaba esto. Con el siguiente paso dentro, el hueco deja de ser un problema y
+ * pasa a ser el sitio por donde se empieza.
+ */
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="rounded-3xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
       <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</p>
       {description ? (
         <p className="mx-auto mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">{description}</p>
       ) : null}
+      {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
     </div>
   );
 }

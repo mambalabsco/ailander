@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { SectionCard } from "@/components/section-card";
 import { EmptyState } from "@/components/ui";
 import { LandingViewer } from "@/components/landing-viewer";
@@ -48,7 +49,15 @@ export function LandingsTab({
         {landings.length === 0 ? (
           <EmptyState
             title="Todavía no hay ninguna página"
-            description="Se generan desde la pestaña de Copys, eligiendo el formato de publirreportaje."
+            description="Se hacen a partir de un copy ya escrito: el texto se reparte en secciones y se le añaden autor, valoraciones, comentarios y oferta."
+            action={
+              <Link
+                href={`/products/${productId}?tab=copys`}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                Ir a los copys
+              </Link>
+            }
           />
         ) : (
           <div className="space-y-4">

@@ -400,6 +400,9 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           productId={product.id}
           performance={performance}
           hasHiggsfieldKey={hasHiggsfieldKey}
+          landingCopyIds={
+            new Set(landings.map((item) => item.copyId).filter(Boolean) as string[])
+          }
         />
       ) : null}
       {activeTab === "landings" ? (
