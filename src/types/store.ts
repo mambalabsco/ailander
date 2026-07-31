@@ -93,6 +93,16 @@ export interface Store {
   shopCurrency?: string;
   /** Zona horaria de la tienda: decide a qué día pertenece cada pedido. */
   shopTimeZone?: string;
+  /**
+   * El logo de la marca.
+   *
+   * Vive aquí y no en cada landing: se generaba por página, así que dos páginas
+   * de la misma tienda salían con logos distintos — lo contrario de lo que hace
+   * un logo. Lo usan las landings, las creatividades y los vídeos.
+   */
+  logoUrl?: string;
+  /** El prompt con el que se generó, para rehacerlo igual o variarlo. */
+  logoPrompt?: string;
   createdAt: string;
 }
 

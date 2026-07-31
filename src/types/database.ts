@@ -70,6 +70,9 @@ type StoreRow = {
   /** Moneda y zona horaria que declara Shopify. Base de todos los informes. */
   shop_currency: string | null;
   shop_time_zone: string | null;
+  /** El logo de la marca. Vive en la tienda, no en cada landing. */
+  logo_url: string | null;
+  logo_prompt: string | null;
   id: string;
   user_id: string;
   name: string;
@@ -768,7 +771,9 @@ export type Database = {
           | "shopify_api_key"
           | "shopify_api_secret"
           | "shop_currency"
-          | "shop_time_zone">>;
+          | "shop_time_zone"
+          | "logo_url"
+          | "logo_prompt">>;
       store_markets: Table<
         StoreMarketRow,
         Insertable<StoreMarketRow, "domain" | "path_prefix" | "is_primary">,

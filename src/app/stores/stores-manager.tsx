@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 import { SectionCard } from "@/components/section-card";
 import { Button, Field, SelectField, Tag, TextField } from "@/components/ui";
 import { Copyable } from "@/components/copyable";
+import { Combobox } from "@/components/combobox";
+import { StoreLogo } from "@/components/store-logo";
+import {
+  COUNTRIES,
+  CURRENCIES,
+  LANGUAGES,
+  currencyMatchesCountry,
+  findCountry,
+  languageName,
+} from "@/lib/locales";
 import {
   STORE_PLATFORM_LABELS,
   marketLabel,
@@ -35,6 +45,29 @@ const emptyMarket = {
   pathPrefix: "",
   domain: "",
 };
+
+/*
+ * Las opciones se arman una vez, fuera del componente.
+ *
+ * Dentro se recalcularían en cada pulsación de tecla del formulario, que es
+ * justo cuando el navegador está ocupado filtrando la lista.
+ */
+const COUNTRY_OPTIONS = COUNTRIES.map((country) => ({
+  code: country.code,
+  name: country.name,
+  hint: country.currency,
+}));
+
+const LANGUAGE_OPTIONS = LANGUAGES.map((language) => ({
+  code: language.code,
+  name: language.name,
+}));
+
+const CURRENCY_OPTIONS = CURRENCIES.map((currency) => ({
+  code: currency.code,
+  name: currency.code,
+  hint: currency.name,
+}));
 
 const emptyStore = {
   name: "",
@@ -158,10 +191,32 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
             <p className="mt-5 text-sm font-medium">Mercado principal</p>
             <div className="mt-2 grid gap-4 md:grid-cols-4">
               <Field label="País">
-                <TextField
-                  required
+                <Combobox
                   value={newStore.countryName}
-                  onChange={(event) => setNewStore({ ...newStore, countryName: event.target.value })}
+                  options={COUNTRY_OPTIONS}
+                  placeholder="Chile"
+                  /*
+                   * Elegir el país rellena código, idioma y moneda.
+                   *
+                   * Es lo que evita el error que había en pantalla —Chile con
+                   * euros—: la moneda deja de ser algo que alguien teclea y pasa
+                   * a salir del país. Se puede corregir después, porque hay
+                   * tiendas que liquidan en otra a propósito.
+                   */
+                  onChange={(value, option) => {
+                    const country = option ? findCountry(option.code) : undefined;
+                    setNewStore({
+                      ...newStore,
+                      countryName: value,
+                      ...(country
+                        ? {
+                            countryCode: country.code,
+                            currency: country.currency,
+                            languageName: languageName(country.language),
+                          }
+                        : {}),
+                    });
+                  }}
                 />
               </Field>
               <Field label="Código">
@@ -173,21 +228,36 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                 />
               </Field>
               <Field label="Idioma">
-                <TextField
-                  required
+                <Combobox
                   value={newStore.languageName}
-                  onChange={(event) => setNewStore({ ...newStore, languageName: event.target.value })}
+                  options={LANGUAGE_OPTIONS}
+                  placeholder="Español"
+                  onChange={(value) => setNewStore({ ...newStore, languageName: value })}
                 />
               </Field>
               <Field label="Moneda">
-                <TextField
-                  required
-                  maxLength={3}
+                <Combobox
                   value={newStore.currency}
-                  onChange={(event) => setNewStore({ ...newStore, currency: event.target.value })}
+                  options={CURRENCY_OPTIONS}
+                  useCode
+                  placeholder="CLP"
+                  onChange={(value) => setNewStore({ ...newStore, currency: value.toUpperCase() })}
                 />
               </Field>
             </div>
+
+            {/*
+              Avisa, no bloquea. Hay tiendas que venden en un país y liquidan en
+              otra moneda a propósito — la mexicana de este proyecto lo hace—.
+              Lo que no puede pasar es que nadie lo mire.
+            */}
+            {!currencyMatchesCountry(newStore.countryName, newStore.currency) ? (
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                {newStore.countryName} suele usar{" "}
+                {findCountry(newStore.countryName)?.currency}, no {newStore.currency}. Si es a
+                propósito, déjalo.
+              </p>
+            ) : null}
 
             <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
               <input
@@ -245,6 +315,19 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                       Marca en los textos: {store.brand} · {store.domain}
                     </p>
                   </div>
+
+                  {/* El logo, a la vista en la cabecera: es identidad de marca,
+                      no un ajuste escondido en un desplegable. */}
+                  {store.logoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element --
+                       CDN externo y proporción variable. */
+                    <img
+                      src={store.logoUrl}
+                      alt={`Logo de ${store.name}`}
+                      className="h-10 max-w-32 shrink-0 object-contain"
+                    />
+                  ) : null}
+
                   <div className="flex shrink-0 gap-2">
                     <Button
                       onClick={() => setOpenMarketForm(openMarketForm === store.id ? null : store.id)}
@@ -263,6 +346,15 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                     </Button>
                   </div>
                 </header>
+
+                <div className="border-b border-slate-200 p-5 dark:border-slate-800">
+                  <p className="mb-3 text-sm font-medium">Logo de la marca</p>
+                  <StoreLogo
+                    storeId={store.id}
+                    storeName={store.name}
+                    logoUrl={store.logoUrl}
+                  />
+                </div>
 
                 <div className="p-5">
                   {/* El token es de esta tienda: cada una es una app distinta.
@@ -491,22 +583,22 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                           />
                         </Field>
                         <Field label="Idioma">
-                          <TextField
-                            required
+                          <Combobox
                             value={draft.languageName}
-                            onChange={(event) =>
-                              updateDraft(store.id, { languageName: event.target.value })
-                            }
+                            options={LANGUAGE_OPTIONS}
                             placeholder="Español"
+                            onChange={(value) => updateDraft(store.id, { languageName: value })}
                           />
                         </Field>
                         <Field label="Moneda">
-                          <TextField
-                            required
-                            maxLength={3}
+                          <Combobox
                             value={draft.currency}
-                            onChange={(event) => updateDraft(store.id, { currency: event.target.value })}
+                            options={CURRENCY_OPTIONS}
+                            useCode
                             placeholder="MXN"
+                            onChange={(value) =>
+                              updateDraft(store.id, { currency: value.toUpperCase() })
+                            }
                           />
                         </Field>
                         <Field label="Prefijo de ruta (opcional)">

@@ -157,6 +157,8 @@ export function toStore(row: Tables<"stores">, markets: Tables<"store_markets">[
     shopifyApiSecret: row.shopify_api_secret ?? undefined,
     shopCurrency: row.shop_currency ?? undefined,
     shopTimeZone: row.shop_time_zone ?? undefined,
+    logoUrl: row.logo_url ?? undefined,
+    logoPrompt: row.logo_prompt ?? undefined,
     createdAt: row.created_at,
   };
 }

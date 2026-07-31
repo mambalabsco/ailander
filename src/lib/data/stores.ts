@@ -110,6 +110,8 @@ export async function updateStore(
       | "shopifyApiSecret"
       | "shopCurrency"
       | "shopTimeZone"
+      | "logoUrl"
+      | "logoPrompt"
     >
   >,
 ): Promise<Store | null> {
@@ -142,6 +144,8 @@ export async function updateStore(
   // una cadena vacía es la forma de decir «ya no lo sabemos».
   if (patch.shopCurrency !== undefined) changes.shop_currency = patch.shopCurrency;
   if (patch.shopTimeZone !== undefined) changes.shop_time_zone = patch.shopTimeZone;
+  if (patch.logoUrl !== undefined) changes.logo_url = patch.logoUrl;
+  if (patch.logoPrompt !== undefined) changes.logo_prompt = patch.logoPrompt;
 
   if (Object.keys(changes).length === 0) return findStore(id);
 
