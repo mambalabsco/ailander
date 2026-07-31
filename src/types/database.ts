@@ -719,6 +719,8 @@ type StoreBlueprintRow = {
   offers: unknown;
   guarantee: string;
   scripts: unknown;
+  /** {colors, fonts, buttonRadius} — la paleta y las tipografías leídas. */
+  identity: unknown;
   pages: unknown;
   notes: string;
   created_at: string;

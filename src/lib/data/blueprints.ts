@@ -5,10 +5,13 @@ import type {
   BlueprintSection,
   DetectedScript,
   OfferTier,
+  PageKind,
   SectionKind,
   ScriptKind,
   StoredPage,
+  VisualIdentitySummary,
 } from "@/lib/store-blueprint";
+import { PAGE_KINDS } from "@/lib/store-blueprint";
 
 /** Planos de tiendas analizadas. */
 
@@ -21,6 +24,7 @@ export interface SavedBlueprint {
   offers: OfferTier[];
   guarantee: string;
   scripts: DetectedScript[];
+  identity: VisualIdentitySummary;
   pages: StoredPage[];
   notes: string;
   createdAt: string;
@@ -43,6 +47,14 @@ function parseSections(value: unknown): BlueprintSection[] {
 
     return [
       {
+        /*
+         * Un plano anterior a las tres páginas no trae `page` y se lee como
+         * ficha de producto: es lo único que se analizaba entonces, así que
+         * sigue sirviendo para lo mismo en vez de repartirse al azar.
+         */
+        page: PAGE_KINDS.includes(record.page as PageKind)
+          ? (record.page as PageKind)
+          : "producto",
         kind: record.kind as SectionKind,
         purpose: typeof record.purpose === "string" ? record.purpose : "",
         angle: typeof record.angle === "string" ? record.angle : "",
@@ -128,6 +140,53 @@ function parsePages(value: unknown): StoredPage[] {
   });
 }
 
+/** Los colores y las tipografías, validados como el resto de columnas jsonb. */
+function parseIdentity(value: unknown): VisualIdentitySummary {
+  const empty: VisualIdentitySummary = { colors: [], fonts: [], buttonRadius: null };
+  if (typeof value !== "object" || value === null) return empty;
+
+  const record = value as Record<string, unknown>;
+
+  const colors = Array.isArray(record.colors)
+    ? record.colors.flatMap((item) => {
+        if (typeof item !== "object" || item === null) return [];
+        const color = item as Record<string, unknown>;
+        if (typeof color.hex !== "string") return [];
+
+        return [
+          {
+            hex: color.hex,
+            uses: Number.isFinite(Number(color.uses)) ? Number(color.uses) : 0,
+            role: typeof color.role === "string" ? color.role : "otro",
+          },
+        ];
+      })
+    : [];
+
+  const fonts = Array.isArray(record.fonts)
+    ? record.fonts.flatMap((item) => {
+        if (typeof item !== "object" || item === null) return [];
+        const font = item as Record<string, unknown>;
+        if (typeof font.family !== "string") return [];
+
+        return [
+          {
+            family: font.family,
+            // Sin identificador no se puede aplicar al tema, y un identificador
+            // que llegue raro es peor que ninguno: dejaría el tema sin fuente.
+            handle: typeof font.handle === "string" ? font.handle : null,
+          },
+        ];
+      })
+    : [];
+
+  return {
+    colors,
+    fonts,
+    buttonRadius: typeof record.buttonRadius === "string" ? record.buttonRadius : null,
+  };
+}
+
 export async function listBlueprints(): Promise<SavedBlueprint[]> {
   const { supabase } = await requireContext();
 
@@ -147,6 +206,7 @@ export async function listBlueprints(): Promise<SavedBlueprint[]> {
     offers: parseOffers(row.offers),
     guarantee: row.guarantee,
     scripts: parseScripts(row.scripts),
+    identity: parseIdentity(row.identity),
     pages: parsePages(row.pages),
     notes: row.notes,
     createdAt: row.created_at,

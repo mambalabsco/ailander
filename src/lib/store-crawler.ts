@@ -1,6 +1,7 @@
 import "server-only";
 
 import { classifyScripts, type DetectedScript } from "@/lib/store-blueprint";
+import { readVisualIdentity, type VisualIdentity } from "@/lib/visual-identity";
 import { htmlToText, pageTitle, scriptSources } from "@/lib/html-text";
 
 /**
@@ -42,6 +43,14 @@ export interface CrawlResult {
   storeName: string;
   pages: CrawledPage[];
   scripts: DetectedScript[];
+  /**
+   * Los colores y las tipografías, leídos de la portada.
+   *
+   * De la portada y no de una página cualquiera porque es donde el tema aplica
+   * su esquema principal; una ficha de producto puede estar en un esquema
+   * secundario y daría la paleta de la excepción por la de la marca.
+   */
+  identity: VisualIdentity;
   /** Lo que no se pudo abrir, con su motivo. */
   failed: { url: string; reason: string }[];
 }
@@ -111,6 +120,7 @@ export async function crawlStore(
   const pages: CrawledPage[] = [];
   const failed: { url: string; reason: string }[] = [];
   const scripts: string[] = [];
+  let identity: VisualIdentity = { colors: [], fonts: [], buttonRadius: null };
 
   const queue = [origin, `${origin}/collections/all`];
   const seen = new Set<string>();
@@ -125,19 +135,24 @@ export async function crawlStore(
 
       scripts.push(...scriptSources(html));
 
+      // La portada es la primera de la cola, así que esto se cumple una vez y
+      // con la página correcta.
+      if (pages.length === 0) identity = readVisualIdentity(html);
+
       const text = htmlToText(html);
       pages.push({
         url,
         kind: classifyUrl(url, origin),
         title: pageTitle(html),
         /*
-         * Se recorta a lo que cabe en un análisis útil.
+         * Aquí va el texto **entero**.
          *
-         * Los primeros doce mil caracteres cubren la página hasta bien pasada la
-         * oferta; lo que viene después suele ser el pie y el aviso legal, que no
-         * aportan al plano y sí al coste.
+         * Antes se recortaba a doce mil caracteres pensando solo en el coste del
+         * análisis, pero el mismo texto sirve después de modelo para escribir la
+         * página propia, y ahí doce mil se quedan a media oferta. El recorte para
+         * el análisis se hace al montar su prompt, que es donde importa.
          */
-        text: text.slice(0, 12_000),
+        text,
         htmlSize: html.length,
       });
 
@@ -171,6 +186,7 @@ export async function crawlStore(
     storeName: pages[0].title.split(/[|–—-]/)[0].trim() || new URL(origin).hostname,
     pages,
     scripts: classifyScripts(scripts),
+    identity,
     failed,
   };
 }

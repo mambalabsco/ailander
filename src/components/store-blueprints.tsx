@@ -117,6 +117,34 @@ export function StoreBlueprints({ blueprints }: { blueprints: SavedBlueprint[] }
               </Button>
             </div>
 
+            {/* El aspecto: es lo primero porque es lo que más se parece o no. */}
+            {blueprint.identity.colors.length > 0 || blueprint.identity.fonts.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-sm font-medium">Aspecto</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {blueprint.identity.colors.map((color) => (
+                    <span key={color.hex} className="flex items-center gap-1.5 text-xs">
+                      <span
+                        className="inline-block size-5 rounded border border-slate-300 dark:border-slate-600"
+                        style={{ backgroundColor: color.hex }}
+                      />
+                      <span className="font-mono">{color.hex}</span>
+                      {color.role !== "otro" ? (
+                        <span className="text-slate-500 dark:text-slate-400">{color.role}</span>
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
+                {blueprint.identity.fonts.length > 0 ? (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    {blueprint.identity.fonts
+                      .map((font) => `${font.family}${font.handle ? "" : " (no la sirve Shopify)"}`)
+                      .join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             {/* La estructura: lo que se reproduce con tu contenido. */}
             {blueprint.sections.length > 0 ? (
               <div className="mt-4">
@@ -131,6 +159,7 @@ export function StoreBlueprints({ blueprints }: { blueprints: SavedBlueprint[] }
                   {blueprint.sections.map((section, index) => (
                     <li key={index} className="flex gap-2 text-sm">
                       <span className="w-6 shrink-0 tabular-nums text-slate-400">{index + 1}</span>
+                      <span className="w-16 shrink-0 text-xs text-slate-400">{section.page}</span>
                       <span>
                         <span className="font-medium">{section.kind}</span>
                         {section.images > 0 ? (

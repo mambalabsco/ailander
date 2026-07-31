@@ -382,12 +382,16 @@ export const BLUEPRINT_SCHEMA = object({
   sections: {
     type: "array",
     items: object({
+      // La página a la que pertenece: sin esto todas las secciones de las tres
+      // páginas caerían en un mismo saco y el orden saldría mezclado.
+      page: { type: "string", enum: ["home", "catalogo", "producto"] },
       kind: {
         type: "string",
         enum: [
           "anuncio",
           "cabecera",
           "heroe",
+          "catalogo",
           "prueba-social",
           "beneficios",
           "mecanismo",
@@ -397,6 +401,7 @@ export const BLUEPRINT_SCHEMA = object({
           "garantia",
           "faq",
           "cta",
+          "contenido",
           "pie",
         ],
       },

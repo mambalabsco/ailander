@@ -27,6 +27,8 @@ export const SECTION_KINDS = [
   "anuncio",
   "cabecera",
   "heroe",
+  // La rejilla de productos: es el cuerpo de la portada y del catálogo.
+  "catalogo",
   "prueba-social",
   "beneficios",
   "mecanismo",
@@ -36,12 +38,34 @@ export const SECTION_KINDS = [
   "garantia",
   "faq",
   "cta",
+  // Un bloque de texto o de texto con imagen del que no se deduce el papel.
+  "contenido",
   "pie",
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
 
+/** Las páginas que se analizan y para las que se puede planificar un orden. */
+export const PAGE_KINDS = ["home", "catalogo", "producto"] as const;
+
+export type PageKind = (typeof PAGE_KINDS)[number];
+
+/** La plantilla del tema que corresponde a cada página. */
+export const TEMPLATE_FOR: Record<PageKind, string> = {
+  home: "templates/index.json",
+  catalogo: "templates/collection.json",
+  producto: "templates/product.json",
+};
+
 export interface BlueprintSection {
+  /**
+   * En qué página está.
+   *
+   * Los análisis anteriores no lo traen y se leen como `producto`, que es lo
+   * único que se analizaba entonces: así siguen sirviendo para la ficha en vez
+   * de quedar repartidos entre tres páginas al azar.
+   */
+  page: PageKind;
   kind: SectionKind;
   /** Qué hace esa sección en la página, en una frase. */
   purpose: string;
@@ -59,6 +83,12 @@ export interface OfferTier {
   highlighted: boolean;
 }
 
+export interface VisualIdentitySummary {
+  colors: { hex: string; uses: number; role: string }[];
+  fonts: { family: string; handle: string | null }[];
+  buttonRadius: string | null;
+}
+
 export interface Blueprint {
   url: string;
   /** Cómo se llama la tienda. Solo para poder decir de quién es el análisis. */
@@ -69,6 +99,8 @@ export interface Blueprint {
   guarantee: string;
   /** Los scripts que carga, para saber con qué juega. */
   scripts: DetectedScript[];
+  /** Los colores y las tipografías, para poder adaptar el tema propio. */
+  identity: VisualIdentitySummary;
 }
 
 /* ------------------------------ Los scripts -------------------------------- */
@@ -194,7 +226,8 @@ export const NOT_EXTRACTED = [
  * esta lista, la sección de arriba parece que la herramienta no sirve.
  */
 export const EXTRACTED = [
-  "La estructura: qué secciones tiene la página y en qué orden.",
+  "La estructura de la portada, el catálogo y la ficha: qué secciones tienen y en qué orden.",
+  "Los colores y las tipografías, que son datos y no obra: se pueden aplicar a tu tema.",
   "Qué hace cada sección y con qué ángulo — descrito, no copiado.",
   "La oferta completa: tramos, precios, precio tachado, cuál empujan.",
   "La garantía y cómo la formulan.",
@@ -233,6 +266,11 @@ export function tierDiscounts(offers: OfferTier[]): {
             : null,
       };
     });
+}
+
+/** Las secciones de una página del plano, en su orden. */
+export function sectionsOf(sections: BlueprintSection[], page: PageKind): BlueprintSection[] {
+  return sections.filter((section) => section.page === page);
 }
 
 /** Cuántas imágenes hay que generar para reproducir la estructura. */

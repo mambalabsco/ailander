@@ -12,6 +12,19 @@ import {
   type ThemeChange,
 } from "@/lib/theme-structure";
 import { listBlueprints } from "@/lib/data/blueprints";
+import {
+  PAGE_KINDS,
+  TEMPLATE_FOR,
+  sectionsOf,
+  type PageKind,
+} from "@/lib/store-blueprint";
+import {
+  applySettings,
+  planColorChanges,
+  planFontChanges,
+  readSettings,
+  type SettingsChange,
+} from "@/lib/theme-settings";
 
 /**
  * Comparar el tema de tu tienda con el plano de otra.
@@ -35,8 +48,14 @@ function readText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readPage(value: unknown): PageKind {
+  const page = readText(value);
+  return PAGE_KINDS.includes(page as PageKind) ? (page as PageKind) : "producto";
+}
+
 export interface ThemePlan {
   themeName: string;
+  page: PageKind;
   templateName: string;
   /** Las secciones de tu plantilla, en orden. */
   current: { id: string; type: string; role: string; position: number }[];
@@ -48,14 +67,13 @@ export interface ThemePlan {
 export async function buildThemePlanAction(
   storeId: unknown,
   blueprintId: unknown,
-  template: unknown,
+  pageKind: unknown,
 ): Promise<{ ok: boolean; plan?: ThemePlan; message?: string }> {
   const id = readText(storeId);
   const planId = readText(blueprintId);
 
-  // La de producto por defecto: es donde está la venta y donde el plano tiene
-  // algo que decir. La portada se compara peor porque cada marca la usa distinto.
-  const templateName = readText(template) || "templates/product.json";
+  const page = readPage(pageKind);
+  const templateName = TEMPLATE_FOR[page];
 
   if (!id || !planId) return { ok: false, message: "Elige la tienda y el análisis." };
 
@@ -89,12 +107,28 @@ export async function buildThemePlanAction(
       };
     }
 
-    const changes = planChanges(current, blueprint.sections);
+    /*
+     * Solo las secciones de **esta** página del plano.
+     *
+     * Sin filtrar, la portada del competidor se compararía contra la ficha de
+     * producto propia y el plan diría que sobra media página.
+     */
+    const target = sectionsOf(blueprint.sections, page);
+
+    if (target.length === 0) {
+      return {
+        ok: false,
+        message: `Ese análisis no tiene secciones de ${page}. Si es anterior a esta versión solo miró la ficha de producto: vuelve a analizar la tienda.`,
+      };
+    }
+
+    const changes = planChanges(current, target);
 
     return {
       ok: true,
       plan: {
         themeName: main.name,
+        page,
         templateName,
         current: current.map((section) => ({
           id: section.id,
@@ -131,10 +165,13 @@ export async function applyThemeOrderAction(
   storeId: unknown,
   themeId: unknown,
   blueprintId: unknown,
+  pageKind: unknown,
 ): Promise<{ ok: boolean; message: string }> {
   const id = readText(storeId);
   const theme = readText(themeId);
   const planId = readText(blueprintId);
+  const page = readPage(pageKind);
+  const templateName = TEMPLATE_FOR[page];
 
   if (!id || !theme) return { ok: false, message: "Falta la tienda o el tema." };
   if (!planId) return { ok: false, message: "Falta el análisis con el que comparar." };
@@ -155,12 +192,12 @@ export async function applyThemeOrderAction(
      * el servidor con la plantilla recién leída también evita aplicar un orden
      * pensado para una versión del tema que ya cambió.
      */
-    const [file] = await listThemeFiles(store, theme, ["templates/product.json"]);
+    const [file] = await listThemeFiles(store, theme, [templateName]);
     if (!file?.body) {
-      return { ok: false, message: "No se pudo leer templates/product.json de ese tema." };
+      return { ok: false, message: `No se pudo leer ${templateName} de ese tema.` };
     }
 
-    const order = orderFor(parseTemplate(file.body), blueprint.sections);
+    const order = orderFor(parseTemplate(file.body), sectionsOf(blueprint.sections, page));
     if (order.length === 0) {
       return { ok: false, message: "Esa plantilla no declara secciones legibles." };
     }
@@ -176,11 +213,141 @@ export async function applyThemeOrderAction(
       return { ok: true, message: "Ya estaba en ese orden. No se ha escrito nada." };
     }
 
-    await writeThemeFiles(store, theme, [
-      { filename: "templates/product.json", content: next },
-    ]);
+    await writeThemeFiles(store, theme, [{ filename: templateName, content: next }]);
 
     return { ok: true, message: "Orden aplicado. Míralo en la vista previa del tema antes de publicar." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo aplicar." };
+  }
+}
+
+/* ------------------------- El aspecto: color y letra ----------------------- */
+
+const SETTINGS_FILE = "config/settings_data.json";
+
+export interface LookPlan {
+  themeName: string;
+  changes: SettingsChange[];
+  /** Las tipografías leídas que el tema no puede usar, para decirlo. */
+  unusableFonts: string[];
+  /** Si el tema estaba con un ajuste preestablecido sin tocar. */
+  presetName: string | null;
+}
+
+/**
+ * Qué habría que cambiar en tu tema para acercarlo al aspecto de la otra tienda.
+ *
+ * Esto es lo que de verdad hace que dos tiendas se parezcan. El orden de las
+ * secciones cambia la estructura, pero con distinta paleta y distinta letra dos
+ * páginas idénticas no se parecen en nada; al revés sí.
+ *
+ * Se lee del tema **publicado** para saber de dónde se parte, igual que el plan
+ * de secciones, pero se aplica donde se elija — y por defecto, no ahí.
+ */
+export async function buildLookPlanAction(
+  storeId: unknown,
+  blueprintId: unknown,
+): Promise<{ ok: boolean; plan?: LookPlan; message?: string }> {
+  try {
+    const store = await findStore(readText(storeId));
+    if (!store) return { ok: false, message: "No se encontró la tienda." };
+
+    const blueprint = (await listBlueprints()).find((item) => item.id === readText(blueprintId));
+    if (!blueprint) return { ok: false, message: "Ese análisis ya no existe." };
+
+    if (blueprint.identity.colors.length === 0 && blueprint.identity.fonts.length === 0) {
+      return {
+        ok: false,
+        message:
+          "Ese análisis no tiene colores ni tipografías. Si es anterior a esta versión no los leía: vuelve a analizar la tienda.",
+      };
+    }
+
+    const themes = await listThemes(store);
+    const main = themes.find((theme) => theme.role === "MAIN");
+    if (!main) return { ok: false, message: "Esta tienda no tiene ningún tema publicado." };
+
+    const [file] = await listThemeFiles(store, main.id, [SETTINGS_FILE]);
+    const settings = file?.body ? readSettings(file.body) : null;
+
+    if (!settings) {
+      return {
+        ok: false,
+        message: `No se pudo leer ${SETTINGS_FILE}. Los temas anteriores a Shopify 2.0 no lo tienen y su paleta va en el código, que no se toca desde aquí.`,
+      };
+    }
+
+    return {
+      ok: true,
+      plan: {
+        themeName: main.name,
+        changes: [
+          ...planColorChanges(settings.values, blueprint.identity.colors),
+          ...planFontChanges(settings.values, blueprint.identity.fonts),
+        ],
+        // Se nombran para que no parezca que se ignoraron sin más: Shopify no
+        // las sirve, así que el tema no puede usarlas sin tocar su código.
+        unusableFonts: blueprint.identity.fonts
+          .filter((font) => !font.handle)
+          .map((font) => font.family),
+        presetName: settings.presetName,
+      },
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo comparar." };
+  }
+}
+
+/**
+ * Aplica el color y la letra al tema elegido.
+ *
+ * Se recalcula contra el tema de destino en vez de escribir lo que decidió el
+ * navegador: el tema donde se aplica **no** es el que se leyó para el plan, así
+ * que sus ajustes pueden llamarse distinto o no existir. Escribir el plan a
+ * ciegas dejaría claves que ese tema no lee.
+ */
+export async function applyLookAction(
+  storeId: unknown,
+  themeId: unknown,
+  blueprintId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const theme = readText(themeId);
+  if (!theme) return { ok: false, message: "Falta el tema." };
+
+  try {
+    const store = await findStore(readText(storeId));
+    if (!store) return { ok: false, message: "No se encontró la tienda." };
+
+    const blueprint = (await listBlueprints()).find((item) => item.id === readText(blueprintId));
+    if (!blueprint) return { ok: false, message: "Ese análisis ya no existe." };
+
+    const [file] = await listThemeFiles(store, theme, [SETTINGS_FILE]);
+    const settings = file?.body ? readSettings(file.body) : null;
+
+    if (!settings || !file?.body) {
+      return { ok: false, message: `No se pudo leer ${SETTINGS_FILE} de ese tema.` };
+    }
+
+    const changes = [
+      ...planColorChanges(settings.values, blueprint.identity.colors),
+      ...planFontChanges(settings.values, blueprint.identity.fonts),
+    ];
+
+    if (changes.length === 0) {
+      return { ok: true, message: "Ese tema ya tenía esos colores y esas letras. No se ha escrito nada." };
+    }
+
+    const next = applySettings(file.body, changes);
+    if (!next) {
+      return { ok: false, message: "No se pudo escribir la configuración; no se ha tocado nada." };
+    }
+
+    await writeThemeFiles(store, theme, [{ filename: SETTINGS_FILE, content: next }]);
+
+    return {
+      ok: true,
+      message: `${changes.length} ajuste(s) aplicados. Míralo en la vista previa del tema antes de publicar.`,
+    };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo aplicar." };
   }

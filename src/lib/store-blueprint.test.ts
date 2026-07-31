@@ -121,9 +121,9 @@ test("sin tramo de uno no se inventa un descuento", () => {
 
 test("cuenta cuántas imágenes hay que generar", () => {
   const sections: BlueprintSection[] = [
-    { kind: "heroe", purpose: "", angle: "", images: 1 },
-    { kind: "beneficios", purpose: "", angle: "", images: 3 },
-    { kind: "faq", purpose: "", angle: "", images: 0 },
+    { page: "producto" as const, kind: "heroe", purpose: "", angle: "", images: 1 },
+    { page: "producto" as const, kind: "beneficios", purpose: "", angle: "", images: 3 },
+    { page: "producto" as const, kind: "faq", purpose: "", angle: "", images: 0 },
   ];
 
   assert.equal(imagesNeeded(sections), 4);

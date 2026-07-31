@@ -51,12 +51,24 @@ export async function analyzeStoreAction(input: unknown): Promise<LaunchResult> 
 Tienda: ${crawl.storeName} (${crawl.origin})
 
 ${crawl.pages
-  .map((page) => `### ${page.kind} — ${page.url}\n\n${page.text}`)
+  /*
+   * Al prompt va recortado, no entero.
+   *
+   * Los primeros doce mil caracteres cubren la página hasta bien pasada la
+   * oferta; lo que sigue suele ser el pie y el aviso legal, que no cambian el
+   * plano y sí el coste. El texto completo se guarda igualmente, porque después
+   * sirve de modelo para escribir la página propia.
+   */
+  .map((page) => `### ${page.kind} — ${page.url}\n\n${page.text.slice(0, 12_000)}`)
   .join("\n\n---\n\n")}
 
 ## Lo que tienes que devolver
 
-**La estructura**: qué secciones tiene la página de producto y en qué orden. Para cada una, qué hace en la página y **con qué ángulo** — el enfoque descrito, no sus frases.
+**La estructura de cada página que se leyó**, no solo la de producto. Para cada sección: en qué página está (\`page\`: home, catalogo o producto), qué hace y **con qué ángulo** — el enfoque descrito, no sus frases.
+
+Las tres páginas se describen por separado y **en el orden en que aparecen de arriba abajo**. La portada y el catálogo importan tanto como la ficha: son las que dan la primera impresión y las que se adaptan con las mismas secciones del tema propio.
+
+Si de una página solo se leyó el principio, describe lo que haya y no inventes el resto.
 
 Ejemplo de lo que quiero en \`angle\`: «promete resultado en treinta días apelando al cansancio de la mañana». Ejemplo de lo que **no** quiero: la frase literal que usa la página.
 
@@ -79,7 +91,7 @@ Si un texto de la página te parece especialmente bueno, **describe por qué fun
         currency: string;
         guarantee: string;
         notes: string;
-        sections: { kind: string; purpose: string; angle: string; images: number }[];
+        sections: { page: string; kind: string; purpose: string; angle: string; images: number }[];
         offers: { quantity: number; price: number; compareAt: number; highlighted: boolean }[];
       }>({ prompt, schema: BLUEPRINT_SCHEMA, role: "copy", maxTokens: 16_000 });
 
@@ -99,6 +111,7 @@ Si un texto de la página te parece especialmente bueno, **describe por qué fun
         })),
         guarantee: analysis.data.guarantee,
         scripts: crawl.scripts,
+        identity: crawl.identity,
         /*
          * El texto se guarda, no solo la lista de direcciones.
          *
@@ -123,7 +136,10 @@ Si un texto de la página te parece especialmente bueno, **describe por qué fun
 
       return {
         summary: [
-          `${analysis.data.sections.length} secciones y ${analysis.data.offers.length} tramos de oferta.`,
+          `${analysis.data.sections.length} secciones en ${new Set(analysis.data.sections.map((section) => section.page)).size} página(s) y ${analysis.data.offers.length} tramos de oferta.`,
+          crawl.identity.colors.length > 0
+            ? ` Paleta de ${crawl.identity.colors.length} colores${crawl.identity.fonts.length > 0 ? ` y ${crawl.identity.fonts.length} tipografía(s)` : ""}.`
+            : "",
           `${crawl.scripts.length} script(s) detectados`,
           pixels > 0 ? `, ${pixels} de ellos pixeles que no se importan.` : ".",
           crawl.failed.length > 0 ? ` No se pudo abrir ${crawl.failed.length} página(s).` : "",

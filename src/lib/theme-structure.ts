@@ -39,7 +39,7 @@ export interface TemplateSection {
  * por todo el archivo rompería cualquier `https://` que viviera dentro de una
  * cadena, y las plantillas están llenas de enlaces.
  */
-function stripLeadingComments(json: string): string {
+export function stripLeadingComments(json: string): string {
   const start = json.indexOf("{");
   if (start <= 0) return json;
 
@@ -119,6 +119,14 @@ const ROLE_PATTERNS: { match: RegExp; kind: string }[] = [
     match: /main-product|featured-product|product-form|product-details|product-info|hero|banner|slideshow/i,
     kind: "heroe",
   },
+
+  /*
+   * La rejilla de productos: el cuerpo de la portada y del catálogo.
+   *
+   * Va antes que el héroe porque `featured-collection` contiene «featured», que
+   * el patrón del héroe se llevaría.
+   */
+  { match: /collection|product-grid|product-list|catalog/i, kind: "catalogo" },
 
   { match: /review|rating|testimonial/i, kind: "testimonios" },
   /*
@@ -283,7 +291,8 @@ export function summarize(changes: ThemeChange[]): Record<ChangeKind, number> {
  * que separa esto de un problema, así que se dice donde se lee, no solo aquí.
  */
 export const PLAN_LIMITS = [
-  "Ordena secciones y dice cuáles faltan. El contenido de cada una sale de tu producto, no de la referencia.",
+  "Aplica colores y tipografías, y ordena secciones. El contenido de cada sección sale de tu producto, no de la referencia.",
+  "Las secciones que falten no se añaden solas: una sección nueva necesita su texto y sus imágenes.",
   "No copia texto ni imágenes: los textos se escriben con tu investigación y las imágenes se generan con tu foto de producto.",
   "No importa código de tema. Las secciones se añaden con las que trae el tuyo.",
 ];
