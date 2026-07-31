@@ -17,7 +17,27 @@ import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
  */
 
 /** Los permisos que necesita la plataforma. */
-export const SHOPIFY_SCOPES = ["write_content", "write_files", "read_orders"];
+/**
+ * Los permisos que se piden al instalar.
+ *
+ * `write_products` y `read_themes` se añadieron para poder gestionar la tienda
+ * entera desde la plataforma. **Cambiar esta lista obliga a reconectar cada
+ * tienda**: el token guardado lleva grabados los permisos con los que se
+ * concedió, y los nuevos no aparecen solos. Si algo devuelve un error de acceso
+ * después de tocar aquí, es por eso.
+ *
+ * `write_themes` está pedido, pero por sí solo no basta: escribir archivos de
+ * tema exige además una exención que Shopify concede a mano. Leer el tema sí
+ * funciona con el permiso.
+ */
+export const SHOPIFY_SCOPES = [
+  "write_content",
+  "write_files",
+  "read_orders",
+  "write_products",
+  "read_themes",
+  "write_themes",
+];
 
 /** El dominio limpio, sin protocolo ni rutas. */
 export function shopDomain(value: string): string {
