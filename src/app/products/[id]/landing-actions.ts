@@ -10,6 +10,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { generateStructured } from "@/lib/generators";
 import { LANDING_PAGE_SCHEMA } from "@/lib/generation-schemas";
 import { buildLandingPrompt } from "@/lib/landing-prompt";
+import { findModelPage } from "@/lib/store-blueprint";
 import { AVATAR_POOL_SIZE, avatarSlot, buildAvatarPrompt } from "@/lib/avatar-prompts";
 import { saveLanding, deleteLanding } from "@/lib/data/landings";
 import { runInBackground } from "@/lib/background";
@@ -67,13 +68,32 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
   const commentStyle = readText(raw.commentStyle) === "testimonios" ? "testimonios" : "facebook";
 
   /*
-   * La referencia puede ser cualquier cosa guardada en el archivo: un copy que
-   * funcionó, o una landing entera pegada de otra marca. Se trata igual.
+   * La referencia puede ser tres cosas, y las tres se tratan igual: un copy del
+   * archivo, una landing pegada a mano, o **una página de una tienda analizada**.
+   *
+   * Esta última es la que cierra el círculo. Analizar un competidor daba hasta
+   * ahora la estructura —trece etiquetas de sección y la oferta— pero para
+   * escribir la página hacía falta el texto delante: por dónde entra, cuánto
+   * tarda en nombrar el producto, dónde mete la objeción. Sin eso, «replicar»
+   * era reordenar secciones vacías.
+   *
+   * Lo que se replica es la **construcción**. El producto, el mecanismo, los
+   * datos y los nombres salen de esta investigación, y eso lo impone el prompt.
    */
   const referenceId = readText(raw.referenceId);
   let reference: { label: string; body: string } | undefined;
 
-  if (referenceId) {
+  if (referenceId.startsWith("plano:")) {
+    const { listBlueprints } = await import("@/lib/data/blueprints");
+    const found = findModelPage(await listBlueprints(), referenceId);
+    if (!found) {
+      throw new Error(
+        "Esa página analizada ya no está disponible. Si el análisis es anterior a esta versión no guardó el texto: vuelve a analizar la tienda.",
+      );
+    }
+
+    reference = found;
+  } else if (referenceId) {
     const { listSwipeCopies } = await import("@/lib/data/swipe");
     const found = (await listSwipeCopies()).find((item) => item.id === referenceId);
     if (!found) throw new Error("Esa referencia ya no existe.");

@@ -239,3 +239,112 @@ export function tierDiscounts(offers: OfferTier[]): {
 export function imagesNeeded(sections: BlueprintSection[]): number {
   return sections.reduce((sum, section) => sum + Math.max(0, section.images), 0);
 }
+
+/* ---------------------- Las páginas como modelo a seguir -------------------- */
+
+/**
+ * Cuánto texto se conserva de cada página leída.
+ *
+ * Una landing larga de las que se replican ronda los quince mil caracteres, así
+ * que veinticuatro mil entra entera con margen. El corte existe porque una home
+ * con el catálogo entero embebido puede irse a cientos de miles y eso ni cabe
+ * cómodo en la fila ni aporta: lo que sobra es repetición de fichas.
+ */
+export const PAGE_TEXT_LIMIT = 24_000;
+
+export interface StoredPage {
+  url: string;
+  kind: string;
+  title: string;
+  /** El texto visible de la página, ya limpio. */
+  text: string;
+}
+
+/** Recorta por la última frase entera que quepa, para no cortar a media palabra. */
+export function trimPageText(text: string, limit = PAGE_TEXT_LIMIT): string {
+  if (text.length <= limit) return text;
+
+  const cut = text.slice(0, limit);
+  const lastStop = cut.lastIndexOf(". ");
+
+  // Si no hay ni un punto en veinticuatro mil caracteres, no es prosa: se corta
+  // donde toque y ya. Buscar frase donde no la hay dejaría el texto vacío.
+  return lastStop > limit * 0.5 ? cut.slice(0, lastStop + 1) : cut;
+}
+
+/**
+ * Qué páginas del análisis sirven de modelo para escribir la tuya.
+ *
+ * No todas valen, y ofrecerlas todas hace elegir mal:
+ *
+ * - **El catálogo se descarta.** Es una rejilla de fichas; su texto es una lista
+ *   de nombres y precios. Como modelo de una página de venta no dice nada.
+ * - **Las muy cortas también.** Menos de ochocientos caracteres es un aviso
+ *   legal o una página de contacto, no una estructura que copiar.
+ *
+ * El orden es el de utilidad: la ficha de producto primero, porque es donde está
+ * la venta; después las sueltas, que es donde suelen vivir los publirreportajes;
+ * la home al final, que solo a veces es una landing.
+ */
+export function pagesAsModel(pages: StoredPage[]): StoredPage[] {
+  const rank: Record<string, number> = { producto: 0, otra: 1, home: 2 };
+
+  return pages
+    .filter((page) => page.kind !== "catalogo" && page.text.trim().length >= 800)
+    .slice()
+    .sort((a, b) => (rank[a.kind] ?? 3) - (rank[b.kind] ?? 3));
+}
+
+interface BlueprintWithPages {
+  id: string;
+  storeName: string;
+  pages: StoredPage[];
+}
+
+/**
+ * El identificador lleva la posición **en el array guardado**, no en la lista
+ * filtrada. Si mañana cambian las reglas de `pagesAsModel`, un identificador
+ * emitido hoy sigue apuntando a la misma página.
+ */
+function modelId(blueprintId: string, index: number): string {
+  return `plano:${blueprintId}:${index}`;
+}
+
+/** Las páginas analizadas que se pueden ofrecer como modelo, ya etiquetadas. */
+export function modelOptions(blueprints: BlueprintWithPages[]): { id: string; title: string }[] {
+  return blueprints.flatMap((blueprint) => {
+    const usable = new Set(pagesAsModel(blueprint.pages).map((page) => page.url));
+
+    return blueprint.pages.flatMap((page, index) =>
+      usable.has(page.url)
+        ? [
+            {
+              id: modelId(blueprint.id, index),
+              title: `${blueprint.storeName} · ${page.kind}${page.title ? ` · ${page.title}` : ""}`,
+            },
+          ]
+        : [],
+    );
+  });
+}
+
+/** La página a la que apunta un identificador, o nada si ya no existe. */
+export function findModelPage(
+  blueprints: BlueprintWithPages[],
+  id: string,
+): { label: string; body: string } | null {
+  const parts = id.split(":");
+  if (parts[0] !== "plano" || parts.length < 3) return null;
+
+  const index = Number(parts[parts.length - 1]);
+  const blueprintId = parts.slice(1, -1).join(":");
+  const blueprint = blueprints.find((item) => item.id === blueprintId);
+  const page = blueprint?.pages[index];
+
+  if (!blueprint || !page || !page.text.trim()) return null;
+
+  return {
+    label: `${blueprint.storeName} — ${page.title || page.kind} (${page.url})`,
+    body: page.text,
+  };
+}

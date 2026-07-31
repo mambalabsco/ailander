@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { StatusPill } from "@/components/status-pill";
 import { JobsPanel } from "@/components/jobs-panel";
 import { listLandings } from "@/lib/data/landings";
+import { listBlueprints } from "@/lib/data/blueprints";
+import { modelOptions } from "@/lib/store-blueprint";
 import { listSwipeCopies } from "@/lib/data/swipe";
 import { renderLandingHtml } from "@/lib/landing-html";
 import { LandingsTab } from "@/app/products/[id]/tab-landings";
@@ -220,12 +222,25 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   let landings: Awaited<ReturnType<typeof listLandings>> = [];
   let swipeCopies: Awaited<ReturnType<typeof listSwipeCopies>> = [];
 
+  /*
+   * Las páginas de las tiendas analizadas, para poder escribir siguiendo una.
+   * Van con el resto de referencias porque para quien escribe son lo mismo:
+   * un modelo que seguir.
+   */
+  let modelPages: { id: string; title: string }[] = [];
+
   if (isSupabaseConfigured()) {
-    [landings, swipeCopies, videos] = await Promise.all([
+    const [loadedLandings, loadedSwipe, loadedVideos, blueprints] = await Promise.all([
       listLandings(product.id).catch(() => []),
       listSwipeCopies().catch(() => []),
       listVideos(product.id).catch(() => []),
+      listBlueprints().catch(() => []),
     ]);
+
+    landings = loadedLandings;
+    swipeCopies = loadedSwipe;
+    videos = loadedVideos;
+    modelPages = modelOptions(blueprints);
   }
 
   let experiments: Awaited<ReturnType<typeof listExperiments>> = [];
@@ -417,6 +432,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           primaryImage={primaryImage}
           images={images}
           swipeCopies={swipeCopies}
+          modelPages={modelPages}
           productId={product.id}
           performance={performance}
           hasHiggsfieldKey={hasHiggsfieldKey}

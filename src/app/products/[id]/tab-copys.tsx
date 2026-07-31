@@ -45,6 +45,7 @@ interface CopysTabProps {
   images: ProductImage[];
   /** Copys ya probados, que alimentan las próximas generaciones. */
   swipeCopies: SwipeCopy[];
+  modelPages: { id: string; title: string }[];
   productId: string;
   performance: Map<string, PerformanceRecord>;
   hasHiggsfieldKey: boolean;
@@ -78,6 +79,7 @@ export function CopysTab({
   primaryImage,
   images,
   swipeCopies,
+  modelPages,
   productId,
   performance,
   hasHiggsfieldKey,
@@ -412,7 +414,7 @@ export function CopysTab({
 
                 {/* Partir de una landing o un copy guardado, para los casos en
                     que lo que quieres es calcar uno que ya funciona. */}
-                {swipeCopies.length > 0 ? (
+                {swipeCopies.length > 0 || modelPages.length > 0 ? (
                   <div className="mb-3 grid gap-2 md:grid-cols-2">
                     <label className="text-sm">
                       <span className="mb-1 block">Partir de una referencia</span>
@@ -421,12 +423,30 @@ export function CopysTab({
                         onChange={(event) => setLandingReferenceId(event.target.value)}
                       >
                         <option value="">Sin referencia — solo la investigación</option>
-                        {swipeCopies.map((copy) => (
-                          <option key={copy.id} value={copy.id}>
-                            {copy.title}
-                            {copy.source ? ` — ${copy.source}` : ""}
-                          </option>
-                        ))}
+                        {swipeCopies.length > 0 ? (
+                          <optgroup label="Tu archivo">
+                            {swipeCopies.map((copy) => (
+                              <option key={copy.id} value={copy.id}>
+                                {copy.title}
+                                {copy.source ? ` — ${copy.source}` : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                        {/*
+                          Aquí es donde se replica una tienda analizada: se elige
+                          su página, se deja «calcada» y sale la misma
+                          construcción escrita para este producto.
+                        */}
+                        {modelPages.length > 0 ? (
+                          <optgroup label="Tiendas analizadas">
+                            {modelPages.map((page) => (
+                              <option key={page.id} value={page.id}>
+                                {page.title}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
                       </SelectField>
                     </label>
 
@@ -692,6 +712,7 @@ export function CopysTab({
                           id: item.id,
                           title: item.title,
                         }))}
+                        modelPages={modelPages}
                         hasApiKey={hasApiKey}
                         alreadyHasLanding={landingCopyIds.has(copy.id)}
                       />

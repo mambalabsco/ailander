@@ -5,7 +5,7 @@ import { runInBackground } from "@/lib/background";
 import { generateStructured } from "@/lib/generators";
 import { BLUEPRINT_SCHEMA } from "@/lib/generation-schemas";
 import { crawlStore } from "@/lib/store-crawler";
-import { NOT_EXTRACTED } from "@/lib/store-blueprint";
+import { NOT_EXTRACTED, trimPageText } from "@/lib/store-blueprint";
 import { requireContext } from "@/lib/supabase/session";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { hasActiveProviderKey } from "@/lib/provider-config";
@@ -99,7 +99,21 @@ Si un texto de la página te parece especialmente bueno, **describe por qué fun
         })),
         guarantee: analysis.data.guarantee,
         scripts: crawl.scripts,
-        pages: crawl.pages.map((page) => ({ url: page.url, kind: page.kind, title: page.title })),
+        /*
+         * El texto se guarda, no solo la lista de direcciones.
+         *
+         * Antes se tiraba en cuanto el análisis terminaba, y con él la única
+         * forma de decir «escríbeme una página con esta estructura»: sin el
+         * texto delante, el generador solo tenía trece etiquetas de sección.
+         * Volver a descargarla después tampoco sirve —la tienda cambia— así que
+         * se conserva lo que se leyó el día del análisis.
+         */
+        pages: crawl.pages.map((page) => ({
+          url: page.url,
+          kind: page.kind,
+          title: page.title,
+          text: trimPageText(page.text),
+        })),
         notes: analysis.data.notes,
       });
 

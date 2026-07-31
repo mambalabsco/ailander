@@ -35,6 +35,8 @@ export function CopyToLanding({
   angleId,
   /** Copys y páginas guardados en el archivo, para usar de modelo. */
   references,
+  /** Páginas de tiendas analizadas, para escribir siguiendo su construcción. */
+  modelPages = [],
   hasApiKey,
   /** Si ya existe una página nacida de este copy. */
   alreadyHasLanding,
@@ -44,6 +46,7 @@ export function CopyToLanding({
   methodId: string;
   angleId?: string;
   references: { id: string; title: string }[];
+  modelPages?: { id: string; title: string }[];
   hasApiKey: boolean;
   alreadyHasLanding?: boolean;
 }) {
@@ -99,7 +102,7 @@ export function CopyToLanding({
           </SelectField>
         </label>
 
-        {references.length > 0 ? (
+        {references.length > 0 || modelPages.length > 0 ? (
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Página de referencia
@@ -109,11 +112,30 @@ export function CopyToLanding({
               onChange={(event) => setReferenceId(event.target.value)}
             >
               <option value="">Sin referencia</option>
-              {references.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
+              {/*
+                Los dos orígenes van separados porque no se eligen igual. Del
+                archivo se escoge un texto que ya funcionó; de una tienda
+                analizada se escoge una página que hay que reconstruir con otro
+                producto. Mezclarlos en una lista plana esconde esa diferencia.
+              */}
+              {references.length > 0 ? (
+                <optgroup label="Tu archivo">
+                  {references.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {modelPages.length > 0 ? (
+                <optgroup label="Tiendas analizadas">
+                  {modelPages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </SelectField>
           </label>
         ) : null}

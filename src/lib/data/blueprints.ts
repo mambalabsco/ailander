@@ -7,6 +7,7 @@ import type {
   OfferTier,
   SectionKind,
   ScriptKind,
+  StoredPage,
 } from "@/lib/store-blueprint";
 
 /** Planos de tiendas analizadas. */
@@ -20,7 +21,7 @@ export interface SavedBlueprint {
   offers: OfferTier[];
   guarantee: string;
   scripts: DetectedScript[];
-  pages: { url: string; kind: string; title: string }[];
+  pages: StoredPage[];
   notes: string;
   createdAt: string;
 }
@@ -101,6 +102,32 @@ function parseScripts(value: unknown): DetectedScript[] {
   });
 }
 
+/**
+ * Las páginas leídas, con su texto.
+ *
+ * Los análisis anteriores a que se guardara el texto siguen leyéndose: llegan
+ * con `text` vacío y `pagesAsModel` los descarta como modelo, que es lo correcto
+ * —no hay nada que seguir— sin romper la pantalla del plano.
+ */
+function parsePages(value: unknown): StoredPage[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.url !== "string") return [];
+
+    return [
+      {
+        url: record.url,
+        kind: typeof record.kind === "string" ? record.kind : "otra",
+        title: typeof record.title === "string" ? record.title : "",
+        text: typeof record.text === "string" ? record.text : "",
+      },
+    ];
+  });
+}
+
 export async function listBlueprints(): Promise<SavedBlueprint[]> {
   const { supabase } = await requireContext();
 
@@ -120,7 +147,7 @@ export async function listBlueprints(): Promise<SavedBlueprint[]> {
     offers: parseOffers(row.offers),
     guarantee: row.guarantee,
     scripts: parseScripts(row.scripts),
-    pages: Array.isArray(row.pages) ? (row.pages as SavedBlueprint["pages"]) : [],
+    pages: parsePages(row.pages),
     notes: row.notes,
     createdAt: row.created_at,
   }));
