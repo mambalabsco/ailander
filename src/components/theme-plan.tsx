@@ -240,18 +240,15 @@ export function ThemePlanPanel({
                     return;
                   }
 
-                  const result = await applyThemeOrderAction(
-                    storeId,
-                    targetTheme,
-                    // El orden que propone el plano, y detrás lo que no encaja
-                    // en ningún papel del plan — que se conserva, no se pierde.
-                    plan.changes
-                      .map(
-                        (change) =>
-                          plan.current.find((section) => section.role === change.role)?.id,
-                      )
-                      .filter((id): id is string => Boolean(id)),
-                  );
+                  /*
+                   * Se manda el análisis, no una lista de identificadores.
+                   *
+                   * Armarla aquí fue el fallo: con dos secciones del mismo papel
+                   * —Sculpt tiene dos de preguntas— salía la misma repetida y
+                   * Shopify rechazaba la escritura entera. El servidor lo calcula
+                   * contra la plantilla que acaba de leer.
+                   */
+                  const result = await applyThemeOrderAction(storeId, targetTheme, blueprintId);
 
                   setMessage(result.message);
                 })

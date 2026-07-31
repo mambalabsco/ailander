@@ -291,6 +291,40 @@ export const PLAN_LIMITS = [
 /* ------------------------------- Aplicarlo --------------------------------- */
 
 /**
+ * El orden que hay que escribir, a partir del plano.
+ *
+ * **Cada sección se usa una sola vez.** Es la parte que falla si se resuelve con
+ * un `find` por papel: una página con dos secciones de preguntas devuelve la
+ * misma dos veces, y Shopify rechaza la escritura entera con «order: can't
+ * contain duplicate values». Aquí se van consumiendo: la primera coincidencia se
+ * gasta y la siguiente busca entre las que quedan.
+ *
+ * Lo que el plano no pide se conserva al final, en su orden original. Reordenar
+ * no es quitar, y perder una sección por no estar en la referencia sería un
+ * destrozo silencioso.
+ */
+export function orderFor(current: TemplateSection[], blueprint: { kind: string }[]): string[] {
+  const pool = current.map((section) => ({ ...section, role: roleOf(section.type) }));
+  const used = new Set<string>();
+  const order: string[] = [];
+
+  for (const target of blueprint) {
+    const match = pool.find((section) => !used.has(section.id) && section.role === target.kind);
+    if (!match) continue;
+
+    used.add(match.id);
+    order.push(match.id);
+  }
+
+  for (const section of pool) {
+    if (!used.has(section.id)) order.push(section.id);
+  }
+
+  return order;
+}
+
+
+/**
  * Reordena las secciones de una plantilla **sin tocar nada más**.
  *
  * Solo se reescribe el array `order`. Los ajustes de cada sección, sus bloques y
@@ -322,7 +356,21 @@ export function reorderTemplate(json: string, orderedIds: string[]): string | nu
   if (!data.sections || typeof data.sections !== "object") return null;
 
   const known = new Set(Object.keys(data.sections));
-  const wanted = orderedIds.filter((id) => known.has(id));
+
+  /*
+   * Se quitan los repetidos aquí también, aunque quien llama ya no los mande.
+   *
+   * Shopify rechaza la escritura entera con «order: can't contain duplicate
+   * values», y el mensaje no dice cuál está repetido. La invariante es de este
+   * archivo —un orden es una permutación— así que se hace cumplir aquí y no solo
+   * en quien construye la lista.
+   */
+  const seen = new Set<string>();
+  const wanted = orderedIds.filter((id) => {
+    if (!known.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 
   // Lo que existe y no se nombró va detrás, en su orden original.
   const rest = (data.order ?? Object.keys(data.sections)).filter(

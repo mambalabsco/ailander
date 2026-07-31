@@ -5,6 +5,7 @@ import {
   PLAN_LIMITS,
   parseTemplate,
   planChanges,
+  orderFor,
   reorderTemplate,
   roleOf,
   summarize,
@@ -297,4 +298,51 @@ test("un identificador inventado se ignora", () => {
 test("una plantilla que no se puede leer devuelve null, no algo a medias", () => {
   assert.equal(reorderTemplate("no es json", ["a"]), null);
   assert.equal(reorderTemplate('{"nada": 1}', ["a"]), null);
+});
+
+/* --------------------------- El orden que se escribe ----------------------- */
+
+test("una sección no se repite aunque dos papeles coincidan", () => {
+  /*
+   * El fallo real: Sculpt tiene **dos** `store-faq`. Resolviendo con un `find`
+   * por papel, la misma sección salía dos veces y Shopify rechazaba la escritura
+   * entera con «order: can't contain duplicate values», sin decir cuál.
+   */
+  const current = parseTemplate(
+    JSON.stringify({
+      sections: {
+        main: { type: "shop-product-details" },
+        faq1: { type: "store-faq" },
+        faq2: { type: "store-faq" },
+      },
+      order: ["main", "faq1", "faq2"],
+    }),
+  );
+
+  const order = orderFor(current, [{ kind: "faq" }, { kind: "faq" }, { kind: "heroe" }]);
+
+  assert.deepEqual(order, ["faq1", "faq2", "main"]);
+  assert.equal(new Set(order).size, order.length, "no puede haber repetidos");
+});
+
+test("lo que el plano no pide se conserva al final", () => {
+  // Reordenar no es quitar: perder una sección por no estar en la referencia
+  // sería un destrozo silencioso.
+  const current = parseTemplate(
+    JSON.stringify({
+      sections: { a: { type: "shop-product-details" }, b: { type: "rich-text" } },
+      order: ["a", "b"],
+    }),
+  );
+
+  assert.deepEqual(orderFor(current, [{ kind: "heroe" }]), ["a", "b"]);
+});
+
+test("reorderTemplate quita los repetidos aunque se los manden", () => {
+  // La invariante es suya: un orden es una permutación.
+  const out = reorderTemplate(CON_CABECERA, ["a", "a", "b", "b"])!;
+  const order = JSON.parse(out.split("*/")[1]).order;
+
+  assert.deepEqual(order, ["a", "b", "c"]);
+  assert.equal(new Set(order).size, order.length);
 });

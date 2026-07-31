@@ -3,6 +3,7 @@
 import { findStore } from "@/lib/store-registry";
 import { listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
 import {
+  orderFor,
   parseTemplate,
   planChanges,
   reorderTemplate,
@@ -129,22 +130,39 @@ export async function buildThemePlanAction(
 export async function applyThemeOrderAction(
   storeId: unknown,
   themeId: unknown,
-  orderedIds: unknown,
+  blueprintId: unknown,
 ): Promise<{ ok: boolean; message: string }> {
   const id = readText(storeId);
   const theme = readText(themeId);
-  const order = Array.isArray(orderedIds) ? orderedIds.map((item) => readText(item)) : [];
+  const planId = readText(blueprintId);
 
   if (!id || !theme) return { ok: false, message: "Falta la tienda o el tema." };
-  if (order.length === 0) return { ok: false, message: "No hay ningún orden que aplicar." };
+  if (!planId) return { ok: false, message: "Falta el análisis con el que comparar." };
 
   try {
     const store = await findStore(id);
     if (!store) return { ok: false, message: "No se encontró la tienda." };
 
+    const blueprint = (await listBlueprints()).find((item) => item.id === planId);
+    if (!blueprint) return { ok: false, message: "Ese análisis ya no existe." };
+
+    /*
+     * El orden se calcula **aquí**, no en el navegador.
+     *
+     * Antes lo armaba el componente con un `find` por papel, y con dos secciones
+     * del mismo papel devolvía la misma dos veces: Shopify rechazaba la
+     * escritura entera con «order: can't contain duplicate values». Calcularlo en
+     * el servidor con la plantilla recién leída también evita aplicar un orden
+     * pensado para una versión del tema que ya cambió.
+     */
     const [file] = await listThemeFiles(store, theme, ["templates/product.json"]);
     if (!file?.body) {
       return { ok: false, message: "No se pudo leer templates/product.json de ese tema." };
+    }
+
+    const order = orderFor(parseTemplate(file.body), blueprint.sections);
+    if (order.length === 0) {
+      return { ok: false, message: "Esa plantilla no declara secciones legibles." };
     }
 
     const next = reorderTemplate(file.body, order);
