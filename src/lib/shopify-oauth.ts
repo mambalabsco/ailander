@@ -26,9 +26,16 @@ import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
  * concedió, y los nuevos no aparecen solos. Si algo devuelve un error de acceso
  * después de tocar aquí, es por eso.
  *
- * `write_themes` está pedido, pero por sí solo no basta: escribir archivos de
- * tema exige además una exención que Shopify concede a mano. Leer el tema sí
- * funciona con el permiso.
+ * **Los permisos de tema son dos, no uno.** En el panel de Shopify aparecen en
+ * filas separadas: `read_themes` y `write_themes` bajo «Theme templates», y
+ * `write_theme_code` bajo «Theme Code». La documentación de `themeFilesUpsert`
+ * solo menciona el segundo grupo y una exención, pero el panel enseña ese
+ * tercero aparte — así que se piden los tres y que Shopify conceda lo que
+ * conceda.
+ *
+ * `write_theme_code` viene **desmarcado** por defecto en el panel. Pedirlo aquí
+ * no basta: hay que marcarlo también allí, en la configuración de la app, antes
+ * de reconectar la tienda.
  */
 export const SHOPIFY_SCOPES = [
   "write_content",
@@ -37,6 +44,7 @@ export const SHOPIFY_SCOPES = [
   "write_products",
   "read_themes",
   "write_themes",
+  "write_theme_code",
 ];
 
 /** El dominio limpio, sin protocolo ni rutas. */

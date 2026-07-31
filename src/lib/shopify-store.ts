@@ -20,12 +20,17 @@ import type { Store } from "@/types/store";
  * Lo mismo con colecciones y metacampos. Por eso `updateProduct` lee antes lo
  * que hay y lo vuelve a mandar completo.
  *
- * ## El tema necesita permiso de Shopify, no solo un scope
+ * ## Los permisos de tema son dos, y la documentación solo menciona uno
  *
- * `themeFilesUpsert` exige `write_themes` **y además una exención que Shopify
- * concede a mano**, por formulario. No es algo que se arregle reconectando la
- * app. Está construido y la interfaz lo dice: sin la exención, Shopify responde
- * con un error de acceso que sin esta explicación no se entiende.
+ * En el panel de la app aparecen en filas separadas: `read_themes` y
+ * `write_themes` bajo «Theme templates», y **`write_theme_code` bajo «Theme
+ * Code»**, que viene desmarcado. La documentación de `themeFilesUpsert` solo
+ * habla del primer grupo y de una exención concedida a mano.
+ *
+ * Se piden los tres y que Shopify conceda lo que conceda. Marcar
+ * `write_theme_code` en el panel y reconectar es lo primero que hay que probar;
+ * si aun así falla, entonces sí es la exención. El error de Shopify no
+ * distingue entre los dos casos, así que el mensaje los enumera.
  */
 
 /* ------------------------------- Productos --------------------------------- */
@@ -408,7 +413,7 @@ export async function writeThemeFiles(
 
       if (/access|denied|scope|not approved|exemption/i.test(message)) {
         throw new Error(
-          "Shopify no deja escribir en el tema. Además del permiso `write_themes` hace falta una exención que concede Shopify a mano, por formulario, para las apps que modifican archivos de tema. Mientras tanto sí se puede leer el tema y gestionar productos.",
+          "Shopify no deja escribir en el tema. Los permisos de tema son dos y van en filas distintas del panel de la app: `write_themes` bajo «Theme templates» y **`write_theme_code` bajo «Theme Code»**, que viene desmarcado. Márcalo allí y vuelve a conectar la tienda. Si aun así falla, es que hace falta la exención que Shopify concede a mano para modificar archivos de tema; mientras tanto se puede leer el tema y gestionar productos.",
         );
       }
 
