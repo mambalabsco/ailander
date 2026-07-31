@@ -420,3 +420,39 @@ export const BLUEPRINT_SCHEMA = object({
     }),
   },
 });
+
+/**
+ * El contenido de las secciones que se crean en el tema.
+ *
+ * Todos los campos van siempre —la salida estructurada exige `required`
+ * completo— y los que no apliquen llegan vacíos. Es más barato que un esquema
+ * por disposición y evita que el modelo tenga que elegir forma además de texto.
+ */
+export const THEME_SECTIONS_SCHEMA = object({
+  sections: {
+    type: "array",
+    items: object({
+      kind: str,
+      heading: str,
+      subheading: str,
+      /** Solo para las de texto corrido. */
+      body: str,
+      columnMine: str,
+      columnTheirs: str,
+      ctaLabel: str,
+      items: {
+        type: "array",
+        items: object({
+          title: str,
+          body: str,
+          /** La columna ajena de la comparativa. */
+          other: str,
+          /** Solo en la oferta. */
+          price: str,
+          compareAt: str,
+          highlighted: { type: "boolean" },
+        }),
+      },
+    }),
+  },
+});

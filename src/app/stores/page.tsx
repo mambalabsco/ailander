@@ -69,7 +69,7 @@ export default async function StoresPage() {
       */}
       <SectionCard
         title="Adaptar tu tema"
-        description="Compara la estructura de tu página de producto con la de una tienda analizada y dice qué secciones faltan, cuáles mover y a dónde."
+        description="Copia el aspecto de una tienda analizada a tu tema: sus colores y su letra, y las secciones que le faltan, escritas con tu producto."
       >
         <ThemePlanPanel
           stores={stores.map((store) => ({
@@ -81,6 +81,7 @@ export default async function StoresPage() {
             id: blueprint.id,
             storeName: blueprint.storeName,
           }))}
+          products={products.map((product) => ({ id: product.id, name: product.name }))}
         />
       </SectionCard>
     </div>

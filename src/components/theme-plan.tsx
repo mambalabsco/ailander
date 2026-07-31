@@ -7,10 +7,12 @@ import {
   applyThemeOrderAction,
   buildLookPlanAction,
   buildThemePlanAction,
+  recreatePageAction,
   themesForApplyAction,
   type LookPlan,
   type ThemePlan,
 } from "@/app/stores/theme-plan-actions";
+import { GenerateButton } from "@/components/generate-button";
 import { PLAN_LIMITS } from "@/lib/theme-structure";
 import { PAGE_KINDS, type PageKind } from "@/lib/store-blueprint";
 
@@ -64,9 +66,12 @@ function Swatch({ hex }: { hex: string }) {
 export function ThemePlanPanel({
   stores,
   blueprints,
+  products,
 }: {
   stores: { id: string; name: string; connected: boolean }[];
   blueprints: { id: string; storeName: string }[];
+  /** De cuál sale el contenido de las secciones que se creen. */
+  products: { id: string; name: string }[];
 }) {
   const [storeId, setStoreId] = useState(stores.find((store) => store.connected)?.id ?? "");
   const [blueprintId, setBlueprintId] = useState(blueprints[0]?.id ?? "");
@@ -76,6 +81,7 @@ export function ThemePlanPanel({
   const [message, setMessage] = useState("");
   const [themes, setThemes] = useState<{ id: string; name: string; published: boolean }[]>([]);
   const [targetTheme, setTargetTheme] = useState("");
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [isPending, startTransition] = useTransition();
 
   if (blueprints.length === 0) {
@@ -425,6 +431,62 @@ export function ThemePlanPanel({
                 {isPending ? "Aplicando…" : `Aplicar orden de ${PAGE_LABEL[plan.page].toLowerCase()}`}
               </Button>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ------------------- 4. Crear las secciones que faltan ---------------- */}
+
+      {plan && themes.length > 0 ? (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900 dark:bg-violet-950/20">
+          <p className="text-sm font-medium">4 · Crear las secciones que te faltan</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Escribe en tu tema las secciones que el plano pide y tú no tienes —comparativa, oferta
+            por tramos, preguntas— con los colores de la referencia y el texto de tu producto. Las
+            tuyas que queden duplicadas salen de la página, pero no se borran: se pueden volver a
+            arrastrar desde el editor.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Contenido del producto
+              </span>
+              <SelectField
+                value={productId}
+                onChange={(event) => setProductId(event.target.value)}
+                className="min-w-56"
+              >
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </SelectField>
+            </label>
+          </div>
+
+          <div className="mt-3">
+            <GenerateButton
+              variant="primary"
+              action={async () => {
+                if (!confirmed()) throw new Error("Cancelado: no se ha tocado nada.");
+
+                return recreatePageAction({
+                  storeId,
+                  themeId: targetTheme,
+                  blueprintId,
+                  page: plan.page,
+                  productId,
+                });
+              }}
+              label={`Crear las secciones de ${PAGE_LABEL[plan.page].toLowerCase()}`}
+              disabled={!targetTheme || !productId}
+              disabledReason={
+                !productId ? "Necesitas un producto del que sacar el contenido" : undefined
+              }
+              hint="Escribe archivos en el tema elegido. Hazlo en uno sin publicar y míralo en la vista previa."
+            />
           </div>
         </div>
       ) : null}

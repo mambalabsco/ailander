@@ -12,6 +12,22 @@ import {
   type ThemeChange,
 } from "@/lib/theme-structure";
 import { listBlueprints } from "@/lib/data/blueprints";
+import { findProductAnywhere } from "@/lib/products";
+import { readProductResearch } from "@/lib/research-store";
+import { hasActiveProviderKey } from "@/lib/provider-config";
+import { generateStructured } from "@/lib/generators";
+import { runInBackground } from "@/lib/background";
+import { THEME_SECTIONS_SCHEMA } from "@/lib/generation-schemas";
+import { buildSectionContentPrompt } from "@/lib/section-content-prompt";
+import {
+  buildTemplateEntry,
+  filesFor,
+  orderAfterRecreate,
+  planRecreate,
+  writeTemplate,
+  type TemplateEntry,
+} from "@/lib/theme-sections";
+import type { LaunchResult } from "@/types/jobs";
 import {
   PAGE_KINDS,
   TEMPLATE_FOR,
@@ -219,6 +235,195 @@ export async function applyThemeOrderAction(
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo aplicar." };
   }
+}
+
+/* ------------------------- Recrear la página entera ------------------------ */
+
+/**
+ * Crea en tu tema las secciones que le faltan y monta la página.
+ *
+ * Es lo que reordenar no podía hacer. Una plantilla solo puede nombrar secciones
+ * que **existan** en el tema, así que si el tuyo no trae una comparativa no hay
+ * forma de ponerla moviendo cosas: hay que escribirla. Se escriben secciones
+ * propias, con su Liquid y su esquema, no código de nadie.
+ *
+ * El contenido se genera con **tu** investigación: a la referencia se le copia la
+ * construcción —qué secciones, en qué orden, cómo enfoca cada una— y lo que dice
+ * cada sección sale de este producto.
+ *
+ * Se escribe todo de una vez. Si algo falla, no queda una plantilla apuntando a
+ * secciones que no se llegaron a escribir, que es una página rota en producción.
+ */
+export async function recreatePageAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const storeId = readText(raw.storeId);
+  const themeId = readText(raw.themeId);
+  const blueprintId = readText(raw.blueprintId);
+  const productId = readText(raw.productId);
+  const page = readPage(raw.page);
+  const templateName = TEMPLATE_FOR[page];
+
+  if (!storeId || !themeId) throw new Error("Falta la tienda o el tema.");
+  if (!productId) throw new Error("Elige el producto del que sale el contenido.");
+
+  if (!(await hasActiveProviderKey())) {
+    throw new Error("No hay clave de API configurada. Añádela en Configuración.");
+  }
+
+  const store = await findStore(storeId);
+  if (!store) throw new Error("No se encontró la tienda.");
+
+  const blueprint = (await listBlueprints()).find((item) => item.id === blueprintId);
+  if (!blueprint) throw new Error("Ese análisis ya no existe.");
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  const research = await readProductResearch(productId);
+
+  const [file] = await listThemeFiles(store, themeId, [templateName]);
+  if (!file?.body) throw new Error(`No se pudo leer ${templateName} de ese tema.`);
+
+  const current = parseTemplate(file.body);
+  if (current.length === 0) {
+    throw new Error(`${templateName} no declara secciones en el formato de Shopify 2.0.`);
+  }
+
+  const plan = planRecreate(current, sectionsOf(blueprint.sections, page));
+  if (plan.create.length === 0) {
+    throw new Error(
+      "Ese análisis no tiene ninguna sección que se pueda crear para esta página. Vuelve a analizar la tienda si es anterior a esta versión.",
+    );
+  }
+
+  const prompt = buildSectionContentPrompt({
+    product,
+    research,
+    store,
+    sections: plan.create,
+    offers: blueprint.offers,
+    guarantee: blueprint.guarantee,
+    currency: blueprint.currency,
+  });
+
+  return runInBackground({
+    kind: "tema",
+    label: `Recrear ${page} · ${blueprint.storeName}`,
+    revalidate: "/stores",
+    work: async () => {
+      const { data, inputTokens, outputTokens } = await generateStructured<{
+        sections: {
+          kind: string;
+          heading: string;
+          subheading: string;
+          body: string;
+          columnMine: string;
+          columnTheirs: string;
+          ctaLabel: string;
+          items: {
+            title: string;
+            body: string;
+            other: string;
+            price: string;
+            compareAt: string;
+            highlighted: boolean;
+          }[];
+        }[];
+      }>({ prompt, schema: THEME_SECTIONS_SCHEMA, role: "copy", maxTokens: 32_000 });
+
+      const palette = paletteOf(blueprint.identity.colors);
+
+      /*
+       * Se recorre el plan, no lo que devolvió el modelo.
+       *
+       * Así el orden y el número de secciones los decide el plano aunque el
+       * modelo devuelva una de más, una de menos o cambiadas de sitio. Se
+       * empareja por papel y consumiendo: dos secciones del mismo papel cogen
+       * cada una la suya.
+       */
+      const pool = [...data.sections];
+      const created: TemplateEntry[] = [];
+
+      plan.create.forEach((wanted, index) => {
+        const position = pool.findIndex((item) => item.kind === wanted.kind);
+        const content = position >= 0 ? pool.splice(position, 1)[0] : null;
+        if (!content) return;
+
+        const entry = buildTemplateEntry(
+          {
+            kind: wanted.kind,
+            heading: content.heading,
+            subheading: content.subheading,
+            body: content.body,
+            ctaLabel: content.ctaLabel,
+            columns: { mine: content.columnMine, theirs: content.columnTheirs },
+            items: content.items.map((item) => ({
+              title: item.title,
+              body: item.body,
+              other: item.other,
+              price: item.price,
+              compareAt: item.compareAt,
+              highlighted: item.highlighted,
+            })),
+          },
+          palette,
+          index,
+        );
+
+        if (entry) created.push(entry);
+      });
+
+      if (created.length === 0) throw new Error("No se pudo escribir ninguna sección.");
+
+      const order = orderAfterRecreate(plan, created, current);
+      const nextTemplate = writeTemplate(file.body!, created, order);
+      if (!nextTemplate) throw new Error("La plantilla no tiene el formato esperado; no se ha tocado.");
+
+      /*
+       * Las secciones y la plantilla, en la misma escritura.
+       *
+       * Si fueran dos llamadas y fallara la segunda, quedarían archivos sueltos
+       * que no usa nadie; si fallara al revés, una plantilla apuntando a
+       * secciones que no existen — o sea, la página caída.
+       */
+      const written = await writeThemeFiles(store, themeId, [
+        ...filesFor(plan.create.map((section) => section.kind)),
+        { filename: templateName, content: nextTemplate },
+      ]);
+
+      return {
+        summary: [
+          `${created.length} sección(es) creadas en ${templateName}`,
+          plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
+          `. ${written} archivo(s) escritos. Míralo en la vista previa antes de publicar.`,
+        ].join(""),
+        inputTokens,
+        outputTokens,
+      };
+    },
+  });
+}
+
+/**
+ * La paleta que llevan las secciones creadas.
+ *
+ * Con lo leído de la referencia cuando está, y con blanco y negro cuando no.
+ * Un color de acento que no se encontró vale más dejarlo neutro que inventarlo:
+ * un acento equivocado se ve mal en toda la página.
+ */
+function paletteOf(colors: { hex: string; role: string }[]): {
+  background: string;
+  text: string;
+  accent: string;
+} {
+  const byRole = (role: string) => colors.find((color) => color.role === role)?.hex;
+
+  return {
+    background: byRole("fondo") ?? "#ffffff",
+    text: byRole("texto") ?? "#121212",
+    accent: byRole("botón") ?? byRole("acento") ?? byRole("texto") ?? "#121212",
+  };
 }
 
 /* ------------------------- El aspecto: color y letra ----------------------- */

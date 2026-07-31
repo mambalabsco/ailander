@@ -18,6 +18,8 @@ export const JOB_KINDS = [
   "ficha",
   "landing",
   "shopify",
+  // Escribir en el tema: secciones nuevas y configuración.
+  "tema",
   "datos",
 ] as const;
 
@@ -36,6 +38,7 @@ export const JOB_KIND_LABELS: Record<JobKind, string> = {
   ficha: "Ficha del producto",
   landing: "Página",
   shopify: "Shopify",
+  tema: "Tema de la tienda",
   datos: "Datos de tienda",
 };
 
