@@ -20,17 +20,20 @@ import type { Store } from "@/types/store";
  * Lo mismo con colecciones y metacampos. Por eso `updateProduct` lee antes lo
  * que hay y lo vuelve a mandar completo.
  *
- * ## Los permisos de tema son dos, y la documentación solo menciona uno
+ * ## Los permisos de tema son dos, y basta con marcarlos
  *
- * En el panel de la app aparecen en filas separadas: `read_themes` y
- * `write_themes` bajo «Theme templates», y **`write_theme_code` bajo «Theme
- * Code»**, que viene desmarcado. La documentación de `themeFilesUpsert` solo
- * habla del primer grupo y de una exención concedida a mano.
+ * En el panel de la app van en filas separadas: `read_themes` y `write_themes`
+ * bajo «Theme templates», y **`write_theme_code` bajo «Theme Code»**, que viene
+ * desmarcado.
  *
- * Se piden los tres y que Shopify conceda lo que conceda. Marcar
- * `write_theme_code` en el panel y reconectar es lo primero que hay que probar;
- * si aun así falla, entonces sí es la exención. El error de Shopify no
- * distingue entre los dos casos, así que el mensaje los enumera.
+ * La documentación de `themeFilesUpsert` dice que hace falta `write_themes`
+ * «más una exención de Shopify». **Probado contra una tienda real el 31 de julio
+ * de 2026: no hace falta ninguna exención.** Con `write_theme_code` marcado en
+ * el panel y la tienda reconectada, escribir, leer y borrar archivos de tema
+ * funciona. Se verificó sobre un tema sin publicar y se limpió después.
+ *
+ * Se deja escrito porque la documentación sigue diciendo lo otro, y quien lea
+ * esto después se ahorra el rodeo del formulario.
  */
 
 /* ------------------------------- Productos --------------------------------- */
@@ -364,10 +367,9 @@ export async function listThemeFiles(
 /**
  * Escribe archivos del tema.
  *
- * **Necesita algo más que el permiso.** `themeFilesUpsert` exige `write_themes`
- * y, además, una **exención que Shopify concede a mano** por formulario. Sin
- * ella la llamada falla con un error de acceso que no explica que el problema
- * sea ese, así que se traduce aquí.
+ * Funciona con `write_theme_code` marcado en el panel de la app y la tienda
+ * reconectada — sin exención, pese a lo que dice la documentación. Ver la
+ * cabecera de este archivo.
  *
  * El tope de cincuenta archivos por llamada es de Shopify. Se trocea en vez de
  * fallar: quien edita una sección suele tocar dos archivos, pero un cambio de
@@ -413,7 +415,7 @@ export async function writeThemeFiles(
 
       if (/access|denied|scope|not approved|exemption/i.test(message)) {
         throw new Error(
-          "Shopify no deja escribir en el tema. Los permisos de tema son dos y van en filas distintas del panel de la app: `write_themes` bajo «Theme templates» y **`write_theme_code` bajo «Theme Code»**, que viene desmarcado. Márcalo allí y vuelve a conectar la tienda. Si aun así falla, es que hace falta la exención que Shopify concede a mano para modificar archivos de tema; mientras tanto se puede leer el tema y gestionar productos.",
+          "Shopify no deja escribir en el tema. Falta `write_theme_code`, que va en su propia fila del panel de la app —«Theme Code»— y viene desmarcado. Márcalo allí y vuelve a conectar la tienda: con eso basta, no hace falta ninguna exención.",
         );
       }
 

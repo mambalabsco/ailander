@@ -129,12 +129,12 @@ export function ShopProducts({
             ))}
           </ul>
           {/*
-            Se dice antes de que alguien lo intente. Shopify responde con un
-            error de acceso que no explica que el problema sea la exención.
+            Shopify responde con un error de acceso que no dice cuál es el
+            permiso que falta, y el de código de tema va en su propia fila.
           */}
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            Leer el tema funciona. **Escribirlo** exige, además del permiso, una exención que Shopify
-            concede a mano por formulario para las apps que modifican archivos de tema.
+            Para editar el código del tema hace falta <code>write_theme_code</code>, que va en su
+            propia fila del panel de la app —«Theme Code»— y viene desmarcado.
           </p>
         </div>
       ) : null}
