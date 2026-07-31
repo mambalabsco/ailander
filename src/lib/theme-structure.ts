@@ -27,6 +27,31 @@ export interface TemplateSection {
 }
 
 /**
+ * Quita el bloque de comentario con el que Shopify encabeza sus plantillas.
+ *
+ * **Sus plantillas JSON no son JSON válido.** Empiezan con un comentario que el
+ * propio Shopify genera —«IMPORTANT: The contents of this file are
+ * auto-generated»— y `JSON.parse` se atraganta con la primera barra. El síntoma
+ * era desconcertante: el archivo existía, pesaba cien kilobytes y la plataforma
+ * decía que el tema no era de bloques.
+ *
+ * Solo se recorta lo que hay **antes de la primera llave**. Barrer comentarios
+ * por todo el archivo rompería cualquier `https://` que viviera dentro de una
+ * cadena, y las plantillas están llenas de enlaces.
+ */
+function stripLeadingComments(json: string): string {
+  const start = json.indexOf("{");
+  if (start <= 0) return json;
+
+  const head = json.slice(0, start);
+
+  // Solo si lo de delante es de verdad un comentario y espacios. Si hay
+  // cualquier otra cosa, se deja como está y que falle el parseo: cortar a
+  // ciegas escondería un archivo corrupto.
+  return /^\s*(?:\/\*[\s\S]*?\*\/\s*)*$/.test(head) ? json.slice(start) : json;
+}
+
+/**
  * Lee `templates/*.json` de un tema de Shopify 2.0.
  *
  * El campo `order` es el que manda: `sections` es un objeto y el orden de las
@@ -40,7 +65,7 @@ export interface TemplateSection {
 export function parseTemplate(json: string): TemplateSection[] {
   let data: unknown;
   try {
-    data = JSON.parse(json);
+    data = JSON.parse(stripLeadingComments(json));
   } catch {
     return [];
   }
@@ -78,17 +103,54 @@ export function parseTemplate(json: string): TemplateSection[] {
  */
 const ROLE_PATTERNS: { match: RegExp; kind: string }[] = [
   { match: /announcement/i, kind: "anuncio" },
-  { match: /header|nav/i, kind: "cabecera" },
-  { match: /main-product|featured-product|product-form|hero|banner|slideshow/i, kind: "heroe" },
-  { match: /review|rating|testimonial|social-proof/i, kind: "testimonios" },
-  { match: /trust|badge|logo-list|guarantee/i, kind: "garantia" },
-  { match: /icon|benefit|feature|multicolumn/i, kind: "beneficios" },
-  { match: /compar|table/i, kind: "comparativa" },
-  { match: /faq|collapsible|accordion/i, kind: "faq" },
-  { match: /price|offer|bundle|quantity-break/i, kind: "oferta" },
-  { match: /how|mechanism|science|ingredient/i, kind: "mecanismo" },
-  { match: /cta|call-to-action|newsletter/i, kind: "cta" },
+  { match: /header|navigation/i, kind: "cabecera" },
   { match: /footer/i, kind: "pie" },
+
+  /*
+   * La comparativa va antes que el producto.
+   *
+   * `product-comparison` contiene «product», así que con el patrón del héroe
+   * primero se llevaría todas las comparativas de producto — que son
+   * precisamente las que hay que detectar.
+   */
+  { match: /compar|versus|vs-/i, kind: "comparativa" },
+
+  {
+    match: /main-product|featured-product|product-form|product-details|product-info|hero|banner|slideshow/i,
+    kind: "heroe",
+  },
+
+  { match: /review|rating|testimonial/i, kind: "testimonios" },
+  /*
+   * «Como se ha visto en» y las cifras son prueba social, no garantía.
+   *
+   * `logo-list` estaba mapeado a garantía y es un error: una fila de logotipos
+   * de medios dice «hablan de nosotros», que es otra cosa que «te devolvemos el
+   * dinero». Los nombres salen de temas reales.
+   */
+  { match: /as-seen|logo-list|logos|press|media|statistic|counter|social-proof/i, kind: "prueba-social" },
+  { match: /trust|badge|guarantee|warranty|shipping-info/i, kind: "garantia" },
+
+  { match: /faq|collapsible|accordion|question/i, kind: "faq" },
+  { match: /price|offer|bundle|quantity-break|discount/i, kind: "oferta" },
+  { match: /how|mechanism|science|ingredient|roadmap|steps|process|timeline/i, kind: "mecanismo" },
+  { match: /icon|benefit|feature|multicolumn|store-features/i, kind: "beneficios" },
+
+  /*
+   * `sticky-add-to-cart` es una llamada a la acción, no una sección de la
+   * página: flota encima. Se reconoce igualmente porque su presencia o ausencia
+   * es una decisión de la página que conviene comparar.
+   */
+  { match: /sticky|cta|call-to-action|newsletter|add-to-cart/i, kind: "cta" },
+
+  /*
+   * Los genéricos van al final, a propósito.
+   *
+   * `image-with-text` y `rich-text` no dicen qué papel cumplen —dependen de lo
+   * que lleven dentro— así que solo se les asigna uno si ningún patrón concreto
+   * ha encajado antes. Ponerlos arriba se llevaría media página.
+   */
+  { match: /image-with-text|rich-text|text-columns|content/i, kind: "contenido" },
 ];
 
 export function roleOf(sectionType: string): string {
@@ -225,3 +287,51 @@ export const PLAN_LIMITS = [
   "No copia texto ni imágenes: los textos se escriben con tu investigación y las imágenes se generan con tu foto de producto.",
   "No importa código de tema. Las secciones se añaden con las que trae el tuyo.",
 ];
+
+/* ------------------------------- Aplicarlo --------------------------------- */
+
+/**
+ * Reordena las secciones de una plantilla **sin tocar nada más**.
+ *
+ * Solo se reescribe el array `order`. Los ajustes de cada sección, sus bloques y
+ * su contenido quedan byte a byte como estaban: el reordenado es mecánico y no
+ * tiene por qué arriesgar nada de lo que ya funciona.
+ *
+ * Se conserva la cabecera de comentario de Shopify. Es suya y la regenera, pero
+ * quitarla haría que el diff del tema pareciera un cambio mucho mayor del que
+ * es —y quien mire el historial del tema tiene que poder ver qué se tocó.
+ *
+ * Los identificadores que no estén en la plantilla se ignoran, y los que estén y
+ * no se hayan pedido se **conservan al final**: perder una sección por no
+ * haberla nombrado sería un destrozo silencioso.
+ */
+export function reorderTemplate(json: string, orderedIds: string[]): string | null {
+  const start = json.indexOf("{");
+  if (start < 0) return null;
+
+  const header = json.slice(0, start);
+  const body = json.slice(start);
+
+  let data: { sections?: Record<string, unknown>; order?: string[] };
+  try {
+    data = JSON.parse(body);
+  } catch {
+    return null;
+  }
+
+  if (!data.sections || typeof data.sections !== "object") return null;
+
+  const known = new Set(Object.keys(data.sections));
+  const wanted = orderedIds.filter((id) => known.has(id));
+
+  // Lo que existe y no se nombró va detrás, en su orden original.
+  const rest = (data.order ?? Object.keys(data.sections)).filter(
+    (id) => known.has(id) && !wanted.includes(id),
+  );
+
+  const next = { ...data, order: [...wanted, ...rest] };
+
+  // Dos espacios, que es como los escribe Shopify: así el diff del tema enseña
+  // solo las líneas que de verdad cambiaron.
+  return `${header}${JSON.stringify(next, null, 2)}`;
+}

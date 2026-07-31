@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { Button, SelectField } from "@/components/ui";
-import { buildThemePlanAction, type ThemePlan } from "@/app/stores/theme-plan-actions";
+import {
+  applyThemeOrderAction,
+  buildThemePlanAction,
+  themesForApplyAction,
+  type ThemePlan,
+} from "@/app/stores/theme-plan-actions";
 import { PLAN_LIMITS } from "@/lib/theme-structure";
 
 /**
@@ -35,6 +40,8 @@ export function ThemePlanPanel({
   const [blueprintId, setBlueprintId] = useState(blueprints[0]?.id ?? "");
   const [plan, setPlan] = useState<ThemePlan | null>(null);
   const [message, setMessage] = useState("");
+  const [themes, setThemes] = useState<{ id: string; name: string; published: boolean }[]>([]);
+  const [targetTheme, setTargetTheme] = useState("");
   const [isPending, startTransition] = useTransition();
 
   if (blueprints.length === 0) {
@@ -94,10 +101,22 @@ export function ThemePlanPanel({
             startTransition(async () => {
               setMessage("");
               const result = await buildThemePlanAction(storeId, blueprintId, "");
-              if (result.ok) setPlan(result.plan ?? null);
-              else {
+              if (!result.ok) {
                 setPlan(null);
                 setMessage(result.message ?? "No se pudo comparar.");
+                return;
+              }
+
+              setPlan(result.plan ?? null);
+
+              // Los temas se piden aquí y no al aplicar: así el desplegable ya
+              // está lleno cuando se decide, sin otra espera de por medio.
+              const list = await themesForApplyAction(storeId);
+              if (list.ok) {
+                setThemes(list.themes ?? []);
+                // El publicado **no** viene elegido: reordenar la página que ven
+                // los clientes es una decisión, no un descuido.
+                setTargetTheme(list.themes?.find((theme) => !theme.published)?.id ?? "");
               }
             })
           }
@@ -129,6 +148,7 @@ export function ThemePlanPanel({
                     {section.position}
                   </span>
                   <span className="font-mono text-xs">{section.type}</span>
+                  <span className="text-xs text-slate-400">{section.role}</span>
                 </li>
               ))}
             </ol>
@@ -167,6 +187,78 @@ export function ThemePlanPanel({
                   </li>
                 ))}
             </ul>
+          </div>
+        </div>
+      ) : null}
+
+      {plan && themes.length > 0 ? (
+        <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <p className="text-sm font-medium">Aplicar el orden</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Reordena las secciones que ya tienes. Las que faltan no se añaden solas: una sección
+            nueva necesita su texto y sus imágenes, y eso sale de tu producto.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                En qué tema
+              </span>
+              <SelectField
+                value={targetTheme}
+                onChange={(event) => setTargetTheme(event.target.value)}
+                className="min-w-56"
+              >
+                {themes.map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.name}
+                    {theme.published ? " · PUBLICADO" : ""}
+                  </option>
+                ))}
+              </SelectField>
+            </label>
+
+            <Button
+              variant="primary"
+              disabled={isPending || !targetTheme}
+              onClick={() =>
+                startTransition(async () => {
+                  const theme = themes.find((item) => item.id === targetTheme);
+
+                  /*
+                   * El tema publicado pide confirmación aparte.
+                   *
+                   * Es la página que están viendo los clientes ahora mismo. Lo
+                   * normal es probarlo en una copia y publicarla cuando convence.
+                   */
+                  if (
+                    theme?.published &&
+                    !window.confirm(
+                      `«${theme.name}» es el tema PUBLICADO: el cambio lo verán tus clientes en cuanto se guarde.\n\n¿Seguro? Lo prudente es aplicarlo en una copia y publicarla después.`,
+                    )
+                  ) {
+                    return;
+                  }
+
+                  const result = await applyThemeOrderAction(
+                    storeId,
+                    targetTheme,
+                    // El orden que propone el plano, y detrás lo que no encaja
+                    // en ningún papel del plan — que se conserva, no se pierde.
+                    plan.changes
+                      .map(
+                        (change) =>
+                          plan.current.find((section) => section.role === change.role)?.id,
+                      )
+                      .filter((id): id is string => Boolean(id)),
+                  );
+
+                  setMessage(result.message);
+                })
+              }
+            >
+              {isPending ? "Aplicando…" : "Aplicar"}
+            </Button>
           </div>
         </div>
       ) : null}

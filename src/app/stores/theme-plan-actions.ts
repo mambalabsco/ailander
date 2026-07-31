@@ -1,8 +1,15 @@
 "use server";
 
 import { findStore } from "@/lib/store-registry";
-import { listThemeFiles, listThemes } from "@/lib/shopify-store";
-import { parseTemplate, planChanges, summarize, type ThemeChange } from "@/lib/theme-structure";
+import { listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
+import {
+  parseTemplate,
+  planChanges,
+  reorderTemplate,
+  roleOf,
+  summarize,
+  type ThemeChange,
+} from "@/lib/theme-structure";
 import { listBlueprints } from "@/lib/data/blueprints";
 
 /**
@@ -31,7 +38,7 @@ export interface ThemePlan {
   themeName: string;
   templateName: string;
   /** Las secciones de tu plantilla, en orden. */
-  current: { type: string; position: number }[];
+  current: { id: string; type: string; role: string; position: number }[];
   changes: ThemeChange[];
   counts: Record<string, number>;
   blueprintName: string;
@@ -88,7 +95,12 @@ export async function buildThemePlanAction(
       plan: {
         themeName: main.name,
         templateName,
-        current: current.map((section) => ({ type: section.type, position: section.position + 1 })),
+        current: current.map((section) => ({
+          id: section.id,
+          type: section.type,
+          role: roleOf(section.type),
+          position: section.position + 1,
+        })),
         changes,
         counts: summarize(changes),
         blueprintName: blueprint.storeName,
@@ -99,5 +111,81 @@ export async function buildThemePlanAction(
       ok: false,
       message: error instanceof Error ? error.message : "No se pudo comparar.",
     };
+  }
+}
+
+
+/**
+ * Aplica el orden a un tema.
+ *
+ * **Solo reordena.** Añadir una sección que falta no se automatiza: una sección
+ * nueva necesita su contenido —textos, imágenes— y ese sale del producto, no del
+ * plano. Insertarla vacía dejaría un hueco publicado.
+ *
+ * El tema se elige, y el publicado no viene por defecto. Reordenar la página que
+ * están viendo los clientes es una decisión, no un efecto secundario de pulsar
+ * un botón: lo normal es probarlo en una copia y publicarla cuando convence.
+ */
+export async function applyThemeOrderAction(
+  storeId: unknown,
+  themeId: unknown,
+  orderedIds: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(storeId);
+  const theme = readText(themeId);
+  const order = Array.isArray(orderedIds) ? orderedIds.map((item) => readText(item)) : [];
+
+  if (!id || !theme) return { ok: false, message: "Falta la tienda o el tema." };
+  if (order.length === 0) return { ok: false, message: "No hay ningún orden que aplicar." };
+
+  try {
+    const store = await findStore(id);
+    if (!store) return { ok: false, message: "No se encontró la tienda." };
+
+    const [file] = await listThemeFiles(store, theme, ["templates/product.json"]);
+    if (!file?.body) {
+      return { ok: false, message: "No se pudo leer templates/product.json de ese tema." };
+    }
+
+    const next = reorderTemplate(file.body, order);
+    if (!next) {
+      return { ok: false, message: "La plantilla no tiene el formato esperado; no se ha tocado." };
+    }
+
+    // Si el reordenado no cambia nada, no se escribe: cada escritura queda en el
+    // historial del tema y una sin cambios solo añade ruido.
+    if (next.trim() === file.body.trim()) {
+      return { ok: true, message: "Ya estaba en ese orden. No se ha escrito nada." };
+    }
+
+    await writeThemeFiles(store, theme, [
+      { filename: "templates/product.json", content: next },
+    ]);
+
+    return { ok: true, message: "Orden aplicado. Míralo en la vista previa del tema antes de publicar." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo aplicar." };
+  }
+}
+
+/** Los temas de una tienda, para elegir dónde aplicar. */
+export async function themesForApplyAction(
+  storeId: unknown,
+): Promise<{ ok: boolean; themes?: { id: string; name: string; published: boolean }[]; message?: string }> {
+  try {
+    const store = await findStore(readText(storeId));
+    if (!store) return { ok: false, message: "No se encontró la tienda." };
+
+    const themes = await listThemes(store);
+    return {
+      ok: true,
+      themes: themes.map((theme) => ({
+        id: theme.id,
+        name: theme.name,
+        published: theme.role === "MAIN",
+      })),
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo consultar." };
   }
 }

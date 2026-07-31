@@ -5,6 +5,7 @@ import {
   PLAN_LIMITS,
   parseTemplate,
   planChanges,
+  reorderTemplate,
   roleOf,
   summarize,
 } from "./theme-structure.ts";
@@ -34,6 +35,40 @@ test("el orden sale de `order`, no de las claves del objeto", () => {
 
 test("sin `order` se usan las claves, que es mejor que nada", () => {
   const json = JSON.stringify({ sections: { a: { type: "main-product" } } });
+
+  assert.equal(parseTemplate(json).length, 1);
+});
+
+test("la cabecera de comentario de Shopify no impide leer la plantilla", () => {
+  /*
+   * Las plantillas JSON de Shopify **no son JSON válido**: empiezan con un
+   * comentario que genera el propio Shopify. El síntoma era desconcertante — el
+   * archivo existía, pesaba cien kilobytes, y la plataforma decía que el tema no
+   * era de bloques.
+   */
+  const real = `/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ * ------------------------------------------------------------
+ */
+{
+  "sections": { "main": { "type": "main-product" } },
+  "order": ["main"]
+}`;
+
+  assert.deepEqual(
+    parseTemplate(real).map((section) => section.type),
+    ["main-product"],
+  );
+});
+
+test("no se barren comentarios dentro del archivo, que romperían las URL", () => {
+  // Las plantillas están llenas de `https://`, y quitar `//` por todas partes
+  // partiría cualquier enlace que viva dentro de una cadena.
+  const json = JSON.stringify({
+    sections: { main: { type: "main-product", settings: { url: "https://ejemplo.com/a" } } },
+    order: ["main"],
+  });
 
   assert.equal(parseTemplate(json).length, 1);
 });
@@ -70,7 +105,42 @@ test("reconoce el papel aunque el tema le ponga otro nombre", () => {
   assert.equal(roleOf("product-reviews"), "testimonios");
 });
 
-test("lo que no encaja es «otra», que ya es información", () => {
+test("los nombres reales del tema Elixir se reconocen", () => {
+  /*
+   * Estos salen de `templates/product.json` de una tienda de verdad. La primera
+   * versión de los patrones estaba escrita a ciegas y dejaba siete de catorce
+   * secciones sin papel.
+   */
+  assert.equal(roleOf("shop-product-details"), "heroe");
+  assert.equal(roleOf("product-comparison"), "comparativa");
+  assert.equal(roleOf("as-seen-in-logos"), "prueba-social");
+  assert.equal(roleOf("statistics-column"), "prueba-social");
+  assert.equal(roleOf("store-features"), "beneficios");
+  assert.equal(roleOf("product-benefits"), "beneficios");
+  assert.equal(roleOf("roadmap"), "mecanismo");
+  assert.equal(roleOf("store-faq"), "faq");
+  assert.equal(roleOf("sticky-add-to-cart"), "cta");
+});
+
+test("la comparativa gana al héroe, porque lleva «product» dentro", () => {
+  // Con el patrón del héroe primero, `product-comparison` caería en «heroe» y se
+  // perdería justo la sección que más interesa detectar.
+  assert.equal(roleOf("product-comparison"), "comparativa");
+  assert.equal(roleOf("main-product"), "heroe");
+});
+
+test("los genéricos solo se clasifican si nada concreto encajó", () => {
+  /*
+   * `image-with-text` no dice qué papel cumple: depende de lo que lleve dentro.
+   * Ponerlo arriba en la lista se llevaría media página.
+   */
+  assert.equal(roleOf("image-with-text"), "contenido");
+  assert.equal(roleOf("rich-text"), "contenido");
+  // Pero uno que sí dice algo concreto no cae ahí.
+  assert.equal(roleOf("image-with-text-comparison"), "comparativa");
+});
+
+test("lo que no encaja en nada es «otra», que ya es información", () => {
   assert.equal(roleOf("custom-liquid-42"), "otra");
 });
 
@@ -177,4 +247,54 @@ test("está escrito que el plan no trae contenido de la referencia", () => {
   assert.match(texto, /No copia texto ni imágenes/);
   assert.match(texto, /No importa código de tema/);
   assert.match(texto, /sale de tu producto/);
+});
+
+/* ------------------------------- Aplicarlo --------------------------------- */
+
+const CON_CABECERA = `/* auto-generated */
+{
+  "sections": {
+    "a": { "type": "main-product", "settings": { "x": 1 } },
+    "b": { "type": "store-faq" },
+    "c": { "type": "testimonials" }
+  },
+  "order": ["a", "b", "c"]
+}`;
+
+test("reordenar solo cambia `order`, y conserva los ajustes", () => {
+  const out = reorderTemplate(CON_CABECERA, ["a", "c", "b"])!;
+  const data = JSON.parse(out.slice(out.indexOf("{")));
+
+  assert.deepEqual(data.order, ["a", "c", "b"]);
+  // Los ajustes de cada sección quedan intactos: el reordenado es mecánico y no
+  // tiene por qué arriesgar nada de lo que ya funciona.
+  assert.deepEqual(data.sections.a.settings, { x: 1 });
+  assert.equal(data.sections.b.type, "store-faq");
+});
+
+test("se conserva la cabecera de Shopify", () => {
+  // Quitarla haría que el diff del tema pareciera un cambio mucho mayor del que
+  // es, y quien mire el historial tiene que poder ver qué se tocó.
+  assert.ok(reorderTemplate(CON_CABECERA, ["a", "b", "c"])!.startsWith("/* auto-generated */"));
+});
+
+test("una sección que no se nombró se conserva al final, no se pierde", () => {
+  /*
+   * Perder una sección por no haberla nombrado sería un destrozo silencioso: la
+   * página aparecería sin ella y nada diría por qué.
+   */
+  const data = JSON.parse(reorderTemplate(CON_CABECERA, ["c"])!.split("*/")[1]);
+
+  assert.deepEqual(data.order, ["c", "a", "b"]);
+});
+
+test("un identificador inventado se ignora", () => {
+  const data = JSON.parse(reorderTemplate(CON_CABECERA, ["a", "fantasma", "b"])!.split("*/")[1]);
+
+  assert.deepEqual(data.order, ["a", "b", "c"]);
+});
+
+test("una plantilla que no se puede leer devuelve null, no algo a medias", () => {
+  assert.equal(reorderTemplate("no es json", ["a"]), null);
+  assert.equal(reorderTemplate('{"nada": 1}', ["a"]), null);
 });
