@@ -4,6 +4,7 @@ import { StoresManager } from "@/app/stores/stores-manager";
 import { SectionCard } from "@/components/section-card";
 import { StoreBlueprints } from "@/components/store-blueprints";
 import { ShopProducts } from "@/components/shop-products";
+import { ThemePlanPanel } from "@/components/theme-plan";
 import { listBlueprints } from "@/lib/data/blueprints";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -59,6 +60,28 @@ export default async function StoresPage() {
         description="Saca su estructura, su oferta con los descuentos reales y los scripts que usa. Con ese plano se construye tu página, con tu copy y tus imágenes."
       >
         <StoreBlueprints blueprints={blueprints} />
+      </SectionCard>
+
+      {/*
+        El plan va después del análisis y no antes: sin un plano guardado no hay
+        nada con lo que comparar, y una pantalla que pide elegir de una lista
+        vacía se lee como si estuviera rota.
+      */}
+      <SectionCard
+        title="Adaptar tu tema"
+        description="Compara la estructura de tu página de producto con la de una tienda analizada y dice qué secciones faltan, cuáles mover y a dónde."
+      >
+        <ThemePlanPanel
+          stores={stores.map((store) => ({
+            id: store.id,
+            name: store.name,
+            connected: Boolean(store.shopifyAdminToken && store.shopifyShopDomain),
+          }))}
+          blueprints={blueprints.map((blueprint) => ({
+            id: blueprint.id,
+            storeName: blueprint.storeName,
+          }))}
+        />
       </SectionCard>
     </div>
   );
