@@ -706,6 +706,21 @@ type VideoShotRow = {
   created_at: string;
 };
 
+type StoreBlueprintRow = {
+  id: string;
+  user_id: string;
+  url: string;
+  store_name: string;
+  currency: string;
+  sections: unknown;
+  offers: unknown;
+  guarantee: string;
+  scripts: unknown;
+  pages: unknown;
+  notes: string;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -990,6 +1005,10 @@ export type Database = {
           Exclude<keyof CostGatewayFeeRow, "user_id" | "store_id" | "gateway">
         >,
         [Belongs<"store_id", "stores">]
+      >;
+      store_blueprints: Table<
+        StoreBlueprintRow,
+        Insertable<StoreBlueprintRow, Exclude<keyof StoreBlueprintRow, "user_id" | "url">>
       >;
       videos: Table<
         VideoRow,

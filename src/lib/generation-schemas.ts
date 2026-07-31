@@ -364,3 +364,54 @@ export const SCRIPT_SCHEMA = object({
     }),
   },
 });
+
+/* --------------------------- Plano de una tienda --------------------------- */
+
+/**
+ * La estructura de una tienda ajena, **descrita**.
+ *
+ * `angle` pide el enfoque, no el texto: «promete resultado en 30 días apelando al
+ * cansancio», no la frase literal. Es la diferencia entre analizar y copiar, y
+ * está escrita también en el prompt porque el esquema por sí solo no la impone.
+ */
+export const BLUEPRINT_SCHEMA = object({
+  storeName: str,
+  currency: str,
+  guarantee: str,
+  notes: str,
+  sections: {
+    type: "array",
+    items: object({
+      kind: {
+        type: "string",
+        enum: [
+          "anuncio",
+          "cabecera",
+          "heroe",
+          "prueba-social",
+          "beneficios",
+          "mecanismo",
+          "comparativa",
+          "testimonios",
+          "oferta",
+          "garantia",
+          "faq",
+          "cta",
+          "pie",
+        ],
+      },
+      purpose: str,
+      angle: str,
+      images: num,
+    }),
+  },
+  offers: {
+    type: "array",
+    items: object({
+      quantity: num,
+      price: num,
+      compareAt: num,
+      highlighted: { type: "boolean" },
+    }),
+  },
+});
