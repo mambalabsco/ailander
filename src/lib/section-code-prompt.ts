@@ -189,7 +189,7 @@ Deja \`foto_url\` **vacío** en lo que devuelvas: se rellena después.
 
 ${
   options.referenceImages && options.referenceImages > 0
-    ? `**Esa sección de la referencia lleva ${options.referenceImages} imagen(es): declara los mismos huecos**, con su par cada uno. Una sección con menos huecos de los que tiene el original sale más pobre, y los que sobren se quedan vacíos sin molestar.${
+    ? `**Esa sección de la referencia lleva ${options.referenceImages} imagen(es): declara los mismos huecos, en el mismo orden**, con su par cada uno. Se rellenan con **las suyas y en ese orden**, así que el primer hueco que declares recibirá la primera imagen de la sección original, el segundo la segunda, y así. Decláralos en el orden en que salen en el marcado de arriba. Una sección con menos huecos de los que tiene el original sale más pobre, y los que sobren se quedan vacíos sin molestar.${
         options.availableImages
           ? ` Hay ${options.availableImages} fotos disponibles para dejarlas puestas.`
           : ""

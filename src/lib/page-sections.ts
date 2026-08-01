@@ -1,3 +1,5 @@
+import { imageKey, widestFromSrcset } from "./store-images.ts";
+
 /**
  * Partir una página de Shopify en sus secciones, con el estilo de cada una.
  *
@@ -349,6 +351,64 @@ export function trimSectionHtml(html: string, limit = HTML_LIMIT): string {
   return clean.length > limit ? `${clean.slice(0, limit)}\n<!-- …recortado -->` : clean;
 }
 
+/* --------------------- Las imágenes de esa sección, en orden --------------- */
+
+/**
+ * Las imágenes de una sección, **en el orden en que salen**.
+ *
+ * Es lo que hace que la copia se parezca de verdad. Antes los huecos se
+ * rellenaban del montón de todas las imágenes de la tienda, así que en el héroe
+ * podía caer un icono de garantía y en la fila de iconos una foto de producto —
+ * la disposición estaba bien y el resultado no se parecía a nada.
+ *
+ * La portada real de la referencia lo deja claro: su héroe lleva exactamente dos
+ * imágenes —una de escritorio y una de móvil— y su fila de iconos lleva cuatro.
+ * Cogidas en orden, cada una cae donde le toca.
+ *
+ * **Aquí no se filtra por tamaño**, al revés que en el montón general. Allí un
+ * archivo pequeño es un icono de la interfaz que no sirve de maqueta; aquí un
+ * icono pequeño **es** el contenido de ese hueco. Los del catálogo de pago y los
+ * de carga sí sobran en los dos sitios.
+ */
+export function sectionImages(html: string, origin: string): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+
+  for (const tag of html.matchAll(/<img\b[^>]*>/gi)) {
+    const markup = tag[0];
+
+    const attr = (name: string) =>
+      new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(markup)?.[1] ?? "";
+
+    const srcset = attr("srcset") || attr("data-srcset");
+    const raw = (srcset ? widestFromSrcset(srcset)?.url : "") || attr("src") || attr("data-src");
+    if (!raw) continue;
+
+    const clean = raw.trim();
+    const url = clean.startsWith("//")
+      ? `https:${clean}`
+      : clean.startsWith("/")
+        ? `${origin}${clean}`
+        : /^https?:\/\//i.test(clean)
+          ? clean
+          : "";
+
+    if (!url || url.startsWith("data:")) continue;
+    if (/sprite|favicon|placeholder|loader|spinner|1x1|pixel|blank|visa|mastercard|paypal|amex/i.test(url)) {
+      continue;
+    }
+
+    // Por clave, para que la misma foto en dos tamaños no ocupe dos huecos.
+    const key = imageKey(url);
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    urls.push(url);
+  }
+
+  return urls;
+}
+
 /* --------------------------- Emparejar con la propia ----------------------- */
 
 export interface ReferenceSection {
@@ -368,6 +428,8 @@ export interface ReferenceSection {
   palette: SectionPalette | null;
   /** Cuántas imágenes lleva, para declarar los mismos huecos. */
   images: number;
+  /** Sus imágenes, en orden, para que cada una caiga donde le toca. */
+  imageUrls: string[];
   /** Las tipografías que usa: es la otra mitad de por qué no se parecen. */
   fonts: string[];
 }

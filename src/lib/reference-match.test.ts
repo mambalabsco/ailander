@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { takeForRole, type ReferenceSection } from "./page-sections.ts";
 
 function seccion(role: string, type: string): ReferenceSection {
-  return { role, type, html: "", css: "", palette: null, images: 0, fonts: [] };
+  return { role, type, html: "", css: "", palette: null, images: 0, fonts: [], imageUrls: [] };
 }
 
 test("primero se busca por papel", () => {

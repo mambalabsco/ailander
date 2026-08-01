@@ -405,6 +405,9 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       let outputTokens = 0;
       let filledPhotos = 0;
       let matched = 0;
+      // Cuántos huecos se llenaron con la imagen que ocupa ese sitio en la
+      // referencia, que es lo que de verdad hace que se parezca.
+      let matchedPhotos = 0;
       let reused = 0;
 
       /**
@@ -467,13 +470,27 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
         }
 
         const settings = coerceSettings(generated.data.settings, review.schema.settings ?? []);
-        const withPhotos = fillImageUrls(
-          settings,
-          imageUrlSlots(review.schema),
-          photos,
-          filledPhotos,
-        );
+
+        /*
+         * Las imágenes **de esa sección**, en su orden, antes que el montón.
+         *
+         * Era el fallo que más se veía: los huecos se rellenaban de la bolsa de
+         * todas las imágenes de la tienda, así que en el héroe caía un icono de
+         * garantía y en la fila de iconos una foto de producto. La disposición
+         * estaba bien y el resultado no se parecía a nada.
+         *
+         * Su héroe lleva exactamente dos imágenes y su fila de iconos cuatro;
+         * cogidas en orden, cada una cae donde le toca. El montón general queda
+         * de reserva para las secciones que no emparejaron con ninguna.
+         */
+        const own = job.model?.imageUrls ?? [];
+        const slots = imageUrlSlots(review.schema);
+
+        const withOwn = fillImageUrls(settings, slots, own);
+        const withPhotos = fillImageUrls(withOwn.settings, slots, photos, filledPhotos);
+
         filledPhotos += withPhotos.used;
+        matchedPhotos += withOwn.used;
 
         const draft: SectionDraft = {
           kind: job.wanted.kind,
@@ -721,8 +738,11 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           ".",
           reused > 0 ? ` ${reused} venían ya escritas y no se han vuelto a pagar.` : "",
           matched > 0 ? ` ${matched} escritas mirando su sección real.` : "",
+          matchedPhotos > 0
+            ? ` ${matchedPhotos} imagen(es) puestas donde van en el original.`
+            : "",
           filledPhotos > 0
-            ? ` ${filledPhotos} imagen(es) de ${blueprint.storeName} para maquetar: sustitúyelas antes de publicar.`
+            ? ` ${filledPhotos} más del montón. Son de ${blueprint.storeName}: sustitúyelas antes de publicar.`
             : "",
           photoNote,
           lost.length > 0

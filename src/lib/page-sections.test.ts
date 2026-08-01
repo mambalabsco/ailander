@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   CSS_LIMIT,
   relevantCss,
+  sectionImages,
   sectionPalette,
   selectorsIn,
   splitShopifySections,
@@ -192,4 +193,50 @@ test("una variable que apunta a otra no se queda en bucle", () => {
   const css = `:root { --a: var(--b); --b: var(--a) } .hero { background: var(--a) }`;
 
   assert.equal(sectionPalette(css), null);
+});
+
+/* ------------------ Las imágenes de esa sección, en orden ------------------ */
+
+const ORIGIN = "https://sculptique.com";
+
+test("salen en el orden del marcado", () => {
+  // Es lo que hace que cada una caiga donde le toca: el héroe de la referencia
+  // lleva dos y su fila de iconos cuatro.
+  const html = `<div>
+    <img src="/cdn/desk1.png">
+    <img src="/cdn/mobil1.png">
+  </div>`;
+
+  assert.deepEqual(sectionImages(html, ORIGIN), [
+    "https://sculptique.com/cdn/desk1.png",
+    "https://sculptique.com/cdn/mobil1.png",
+  ]);
+});
+
+test("aquí un icono pequeño sí cuenta: es el contenido del hueco", () => {
+  // Al revés que en el montón general, donde un archivo pequeño es ruido.
+  const html = `<img src="/cdn/Frame_148.png" width="48">`;
+
+  assert.equal(sectionImages(html, ORIGIN).length, 1);
+});
+
+test("las direcciones sin protocolo se resuelven", () => {
+  // Es como las sirve la referencia: `//trysculptique.com/cdn/...`.
+  const html = `<img src="//trysculptique.com/cdn/shop/files/desk1.png?v=1">`;
+
+  assert.deepEqual(sectionImages(html, ORIGIN), [
+    "https://trysculptique.com/cdn/shop/files/desk1.png?v=1",
+  ]);
+});
+
+test("la misma imagen en dos tamaños no ocupa dos huecos", () => {
+  const html = `<img src="/cdn/a.jpg?width=400"><img src="/cdn/a.jpg?width=1200">`;
+
+  assert.equal(sectionImages(html, ORIGIN).length, 1);
+});
+
+test("los sellos de pago y los espaciadores no son contenido", () => {
+  const html = `<img src="/cdn/visa.png"><img src="/cdn/1x1.gif"><img src="data:image/gif;base64,R0lGOD">`;
+
+  assert.deepEqual(sectionImages(html, ORIGIN), []);
 });

@@ -4,6 +4,7 @@ import { roleOf } from "@/lib/theme-structure";
 import {
   relevantCss,
   sectionFonts,
+  sectionImages,
   sectionPalette,
   selectorsIn,
   splitShopifySections,
@@ -80,26 +81,7 @@ function sheetUrls(html: string, origin: string): string[] {
 
 export type { ReferenceSection } from "@/lib/page-sections";
 
-interface Built {
-  /** El papel, con el mismo vocabulario que el plano: `heroe`, `faq`… */
-  role: string;
-  /** El tipo tal cual lo llama su tema: `hero-banner`. */
-  type: string;
-  html: string;
-  css: string;
-  /**
-   * Los colores de **esa** sección, cuando se pueden leer.
-   *
-   * No los del tema: casi toda tienda tiene fondo blanco global, y un héroe
-   * puede estar entero sobre rosa. Pasar el global era lo que hacía que la
-   * sección saliera blanca por bien copiada que estuviera la disposición.
-   */
-  palette: ReturnType<typeof sectionPalette>;
-  /** Cuántas imágenes lleva, para declarar los mismos huecos. */
-  images: number;
-  /** Las tipografías que usa: es la mitad de por qué dos páginas no se parecen. */
-  fonts: string[];
-}
+import type { ReferenceSection } from "@/lib/page-sections";
 
 /**
  * Las secciones de una página de referencia, cada una con su marcado y su CSS.
@@ -110,7 +92,7 @@ interface Built {
 export async function readReferenceSections(
   pageUrl: string,
   timeoutMs = 20_000,
-): Promise<Built[]> {
+): Promise<ReferenceSection[]> {
   let html: string;
   let origin: string;
 
@@ -153,6 +135,9 @@ export async function readReferenceSections(
       css: own,
       palette: sectionPalette(own),
       images: (trimmed.match(/<img\b/gi) ?? []).length,
+      // Del marcado sin recortar: el recorte por tamaño puede cortar justo por
+      // el medio de la lista de imágenes y dejar fuera las de abajo.
+      imageUrls: sectionImages(section.html, origin),
       fonts: sectionFonts(own),
     };
   });
