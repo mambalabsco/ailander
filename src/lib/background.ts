@@ -60,11 +60,20 @@ export async function runInBackground(options: {
   work: (report: (progress: string) => Promise<void>) => Promise<JobOutcome>;
   /** Ruta a refrescar al terminar. Por defecto, la del producto. */
   revalidate?: string;
+  /**
+   * Con qué volver a lanzarlo si se corta.
+   *
+   * Solo identificadores. Es lo que permite un botón de continuar en el propio
+   * trabajo, en vez de obligar a volver al panel y reconstruir a mano las cinco
+   * decisiones que ya se habían tomado.
+   */
+  resume?: Record<string, unknown>;
 }): Promise<StartedJob> {
   const jobId = await createJob({
     productId: options.productId,
     kind: options.kind,
     label: options.label,
+    resume: options.resume,
   });
 
   const path =

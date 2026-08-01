@@ -18,6 +18,7 @@ function toJob(row: {
   label: string;
   status: string;
   progress?: string | null;
+  resume?: unknown;
   summary: string | null;
   error: string | null;
   result: unknown;
@@ -34,6 +35,7 @@ function toJob(row: {
     label: row.label,
     status: row.status === "done" ? "done" : row.status === "error" ? "error" : "running",
     progress: row.progress ?? "",
+    canResume: row.resume !== null && row.resume !== undefined,
     summary: row.summary,
     error: row.error,
     result: row.result ?? null,
@@ -46,10 +48,30 @@ function toJob(row: {
   };
 }
 
+/** Lo guardado para relanzar, cuando lo hay. */
+export async function readJobResume(
+  jobId: string,
+): Promise<{ kind: string; resume: Record<string, unknown> } | null> {
+  const { supabase } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("background_jobs")
+    .select("kind, resume")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  if (error || !data?.resume) return null;
+  if (typeof data.resume !== "object" || Array.isArray(data.resume)) return null;
+
+  return { kind: data.kind, resume: data.resume as Record<string, unknown> };
+}
+
 export async function createJob(input: {
   productId?: string | null;
   kind: JobKind;
   label: string;
+  /** Con qué relanzarlo si se corta. Solo identificadores. */
+  resume?: Record<string, unknown>;
 }): Promise<string> {
   const { supabase, userId } = await requireContext();
 
@@ -61,6 +83,7 @@ export async function createJob(input: {
       kind: input.kind,
       label: input.label,
       status: "running",
+      resume: input.resume ?? null,
     })
     .select("id")
     .single();

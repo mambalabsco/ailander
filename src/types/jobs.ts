@@ -51,6 +51,14 @@ export interface BackgroundJob {
   status: "running" | "done" | "error";
   /** Por dónde va, mientras corre. Vacío cuando no dice nada. */
   progress: string;
+  /**
+   * Si se puede volver a lanzar tal cual.
+   *
+   * Va al navegador como un sí o un no y no el contenido: la interfaz solo
+   * necesita saber si enseña el botón, y los identificadores no tienen por qué
+   * salir del servidor.
+   */
+  canResume: boolean;
   summary: string | null;
   error: string | null;
   /** Payload para los trabajos cuyo resultado la interfaz necesita en mano. */

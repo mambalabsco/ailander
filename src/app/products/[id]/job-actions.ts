@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { clearFinishedJobs, listJobs, readJob, readLatestJob } from "@/lib/data/jobs";
+import {
+  clearFinishedJobs,
+  listJobs,
+  readJob,
+  readJobResume,
+  readLatestJob,
+} from "@/lib/data/jobs";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { BackgroundJob, JobKind } from "@/types/jobs";
 
@@ -35,6 +41,47 @@ export async function listJobsAction(productId: unknown): Promise<BackgroundJob[
   } catch {
     return [];
   }
+}
+
+/**
+ * Vuelve a lanzar un trabajo que se cortó, con lo mismo que llevaba.
+ *
+ * Vive aquí y no en el panel de origen porque el sitio donde uno se entera de
+ * que algo murió es la lista de trabajos, no el formulario. Obligar a volver
+ * allí y reconstruir las cinco decisiones —tienda, análisis, tema, producto,
+ * página— es trabajo repetido, y con una equivocada el resultado sale distinto
+ * sin avisar.
+ *
+ * Lo que ya estuviera escrito se reutiliza: continuar no vuelve a pagarlo.
+ */
+export async function resumeJobAction(
+  jobId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  if (typeof jobId !== "string" || !jobId) return { ok: false, message: "Falta el trabajo." };
+  if (!isSupabaseConfigured()) return { ok: false, message: "Supabase no está configurado." };
+
+  const saved = await readJobResume(jobId);
+  if (!saved) {
+    return { ok: false, message: "Ese trabajo no guardó con qué relanzarse. Hazlo desde su panel." };
+  }
+
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+  if (saved.kind === "tema") {
+    const { recreatePageAction } = await import("@/app/stores/theme-plan-actions");
+
+    const form = new FormData();
+    for (const key of ["storeId", "themeId", "blueprintId", "page", "productId"]) {
+      form.set(key, text(saved.resume[key]));
+    }
+
+    await recreatePageAction(form);
+    revalidatePath("/stores");
+
+    return { ok: true, message: "Continuando. Lo que ya estaba escrito no se vuelve a pagar." };
+  }
+
+  return { ok: false, message: "Ese tipo de trabajo todavía no se puede continuar desde aquí." };
 }
 
 /** Limpia los terminados. Los que siguen en marcha no se tocan. */

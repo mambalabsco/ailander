@@ -353,6 +353,14 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
     kind: "tema",
     label: `Recrear ${page} · ${blueprint.storeName}`,
     revalidate: "/stores",
+    /*
+     * Con qué continuarlo desde el propio trabajo.
+     *
+     * Las capturas no van: son archivos y no caben aquí. No importa — la página
+     * de referencia se lee sola, así que continuar sin ellas da el mismo
+     * resultado salvo que se hubieran subido para algo muy concreto.
+     */
+    resume: { storeId, themeId, blueprintId, page, productId },
     work: async (report) => {
       const palette = paletteOf(blueprint.identity.colors);
       const vibe = describeVibe(blueprint.identity);

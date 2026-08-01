@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { clearJobsAction } from "@/app/products/[id]/job-actions";
+import { clearJobsAction, resumeJobAction } from "@/app/products/[id]/job-actions";
 import { clearDataJobsAction } from "@/app/datos/actions";
 import { JOB_KIND_LABELS, isStale, type BackgroundJob } from "@/types/jobs";
 
@@ -47,6 +47,8 @@ export function JobsPanel({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // Lo que dijo el último «Continuar», que si no se pierde sin dejar rastro.
+  const [note, setNote] = useState("");
 
   const running = jobs.filter((job) => job.status === "running" && !isStale(job));
   const stale = jobs.filter((job) => job.status === "running" && isStale(job));
@@ -100,9 +102,23 @@ export function JobsPanel({
         </p>
       ) : null}
 
+      {note ? (
+        <p className="mb-2 rounded-xl border border-violet-200 bg-violet-50 p-2 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+          {note}
+        </p>
+      ) : null}
+
       <ul className="space-y-2">
         {[...running, ...stale, ...finished].map((job) => {
           const abandoned = isStale(job);
+
+          /*
+           * Se puede continuar lo que murió, no lo que sigue vivo.
+           *
+           * Un trabajo en marcha con el botón al lado invita a pulsarlo, y eso
+           * lanza un segundo que compite con el primero por lo mismo.
+           */
+          const resumable = job.canResume && (job.status === "error" || abandoned);
 
           return (
             <li
@@ -139,8 +155,37 @@ export function JobsPanel({
                 {abandoned ? (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
                     Lleva demasiado tiempo sin terminar. Probablemente se cortó al reiniciarse el
-                    servidor: vuelve a lanzarlo — lo que ya estuviera escrito se reutiliza y no se vuelve a
-                    pagar.
+                    servidor.
+                  </p>
+                ) : null}
+
+                {/*
+                  El botón donde se ve el problema.
+
+                  Antes había que volver al panel de origen y reconstruir a mano
+                  lo que ya se había elegido —tienda, análisis, tema, producto,
+                  página—; con una equivocada, el trabajo sale distinto sin
+                  avisar.
+                */}
+                {resumable ? (
+                  <Button
+                    variant="secondary"
+                    disabled={isPending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const result = await resumeJobAction(job.id);
+                        setNote(result.message);
+                        router.refresh();
+                      })
+                    }
+                  >
+                    {isPending ? "Continuando…" : "Continuar"}
+                  </Button>
+                ) : null}
+
+                {resumable ? (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Lo que ya estuviera escrito se reutiliza: continuar no lo vuelve a pagar.
                   </p>
                 ) : null}
 

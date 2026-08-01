@@ -433,6 +433,8 @@ type BackgroundJobRow = {
   status: string;
   /** Por dónde va mientras corre. */
   progress: string;
+  /** Con qué relanzarlo si se corta. Solo identificadores. */
+  resume: unknown;
   summary: string | null;
   error: string | null;
   result: unknown;
