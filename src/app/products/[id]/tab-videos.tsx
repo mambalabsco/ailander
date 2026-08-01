@@ -10,6 +10,7 @@ import { VoicePicker } from "@/components/video/voice-picker";
 import { ShotBoard } from "@/components/video/shot-board";
 import {
   createVideoFromCopyAction,
+  runFullVideoAction,
   deleteVideoAction,
 } from "@/app/products/[id]/video-actions";
 import { estimate, planDurations } from "@/lib/video/shots";
@@ -162,8 +163,54 @@ export function VideosTab({
             */}
             <Presupuesto shots={shots} seconds={seconds} />
 
+            {/*
+              Todo de una, que es como se usa de verdad.
+
+              Se para antes de animar por defecto: regenerar un keyframe malo
+              cuesta unos dos céntimos y dejarlo pasar cuesta la toma animada
+              entera. Mirar seis imágenes lleva medio minuto.
+            */}
+            <div className="flex flex-wrap items-center gap-3">
+              <GenerateButton
+                variant="primary"
+                action={() =>
+                  runFullVideoAction({
+                    productId,
+                    copyId,
+                    voiceId,
+                    shots,
+                    seconds,
+                    referenceId,
+                    stopBeforeClips: true,
+                  })
+                }
+                label="Hacer guion, voz e imágenes"
+                disabled={!copyId || !voiceId}
+                disabledReason={!voiceId ? "Elige una voz" : undefined}
+                hint="Los tres pasos seguidos, en segundo plano. Para antes de animar para que mires las imágenes: es donde está el gasto."
+              />
+
+              <GenerateButton
+                variant="secondary"
+                action={() =>
+                  runFullVideoAction({
+                    productId,
+                    copyId,
+                    voiceId,
+                    shots,
+                    seconds,
+                    referenceId,
+                    stopBeforeClips: false,
+                  })
+                }
+                label="Hacer el vídeo entero"
+                disabled={!copyId || !voiceId}
+                hint="Sin parar a revisar. Anima y monta también: es lo caro, y una toma mala se paga igual."
+              />
+            </div>
+
             <GenerateButton
-              variant="primary"
+              variant="secondary"
               action={() =>
                 createVideoFromCopyAction({
                   productId,
@@ -174,7 +221,7 @@ export function VideosTab({
                   referenceId,
                 })
               }
-              label="Escribir el guion"
+              label="Solo el guion"
               disabled={!copyId || !voiceId}
               disabledReason={!voiceId ? "Elige una voz" : undefined}
               hint="El guion es lo barato: unos 0,05 USD. Nada de vídeo se genera todavía."

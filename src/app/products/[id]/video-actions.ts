@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runInBackground } from "@/lib/background";
+import { runInBackground, runStep, type StepContext } from "@/lib/background";
 import { generateStructured } from "@/lib/generators";
 import { SCRIPT_SCHEMA, STYLE_SCHEMA } from "@/lib/generation-schemas";
 import { findProductAnywhere } from "@/lib/products";
@@ -31,6 +31,7 @@ import {
 import { buildTimeline } from "@/lib/video/timeline";
 import { animate, compose, keyframe, listVoices, speak } from "@/lib/video/providers";
 import { uploadVideoAsset } from "@/lib/data/video-assets";
+import type { JobOutcome } from "@/lib/background";
 import type { LaunchResult } from "@/types/jobs";
 
 /**
@@ -82,7 +83,10 @@ export async function listVoicesAction(): Promise<{
 
 /* ------------------------------- 1 · Guion --------------------------------- */
 
-export async function createVideoFromCopyAction(input: unknown): Promise<LaunchResult> {
+export async function createVideoFromCopyAction(
+  input: unknown,
+  ctx?: StepContext,
+): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const productId = readText(raw.productId);
@@ -126,7 +130,7 @@ export async function createVideoFromCopyAction(input: unknown): Promise<LaunchR
     reference = asScriptReference(found.analysis, found.name);
   }
 
-  return runInBackground({
+  return runStep(ctx, {
     productId,
     kind: "imagenes",
     label: `Guion de vídeo · ${copy.driverLabel}`,
@@ -233,7 +237,10 @@ export async function createVideoFromCopyAction(input: unknown): Promise<LaunchR
  * **Este paso es el que fija el tiempo de todo el vídeo.** A partir de aquí cada
  * toma dura exactamente lo que dura su frase narrada.
  */
-export async function generateVoiceAction(input: unknown): Promise<LaunchResult> {
+export async function generateVoiceAction(
+  input: unknown,
+  ctx?: StepContext,
+): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const videoId = readText(raw.videoId);
@@ -245,7 +252,7 @@ export async function generateVoiceAction(input: unknown): Promise<LaunchResult>
   if (!video) throw new Error("Ese vídeo ya no existe.");
   if (video.shots.length === 0) throw new Error("El vídeo no tiene tomas.");
 
-  return runInBackground({
+  return runStep(ctx, {
     productId,
     kind: "imagenes",
     label: `Voz · ${video.title}`,
@@ -313,7 +320,10 @@ export async function generateVoiceAction(input: unknown): Promise<LaunchResult>
  * La toma de producto lleva la foto real como referencia. El envase nunca se
  * inventa: uno generado se nota y quema la marca.
  */
-export async function generateKeyframesAction(input: unknown): Promise<LaunchResult> {
+export async function generateKeyframesAction(
+  input: unknown,
+  ctx?: StepContext,
+): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const videoId = readText(raw.videoId);
@@ -339,7 +349,7 @@ export async function generateKeyframesAction(input: unknown): Promise<LaunchRes
   const images = await readProductImages(productId);
   const productShot = images.find((image) => image.isPrimary) ?? images[0];
 
-  return runInBackground({
+  return runStep(ctx, {
     productId,
     kind: "imagenes",
     label: `Keyframes · ${video.title}`,
@@ -408,7 +418,10 @@ export async function generateKeyframesAction(input: unknown): Promise<LaunchRes
  * lote lanzado a la vez se cobra entero aunque falle a mitad. En serie, un fallo
  * detiene el gasto en la toma que falló.
  */
-export async function generateClipsAction(input: unknown): Promise<LaunchResult> {
+export async function generateClipsAction(
+  input: unknown,
+  ctx?: StepContext,
+): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const videoId = readText(raw.videoId);
@@ -447,7 +460,7 @@ export async function generateClipsAction(input: unknown): Promise<LaunchResult>
     })),
   );
 
-  return runInBackground({
+  return runStep(ctx, {
     productId,
     kind: "imagenes",
     label: `Clips · ${video.title}`,
@@ -516,7 +529,10 @@ export async function generateClipsAction(input: unknown): Promise<LaunchResult>
  * minuto de vídeo en dieciséis núcleos, y este servidor tiene dos. Aquí la
  * plataforma solo espera.
  */
-export async function assembleVideoAction(input: unknown): Promise<LaunchResult> {
+export async function assembleVideoAction(
+  input: unknown,
+  ctx?: StepContext,
+): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const videoId = readText(raw.videoId);
@@ -530,7 +546,7 @@ export async function assembleVideoAction(input: unknown): Promise<LaunchResult>
   const withClip = video.shots.filter((shot) => shot.clipUrl || shot.lipsyncUrl);
   if (withClip.length === 0) throw new Error("No hay ningún clip que montar.");
 
-  return runInBackground({
+  return runStep(ctx, {
     productId,
     kind: "imagenes",
     label: `Montaje · ${video.title}`,
@@ -590,4 +606,125 @@ export async function listVideosAction(productId: unknown) {
   } catch {
     return [];
   }
+}
+
+/* --------------------------- El vídeo entero, de una ----------------------- */
+
+/**
+ * Escribe el guion, pone la voz, genera las imágenes y —si se pide— anima y monta.
+ *
+ * ## Un solo trabajo, no cinco
+ *
+ * Encadenar los pasos dentro del mismo trabajo es lo que permite mirar una sola
+ * línea y saber en qué punto va el vídeo. Cinco trabajos seguidos serían cinco
+ * filas y ninguna diría cuánto falta para tener algo que ver.
+ *
+ * No duplica ni una línea de los pasos sueltos: los llama a ellos. El mismo
+ * código sirve para el botón de cada paso y para este.
+ *
+ * ## Por qué por defecto se para antes de animar
+ *
+ * Es la parada que más dinero ahorra de todo el pipeline, y no es una opinión:
+ * regenerar un keyframe malo cuesta unos dos céntimos; dejarlo pasar cuesta la
+ * toma animada entera —entre diez céntimos y noventa— más el rato de rehacerla.
+ * Mirar seis imágenes lleva medio minuto y evita pagar dos veces lo caro.
+ *
+ * Quien quiera el vídeo entero sin mirar lo dice, y entonces sigue hasta el
+ * final. Pero se para por defecto porque el descuido caro es el otro.
+ */
+export async function runFullVideoAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const productId = readText(raw.productId);
+  const copyId = readText(raw.copyId);
+  const voiceId = readText(raw.voiceId);
+  const stopBeforeClips = raw.stopBeforeClips !== false;
+
+  if (!productId || !copyId) throw new Error("Falta el copy.");
+  if (!voiceId) throw new Error("Elige una voz.");
+  await guard();
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  return runInBackground({
+    productId,
+    kind: "imagenes",
+    label: stopBeforeClips ? "Vídeo hasta las imágenes" : "Vídeo completo",
+    resume: { productId, copyId, voiceId, stopBeforeClips },
+    work: async (report, cancelled) => {
+      const outcomes: JobOutcome[] = [];
+
+      const ctx: StepContext = {
+        report,
+        cancelled,
+        collect: (outcome) => outcomes.push(outcome),
+        jobId: "",
+        label: "paso",
+      };
+
+      const last = () => outcomes[outcomes.length - 1];
+
+      /*
+       * Entre pasos se mira si han pedido parar.
+       *
+       * El paso que esté a medias ya está pagado, así que se termina; el
+       * siguiente no se empieza. Y lo hecho queda guardado en el vídeo, así que
+       * se puede seguir a mano desde donde se quedó.
+       */
+      const detenido = async (): Promise<boolean> => cancelled();
+
+      await report("1 de 5 · Escribiendo el guion");
+      await createVideoFromCopyAction(
+        { productId, copyId, voiceId, shots: raw.shots, seconds: raw.seconds, referenceId: raw.referenceId },
+        ctx,
+      );
+
+      const videoId = (last()?.result as { videoId?: string } | undefined)?.videoId;
+      if (!videoId) throw new Error("El guion no llegó a guardarse.");
+
+      const cerrar = (extra: string) => ({
+        summary: [
+          outcomes
+            .map((outcome) => outcome.summary)
+            .filter(Boolean)
+            .join(" · "),
+          extra,
+        ]
+          .filter(Boolean)
+          .join(" — "),
+        result: { videoId },
+        inputTokens: outcomes.reduce((sum, o) => sum + (o.inputTokens ?? 0), 0),
+        outputTokens: outcomes.reduce((sum, o) => sum + (o.outputTokens ?? 0), 0),
+      });
+
+      if (await detenido()) return cerrar("Cancelado tras el guion.");
+
+      await report("2 de 5 · Poniendo la voz");
+      await generateVoiceAction({ productId, videoId }, ctx);
+
+      if (await detenido()) return cerrar("Cancelado tras la voz.");
+
+      await report("3 de 5 · Generando las imágenes");
+      await generateKeyframesAction({ productId, videoId }, ctx);
+
+      if (stopBeforeClips) {
+        return cerrar(
+          "Parado antes de animar, que es donde está el gasto. Mira las imágenes y sigue desde el vídeo.",
+        );
+      }
+
+      if (await detenido()) return cerrar("Cancelado antes de animar.");
+
+      await report("4 de 5 · Animando las tomas");
+      await generateClipsAction({ productId, videoId }, ctx);
+
+      if (await detenido()) return cerrar("Cancelado antes del montaje.");
+
+      await report("5 de 5 · Montando el vídeo");
+      await assembleVideoAction({ productId, videoId }, ctx);
+
+      return cerrar("");
+    },
+  });
 }

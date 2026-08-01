@@ -44,6 +44,41 @@ export interface JobOutcome {
   costUsd?: number;
 }
 
+/**
+ * Un paso que puede correr solo o dentro de otro trabajo.
+ *
+ * Es lo que permite un botón de «hacer el vídeo entero» sin duplicar ni una
+ * línea de los pasos sueltos: el mismo código sirve para los dos. Sin esto,
+ * encadenarlos habría significado copiar la lógica de cada paso en la cadena, y
+ * eso se separa del original a la primera corrección.
+ */
+export interface StepContext {
+  report: (progress: string) => Promise<void>;
+  cancelled: () => Promise<boolean>;
+  /** Dónde deja lo que produjo, para que quien encadena pueda leerlo. */
+  collect: (outcome: JobOutcome) => void;
+  jobId: string;
+  label: string;
+}
+
+/**
+ * Lanza el paso como trabajo propio, o lo corre aquí mismo si ya hay uno.
+ *
+ * Dentro de una cadena no se crea un trabajo por paso: serían cinco filas para
+ * una sola acción y ninguna diría en qué punto va el conjunto.
+ */
+export async function runStep(
+  ctx: StepContext | undefined,
+  options: Parameters<typeof runInBackground>[0],
+): Promise<StartedJob> {
+  if (!ctx) return runInBackground(options);
+
+  const outcome = await options.work(ctx.report, ctx.cancelled);
+  ctx.collect(outcome);
+
+  return { started: true, jobId: ctx.jobId, label: ctx.label };
+}
+
 /** El caso «se puso en marcha» de `LaunchResult`. */
 export type StartedJob = Extract<LaunchResult, { started: true }>;
 
