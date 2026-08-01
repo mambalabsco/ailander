@@ -124,7 +124,7 @@ Dura ${duration.toFixed(1)} segundos. Te paso ${marks.length} fotogramas, en est
 ${
   transcript
     ? `## Lo que se oye\n\n${transcript}\n`
-    : "## Audio\n\nNo hay voz, o no se pudo transcribir. Analiza solo lo visual y dilo en \`voice\`.\n"
+    : "## Audio\n\nNo hay voz, o no se pudo transcribir. **El texto en pantalla es entonces todo lo que dice el anuncio**: léelo con cuidado, porque es el guion.\n"
 }
 ${options.context ? `## Contexto\n\n${options.context}\n` : ""}
 
@@ -133,15 +133,24 @@ ${options.context ? `## Contexto\n\n${options.context}\n` : ""}
 - **hook**: cómo entra. Los tres primeros segundos, descritos: qué se ve, qué se oye, qué hace que alguien no siga bajando. Es el campo que más se va a reutilizar, así que sé concreto — «primer plano de manos apretando una rodilla hinchada mientras una voz dice que llevaba años así» dice algo; «un gancho potente» no dice nada.
 - **promise**: qué promete y a quién le habla.
 - **voice**: quién parece que habla —una clienta, un médico, una voz en off— y en qué tono.
-- **beats**: los momentos del anuncio, en orden. Para cada uno: en qué segundo empieza (\`at\`), qué plano es (\`shot\`), qué papel cumple (\`role\`: gancho, problema, mecanismo, prueba, oferta, cierre) y el texto sobreimpreso si lo hay (\`onScreenText\`, vacío si no).
+- **beats**: los momentos del anuncio, en orden. Para cada uno: en qué segundo empieza (\`at\`), qué plano es (\`shot\`), qué papel cumple (\`role\`: gancho, problema, mecanismo, prueba, oferta, cierre) y el texto en pantalla (\`onScreenText\`).
+
 - **averageShotSeconds**: cada cuánto cambia el plano de media. Cuéntalo de los fotogramas: si entre dos consecutivos cambia la escena, hubo corte.
 - **productMoment**: en qué segundo aparece el producto y cómo. Si no aparece hasta el final, dilo — es una decisión, no un olvido.
 - **callToAction**: cómo cierra y qué pide exactamente.
 - **whyItWorks**: por qué funciona esta construcción. La parte útil: qué orden sigue, dónde coloca la objeción, qué prueba usa y cuándo.
 
+### El texto en pantalla se lee entero y literal
+
+**Léelo tal cual aparece, palabra por palabra**, en \`onScreenText\`. Todo lo que esté escrito encima del vídeo: subtítulos, rótulos, cifras, el sello de garantía, lo que ponga el botón.
+
+Es la parte que más se subestima. La mayoría de la gente ve estos anuncios **sin sonido**, así que el texto en pantalla no acompaña al guion: **es** el guion. Un anuncio donde el subtítulo dice «llevo 3 años con esto» en el segundo dos y otro donde dice «los médicos no te lo cuentan» son dos anuncios distintos aunque las imágenes sean iguales.
+
+Si en un fotograma no hay texto, deja \`onScreenText\` vacío. No lo resumas ni lo traduzcas: literal y en su idioma.
+
 ## Lo que NO debes devolver
 
-- **No transcribas su guion** ni lo parafrasees línea a línea. Describe la función de cada tramo, no sus frases.
+- **No parafrasees su guion hablado** línea a línea. La voz se describe por su función, no por sus frases. El texto **en pantalla** sí va literal: es un dato del anuncio, corto y necesario para entender qué se lee sin sonido.
 - **No describas su marca ni su envase.** El anuncio nuevo lleva otro producto.
 - **No inventes lo que no se ve.** Entre dos fotogramas puede pasar cualquier cosa: si un tramo no se ve, dilo en vez de rellenarlo.
 

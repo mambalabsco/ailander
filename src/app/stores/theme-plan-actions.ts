@@ -17,16 +17,22 @@ import { readProductResearch } from "@/lib/research-store";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { generateStructured } from "@/lib/generators";
 import { runInBackground } from "@/lib/background";
-import { THEME_SECTIONS_SCHEMA } from "@/lib/generation-schemas";
-import { buildSectionContentPrompt } from "@/lib/section-content-prompt";
+import { SECTION_CODE_SCHEMA } from "@/lib/generation-schemas";
+import { buildSectionCodePrompt } from "@/lib/section-code-prompt";
 import {
   buildTemplateEntry,
-  filesFor,
   orderAfterRecreate,
   planRecreate,
   writeTemplate,
   type TemplateEntry,
 } from "@/lib/theme-sections";
+import {
+  blockSettingsOf,
+  coerceSettings,
+  reviewSection,
+  sectionFilename,
+  sectionType,
+} from "@/lib/theme-liquid";
 import type { LaunchResult } from "@/types/jobs";
 import {
   PAGE_KINDS,
@@ -297,84 +303,112 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
     );
   }
 
-  const prompt = buildSectionContentPrompt({
-    product,
-    research,
-    store,
-    sections: plan.create,
-    offers: blueprint.offers,
-    guarantee: blueprint.guarantee,
-    currency: blueprint.currency,
-  });
-
   return runInBackground({
     kind: "tema",
     label: `Recrear ${page} · ${blueprint.storeName}`,
     revalidate: "/stores",
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
-        sections: {
-          kind: string;
-          heading: string;
-          subheading: string;
-          body: string;
-          columnMine: string;
-          columnTheirs: string;
-          ctaLabel: string;
-          items: {
-            title: string;
-            body: string;
-            other: string;
-            price: string;
-            compareAt: string;
-            highlighted: boolean;
-          }[];
-        }[];
-      }>({ prompt, schema: THEME_SECTIONS_SCHEMA, role: "copy", maxTokens: 32_000 });
-
       const palette = paletteOf(blueprint.identity.colors);
+      const vibe = describeVibe(blueprint.identity);
+
+      const created: TemplateEntry[] = [];
+      const files: { filename: string; content: string }[] = [];
+      const skipped: string[] = [];
+
+      let inputTokens = 0;
+      let outputTokens = 0;
 
       /*
-       * Se recorre el plan, no lo que devolvió el modelo.
+       * Una llamada por sección, en serie.
        *
-       * Así el orden y el número de secciones los decide el plano aunque el
-       * modelo devuelva una de más, una de menos o cambiadas de sitio. Se
-       * empareja por papel y consumiendo: dos secciones del mismo papel cogen
-       * cada una la suya.
+       * En paralelo iría más rápido, pero cada sección son unos miles de tokens
+       * de salida y lanzarlas todas a la vez choca con el límite de la cuenta
+       * justo cuando la página tiene muchas secciones — o sea, en el caso que
+       * más importa. En serie tarda un minuto y termina siempre.
        */
-      const pool = [...data.sections];
-      const created: TemplateEntry[] = [];
+      for (const [index, wanted] of plan.create.entries()) {
+        const type = sectionType(wanted.kind, index);
 
-      plan.create.forEach((wanted, index) => {
-        const position = pool.findIndex((item) => item.kind === wanted.kind);
-        const content = position >= 0 ? pool.splice(position, 1)[0] : null;
-        if (!content) return;
+        let problems: string[] = [];
+        let built: { entry: TemplateEntry; file: string } | null = null;
 
-        const entry = buildTemplateEntry(
-          {
-            kind: wanted.kind,
-            heading: content.heading,
-            subheading: content.subheading,
-            body: content.body,
-            ctaLabel: content.ctaLabel,
-            columns: { mine: content.columnMine, theirs: content.columnTheirs },
-            items: content.items.map((item) => ({
-              title: item.title,
-              body: item.body,
-              other: item.other,
-              price: item.price,
-              compareAt: item.compareAt,
-              highlighted: item.highlighted,
-            })),
-          },
-          palette,
-          index,
+        /*
+         * Dos intentos, no más.
+         *
+         * El primero suele pasar; el segundo arregla lo que la revisión señaló,
+         * que llega con el mensaje concreto. Si el segundo tampoco pasa, el
+         * problema no es un descuido y otra vuelta solo gasta.
+         */
+        for (let attempt = 0; attempt < 2 && !built; attempt += 1) {
+          const generated = await generateStructured<{
+            liquid: string;
+            settings: { id: string; value: string }[];
+            blocks: { type: string; settings: { id: string; value: string }[] }[];
+          }>({
+            prompt: buildSectionCodePrompt({
+              product,
+              research,
+              store,
+              section: wanted,
+              type,
+              palette,
+              vibe,
+              offers: wanted.kind === "oferta" ? blueprint.offers : undefined,
+              guarantee: wanted.kind === "garantia" ? blueprint.guarantee : undefined,
+              problems,
+            }),
+            schema: SECTION_CODE_SCHEMA,
+            role: "copy",
+            maxTokens: 24_000,
+          });
+
+          inputTokens += generated.inputTokens;
+          outputTokens += generated.outputTokens;
+
+          const review = reviewSection(generated.data.liquid);
+
+          if (!review.ok || !review.schema) {
+            problems = review.problems;
+            continue;
+          }
+
+          built = {
+            file: generated.data.liquid,
+            entry: buildTemplateEntry({
+              kind: wanted.kind,
+              type,
+              index,
+              settings: coerceSettings(generated.data.settings, review.schema.settings ?? []),
+              blocks: generated.data.blocks.map((block) => ({
+                type: block.type,
+                settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
+              })),
+            }),
+          };
+        }
+
+        if (!built) {
+          /*
+           * Una sección que no pasa la revisión se salta y se dice cuál.
+           *
+           * La alternativa era escribir algo genérico en su lugar, y eso es
+           * justo lo que había antes y lo que no servía: una página con una
+           * sección menos se completa a mano; una llena de secciones que no se
+           * parecen a nada hay que rehacerla entera.
+           */
+          skipped.push(`${wanted.kind} (${problems[0] ?? "no pasó la revisión"})`);
+          continue;
+        }
+
+        created.push(built.entry);
+        files.push({ filename: sectionFilename(type), content: built.file });
+      }
+
+      if (created.length === 0) {
+        throw new Error(
+          `No se pudo escribir ninguna sección. ${skipped[0] ?? "Vuelve a intentarlo."}`,
         );
-
-        if (entry) created.push(entry);
-      });
-
-      if (created.length === 0) throw new Error("No se pudo escribir ninguna sección.");
+      }
 
       const order = orderAfterRecreate(plan, created, current);
       const nextTemplate = writeTemplate(file.body!, created, order);
@@ -388,7 +422,7 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
        * secciones que no existen — o sea, la página caída.
        */
       const written = await writeThemeFiles(store, themeId, [
-        ...filesFor(plan.create.map((section) => section.kind)),
+        ...files,
         { filename: templateName, content: nextTemplate },
       ]);
 
@@ -396,13 +430,36 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
         summary: [
           `${created.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
-          `. ${written} archivo(s) escritos. Míralo en la vista previa antes de publicar.`,
+          `. ${written} archivo(s) escritos.`,
+          skipped.length > 0 ? ` No salieron: ${skipped.join("; ")}.` : "",
+          " Míralo en la vista previa antes de publicar.",
         ].join(""),
         inputTokens,
         outputTokens,
       };
     },
   });
+}
+
+/**
+ * El aire de la tienda de referencia, en una línea.
+ *
+ * Se le da al modelo junto a la paleta porque los colores solos no bastan: dos
+ * tiendas con la misma paleta y distinta letra —una serif clásica contra una
+ * sans geométrica— no se parecen en nada.
+ */
+function describeVibe(identity: {
+  fonts: { family: string }[];
+  buttonRadius: string | null;
+}): string {
+  const parts = [
+    identity.fonts.length > 0
+      ? `tipografías ${identity.fonts.map((font) => font.family).join(" y ")}`
+      : "",
+    identity.buttonRadius ? `botones con ${identity.buttonRadius} de radio` : "",
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : "sin señas particulares leídas";
 }
 
 /**

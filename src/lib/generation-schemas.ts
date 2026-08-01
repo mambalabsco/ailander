@@ -421,38 +421,28 @@ export const BLUEPRINT_SCHEMA = object({
   },
 });
 
+
 /**
- * El contenido de las secciones que se crean en el tema.
+ * Una sección de Shopify escrita por el modelo: código y contenido.
  *
- * Todos los campos van siempre —la salida estructurada exige `required`
- * completo— y los que no apliquen llegan vacíos. Es más barato que un esquema
- * por disposición y evita que el modelo tenga que elegir forma además de texto.
+ * Los valores de los ajustes llegan como texto aunque el ajuste sea un número o
+ * una casilla. Es a propósito: la salida estructurada no admite «cualquier
+ * cosa», y forzar tipos mezclados obligaría a un esquema por sección. Se
+ * convierten al montar la plantilla, donde ya se sabe qué tipo declaró cada uno
+ * —ver `coerceSettings`, que es donde importa: un `checkbox` guardado como texto
+ * lo lee Shopify como verdadero incluso cuando pone «false»—.
  */
-export const THEME_SECTIONS_SCHEMA = object({
-  sections: {
+export const SECTION_CODE_SCHEMA = object({
+  liquid: str,
+  settings: {
+    type: "array",
+    items: object({ id: str, value: str }),
+  },
+  blocks: {
     type: "array",
     items: object({
-      kind: str,
-      heading: str,
-      subheading: str,
-      /** Solo para las de texto corrido. */
-      body: str,
-      columnMine: str,
-      columnTheirs: str,
-      ctaLabel: str,
-      items: {
-        type: "array",
-        items: object({
-          title: str,
-          body: str,
-          /** La columna ajena de la comparativa. */
-          other: str,
-          /** Solo en la oferta. */
-          price: str,
-          compareAt: str,
-          highlighted: { type: "boolean" },
-        }),
-      },
+      type: str,
+      settings: { type: "array", items: object({ id: str, value: str }) },
     }),
   },
 });

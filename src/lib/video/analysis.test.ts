@@ -138,3 +138,13 @@ test("la referencia lleva la construcción y prohíbe el texto", () => {
   // La línea que impide que se convierta en una copia.
   assert.match(reference, /ni una frase, ni un dato, ni un ingrediente/i);
 });
+
+test("pide el texto en pantalla literal, que sin sonido es el guion", () => {
+  // La mayoría ve estos anuncios en silencio: los subtítulos no acompañan al
+  // guion, son el guion.
+  const prompt = buildAnalysisPrompt({ duration: 30, marks: [0], transcript: "" });
+
+  assert.match(prompt, /palabra por palabra/i);
+  assert.match(prompt, /sin sonido/i);
+  assert.match(prompt, /No lo resumas ni lo traduzcas/i);
+});

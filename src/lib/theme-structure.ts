@@ -291,8 +291,8 @@ export function summarize(changes: ThemeChange[]): Record<ChangeKind, number> {
  * que separa esto de un problema, así que se dice donde se lee, no solo aquí.
  */
 export const PLAN_LIMITS = [
-  "Aplica colores y tipografías, y ordena secciones. El contenido de cada sección sale de tu producto, no de la referencia.",
-  "Las secciones que falten no se añaden solas: una sección nueva necesita su texto y sus imágenes.",
+  "Aplica colores y tipografías, ordena secciones y **escribe las que falten**: cada una con su propio código, hecho para parecerse a la de referencia.",
+  "Las imágenes quedan vacías: se ponen desde el editor o se generan con tu foto de producto.",
   "No copia texto ni imágenes: los textos se escriben con tu investigación y las imágenes se generan con tu foto de producto.",
   "No importa código de tema. Las secciones se añaden con las que trae el tuyo.",
 ];
