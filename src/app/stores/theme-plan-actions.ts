@@ -73,6 +73,15 @@ function readText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/**
+ * Cuántas capturas se aceptan y de qué tamaño.
+ *
+ * Cuatro cubren una página larga entera. Van a **cada** llamada de sección, así
+ * que cada una de más se paga once veces en una página de once secciones.
+ */
+const MAX_SHOTS = 4;
+const MAX_SHOT_BYTES = 5 * 1024 * 1024;
+
 function readPage(value: unknown): PageKind {
   const page = readText(value);
   return PAGE_KINDS.includes(page as PageKind) ? (page as PageKind) : "producto";
@@ -263,14 +272,12 @@ export async function applyThemeOrderAction(
  * Se escribe todo de una vez. Si algo falla, no queda una plantilla apuntando a
  * secciones que no se llegaron a escribir, que es una página rota en producción.
  */
-export async function recreatePageAction(input: unknown): Promise<LaunchResult> {
-  const raw = (input ?? {}) as Record<string, unknown>;
-
-  const storeId = readText(raw.storeId);
-  const themeId = readText(raw.themeId);
-  const blueprintId = readText(raw.blueprintId);
-  const productId = readText(raw.productId);
-  const page = readPage(raw.page);
+export async function recreatePageAction(form: FormData): Promise<LaunchResult> {
+  const storeId = readText(form.get("storeId"));
+  const themeId = readText(form.get("themeId"));
+  const blueprintId = readText(form.get("blueprintId"));
+  const productId = readText(form.get("productId"));
+  const page = readPage(form.get("page"));
   const templateName = TEMPLATE_FOR[page];
 
   if (!storeId || !themeId) throw new Error("Falta la tienda o el tema.");
@@ -290,6 +297,34 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
   if (!product) throw new Error("No se encontró el producto.");
 
   const research = await readProductResearch(productId);
+
+  /*
+   * Las capturas de la página de referencia, si las hay.
+   *
+   * Es lo que más acerca el resultado a «que se vea igual». Sin ellas, el modelo
+   * escribe a ciegas: tiene una frase que describe la sección y una paleta, y con
+   * eso no se deduce que el titular ocupa media columna ni que el botón lleva una
+   * flecha en un cuadrado a la derecha. Viéndolo, sí.
+   *
+   * Lo que se reproduce es la disposición. El HTML y el CSS de detrás están
+   * escritos contra el armazón de su tema —sus variables, sus clases, su
+   * retícula— y pegados en otro tema dan un diseño roto, no uno idéntico.
+   */
+  const shots: { mediaType: string; base64: string }[] = [];
+
+  for (const item of form.getAll("shots")) {
+    if (!(item instanceof File) || item.size === 0) continue;
+    if (!item.type.startsWith("image/")) continue;
+    if (item.size > MAX_SHOT_BYTES) {
+      throw new Error(`Una captura pesa más de ${MAX_SHOT_BYTES / 1024 / 1024} MB.`);
+    }
+    if (shots.length >= MAX_SHOTS) break;
+
+    shots.push({
+      mediaType: item.type,
+      base64: Buffer.from(await item.arrayBuffer()).toString("base64"),
+    });
+  }
 
   const [file] = await listThemeFiles(store, themeId, [templateName]);
   if (!file?.body) throw new Error(`No se pudo leer ${templateName} de ese tema.`);
@@ -392,11 +427,13 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
               vibe,
               offers: wanted.kind === "oferta" ? blueprint.offers : undefined,
               guarantee: wanted.kind === "garantia" ? blueprint.guarantee : undefined,
+              hasShots: shots.length > 0,
               problems,
             }),
             schema: SECTION_CODE_SCHEMA,
             role: "copy",
             maxTokens: 24_000,
+            images: shots,
           });
 
           inputTokens += generated.inputTokens;
@@ -479,6 +516,7 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
           `${created.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           `. ${written} archivo(s) escritos.`,
+          shots.length > 0 ? ` Con ${shots.length} captura(s) de referencia delante.` : "",
           filledPhotos > 0
             ? ` ${filledPhotos} imagen(es) de ${blueprint.storeName} puestas para maquetar: sustitúyelas antes de publicar.`
             : "",

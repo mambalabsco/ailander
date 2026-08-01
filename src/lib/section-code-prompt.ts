@@ -41,6 +41,8 @@ export function buildSectionCodePrompt(options: {
   /** Los tramos de la oferta, solo cuando la sección es la oferta. */
   offers?: { quantity: number; price: number; compareAt: number | null; highlighted: boolean }[];
   guarantee?: string;
+  /** Si van adjuntas capturas de la página de referencia. */
+  hasShots?: boolean;
   /** Lo que falló en el intento anterior, si lo hubo. */
   problems?: string[];
 }): string {
@@ -52,7 +54,19 @@ export function buildSectionCodePrompt(options: {
 
 Tienes que devolver **el archivo entero** de una sección de Online Store 2.0, lista para guardar en \`sections/${options.type}.liquid\`.
 
-## Qué sección
+${
+  options.hasShots
+    ? `## Tienes la página delante
+
+Las imágenes adjuntas son **capturas de la página de referencia**. Búscate en ellas la sección de la que va esto y reprodúcela: la disposición, las proporciones, el tamaño relativo del titular, dónde cae la foto, la forma de los botones, cuánto aire hay entre las cosas.
+
+Míralas y mide. Si el titular ocupa media columna y la foto la otra media, hazlo así. Si el botón es una píldora blanca con una flecha en un cuadrado a la derecha, hazlo así.
+
+**Lo que reproduces es la disposición, no su código ni su texto.** El HTML y el CSS que hay detrás de esa captura están escritos para su tema y no encajan en el tuyo; escribe el tuyo, que se vea igual y funcione en este tema. Y el contenido sale de la investigación de arriba.
+
+`
+    : ""
+}## Qué sección
 
 **${section.kind}** — ${section.purpose || "sin descripción"}
 ${section.angle ? `\nCómo la enfoca la tienda de referencia: ${section.angle}` : ""}

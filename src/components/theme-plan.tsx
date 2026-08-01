@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button, SelectField } from "@/components/ui";
 import {
   applyLookAction,
@@ -83,6 +83,7 @@ export function ThemePlanPanel({
   const [themes, setThemes] = useState<{ id: string; name: string; published: boolean }[]>([]);
   const [targetTheme, setTargetTheme] = useState("");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const shotsRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
 
   if (blueprints.length === 0) {
@@ -476,6 +477,28 @@ export function ThemePlanPanel({
                 ))}
               </SelectField>
             </label>
+            {/*
+              Las capturas son lo que más acerca el resultado a «igual».
+
+              Sin ellas el modelo escribe a ciegas: una frase que describe la
+              sección y una paleta. Con la página delante ve que el titular ocupa
+              media columna y que el botón lleva una flecha en un cuadrado.
+            */}
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Capturas de la página de referencia
+              </span>
+              <input
+                ref={shotsRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Hasta cuatro. Es lo que más se nota: sin verla, se escribe a ciegas.
+              </span>
+            </label>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -484,13 +507,18 @@ export function ThemePlanPanel({
               action={async () => {
                 if (!confirmed()) throw new Error("Cancelado: no se ha tocado nada.");
 
-                return recreatePageAction({
-                  storeId,
-                  themeId: targetTheme,
-                  blueprintId,
-                  page: plan.page,
-                  productId,
-                });
+                const payload = new FormData();
+                payload.set("storeId", storeId);
+                payload.set("themeId", targetTheme);
+                payload.set("blueprintId", blueprintId);
+                payload.set("page", plan.page);
+                payload.set("productId", productId);
+
+                for (const file of shotsRef.current?.files ?? []) {
+                  payload.append("shots", file);
+                }
+
+                return recreatePageAction(payload);
               }}
               label={`Crear las secciones de ${PAGE_LABEL[plan.page].toLowerCase()}`}
               disabled={!targetTheme || !productId}
