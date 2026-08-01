@@ -287,6 +287,77 @@ export function reviewSection(source: string): LiquidReview {
   return { ok: problems.length === 0, problems, schema };
 }
 
+/* ------------------------------ Arreglar el esquema ------------------------ */
+
+/**
+ * Quita los `default` vacíos del esquema.
+ *
+ * Shopify rechaza el archivo entero con «setting with id="x" default can't be
+ * blank». Es una regla suya que no está en ningún sitio evidente: un ajuste
+ * puede **no** tener `default`, pero si lo tiene no puede estar vacío. El modelo
+ * escribe `"default": ""` con toda naturalidad —es lo que uno pondría— y tumba
+ * la escritura de la página entera.
+ *
+ * Se arregla aquí y no pidiéndoselo al modelo porque es determinista: un ajuste
+ * sin `default` se comporta igual que uno con el valor vacío, así que borrarlo
+ * no cambia nada y siempre acierta. Confiar en el prompt sería volver a jugársela
+ * en cada generación.
+ */
+export function stripBlankDefaults(source: string): { source: string; removed: number } {
+  const match = /(\{%-?\s*schema\s*-?%\})([\s\S]*?)(\{%-?\s*endschema\s*-?%\})/.exec(source);
+  if (!match) return { source, removed: 0 };
+
+  let schema: unknown;
+  try {
+    schema = JSON.parse(match[2]);
+  } catch {
+    // Un esquema ilegible ya lo caza la revisión, con un mensaje mejor que este.
+    return { source, removed: 0 };
+  }
+
+  let removed = 0;
+
+  const clean = (settings: unknown) => {
+    if (!Array.isArray(settings)) return;
+
+    for (const setting of settings) {
+      if (typeof setting !== "object" || setting === null) continue;
+
+      const record = setting as Record<string, unknown>;
+      if (!("default" in record)) continue;
+
+      const value = record.default;
+      const blank =
+        value === null ||
+        value === undefined ||
+        (typeof value === "string" && value.trim() === "");
+
+      if (blank) {
+        delete record.default;
+        removed += 1;
+      }
+    }
+  };
+
+  const root = schema as Record<string, unknown>;
+  clean(root.settings);
+
+  if (Array.isArray(root.blocks)) {
+    for (const block of root.blocks) {
+      if (typeof block === "object" && block !== null) {
+        clean((block as Record<string, unknown>).settings);
+      }
+    }
+  }
+
+  if (removed === 0) return { source, removed: 0 };
+
+  return {
+    source: `${source.slice(0, match.index)}${match[1]}\n${JSON.stringify(schema, null, 2)}\n${match[3]}${source.slice(match.index + match[0].length)}`,
+    removed,
+  };
+}
+
 /* --------------------------- Los valores de los ajustes -------------------- */
 
 /**

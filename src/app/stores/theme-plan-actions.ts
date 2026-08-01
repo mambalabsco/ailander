@@ -42,6 +42,7 @@ import {
   reviewSection,
   sectionFilename,
   sectionType,
+  stripBlankDefaults,
 } from "@/lib/theme-liquid";
 import type { LaunchResult } from "@/types/jobs";
 import {
@@ -460,7 +461,18 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
               blocks: saved.blocks,
             }),
           );
-          files.push({ filename: sectionFilename(saved.sectionType), content: saved.liquid });
+          /*
+           * Lo guardado se repara al leerlo.
+           *
+           * Las secciones que se escribieron antes de este arreglo llevan dentro
+           * el `default` vacío que Shopify rechaza. Sin repararlas aquí,
+           * reutilizarlas devolvería el mismo error para siempre y la caché —que
+           * está para no pagar dos veces— dejaría la página imposible de escribir.
+           */
+          files.push({
+            filename: sectionFilename(saved.sectionType),
+            content: stripBlankDefaults(saved.liquid).source,
+          });
           reused += 1;
           continue;
         }
@@ -518,7 +530,16 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           inputTokens += generated.inputTokens;
           outputTokens += generated.outputTokens;
 
-          const review = reviewSection(generated.data.liquid);
+          /*
+           * Se arregla antes de revisar.
+           *
+           * Shopify rechaza el archivo entero si un ajuste declara `default`
+           * vacío, y el modelo lo escribe con toda naturalidad —es lo que uno
+           * pondría—. Quitarlo es determinista y no cambia el comportamiento: un
+           * ajuste sin `default` se comporta igual que uno con el valor vacío.
+           */
+          const liquid = stripBlankDefaults(generated.data.liquid).source;
+          const review = reviewSection(liquid);
 
           if (!review.ok || !review.schema) {
             problems = review.problems;
@@ -540,7 +561,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
             kind: wanted.kind,
             ordinal,
             sectionType: type,
-            liquid: generated.data.liquid,
+            liquid,
             settings: withPhotos.settings,
             blocks: generated.data.blocks.map((block) => ({
               type: block.type,
@@ -553,7 +574,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           await saveSectionDraft(blueprintId, page, draft);
 
           built = {
-            file: generated.data.liquid,
+            file: liquid,
             entry: buildTemplateEntry({
               kind: wanted.kind,
               type,

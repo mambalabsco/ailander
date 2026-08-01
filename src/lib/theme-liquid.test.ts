@@ -9,6 +9,7 @@ import {
   reviewSection,
   sectionFilename,
   sectionType,
+  stripBlankDefaults,
 } from "./theme-liquid.ts";
 
 /** Una sección correcta, para partir de algo que pasa. */
@@ -274,4 +275,77 @@ test("sin fotos no se toca nada", () => {
 
   assert.deepEqual(settings, { heading: "Hola" });
   assert.equal(used, 0);
+});
+
+/* ------------------------------ Arreglar el esquema ------------------------ */
+
+function conDefaults(settings: unknown, blocks?: unknown): string {
+  return `<div class="lp">{{ section.settings.heading }}</div>
+{% schema %}
+${JSON.stringify({ name: "X", settings, ...(blocks ? { blocks } : {}), presets: [{ name: "X" }] }, null, 2)}
+{% endschema %}`;
+}
+
+test("un default vacío se quita: Shopify rechaza el archivo entero por eso", () => {
+  // «setting with id="badge_url" default can't be blank». Un ajuste puede no
+  // tener default, pero si lo tiene no puede estar vacío.
+  const { source, removed } = stripBlankDefaults(
+    conDefaults([
+      { type: "text", id: "badge_url", default: "" },
+      { type: "text", id: "heading", default: "Hola" },
+    ]),
+  );
+
+  const schema = JSON.parse(/{% schema %}([\s\S]*?){% endschema %}/.exec(source)![1]);
+
+  assert.equal(removed, 1);
+  assert.equal("default" in schema.settings[0], false);
+  assert.equal(schema.settings[1].default, "Hola", "el que sí tiene valor se queda");
+});
+
+test("también los de dentro de los bloques", () => {
+  const { removed } = stripBlankDefaults(
+    conDefaults(
+      [{ type: "text", id: "heading" }],
+      [{ type: "resena", settings: [{ type: "text", id: "avatar_url", default: "" }] }],
+    ),
+  );
+
+  assert.equal(removed, 1);
+});
+
+test("un default de solo espacios también está vacío para Shopify", () => {
+  assert.equal(stripBlankDefaults(conDefaults([{ type: "text", id: "x", default: "   " }])).removed, 1);
+});
+
+test("un cero o un false son valores, no huecos", () => {
+  // Quitarlos cambiaría el comportamiento de la sección.
+  const { removed } = stripBlankDefaults(
+    conDefaults([
+      { type: "range", id: "padding", default: 0 },
+      { type: "checkbox", id: "activo", default: false },
+    ]),
+  );
+
+  assert.equal(removed, 0);
+});
+
+test("sin nada que quitar se devuelve tal cual", () => {
+  const source = conDefaults([{ type: "text", id: "heading", default: "Hola" }]);
+
+  assert.equal(stripBlankDefaults(source).source, source);
+});
+
+test("y el arreglo deja el archivo listo para la revisión", () => {
+  const arreglado = stripBlankDefaults(
+    conDefaults([{ type: "text", id: "heading", default: "" }]),
+  ).source;
+
+  assert.deepEqual(reviewSection(arreglado).problems, []);
+});
+
+test("un esquema ilegible no se toca aquí: ya lo caza la revisión", () => {
+  const roto = `<div>x</div>\n{% schema %}\n{ "name": "X", }\n{% endschema %}`;
+
+  assert.deepEqual(stripBlankDefaults(roto), { source: roto, removed: 0 });
 });
