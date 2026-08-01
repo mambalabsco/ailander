@@ -6,19 +6,10 @@ import { VIDEO_ANALYSIS_SCHEMA } from "@/lib/generation-schemas";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { runInBackground } from "@/lib/background";
-import {
-  MAX_VIDEO_BYTES,
-  MAX_VIDEO_SECONDS,
-  extractAudio,
-  extractFrames,
-  ffmpegReady,
-  probe,
-  withTempVideo,
-} from "@/lib/video/ffmpeg";
 import { transcribe } from "@/lib/video/providers";
 import {
+  MAX_FRAMES,
   buildAnalysisPrompt,
-  framePlan,
   reviewAnalysis,
   type VideoAnalysis,
 } from "@/lib/video/analysis";
@@ -28,38 +19,36 @@ import type { LaunchResult } from "@/types/jobs";
 /**
  * Analizar un anuncio en vídeo para poder escribir otro.
  *
- * ## El recorrido
+ * ## El vídeo no llega hasta aquí
  *
- * El vídeo entra, se sondea, se le sacan veinte fotogramas y el audio, se
- * transcribe la voz y todo eso va a Claude, que describe **cómo está
- * construido**. El vídeo se borra al terminar: lo que se reutiliza es el
- * análisis, no el archivo.
+ * Los fotogramas y el audio se sacan **en el navegador**, que ya sabe
+ * decodificar vídeo. Aquí llegan veinte JPEG y un WAV pequeño —unos cuatro
+ * megas— en vez de un archivo de sesenta.
  *
- * ## Por qué se comprueba ffmpeg antes de nada
+ * Eso quita el ffmpeg del servidor, quita la espera de subir el vídeo entero por
+ * una conexión de casa, y quita los dos núcleos ocupados decodificando mientras
+ * alguien más usa la plataforma. La alternativa por API tampoco servía: para
+ * esto fal solo ofrece el primer fotograma, el del medio y el último, y con tres
+ * no se lee un gancho.
  *
- * Porque el orden importa para quien lo usa. Descubrir que falta ffmpeg después
- * de que alguien haya subido cien megas por una conexión de casa es la peor
- * versión del mismo error, y el aviso ya trae el comando de instalación.
+ * ## Lo que sí se comprueba aquí
+ *
+ * Todo lo que decida algo. Que los fotogramas sean imágenes, que no vengan más
+ * de los que se piden, y que los segundos que dice el navegador cuadren con los
+ * fotogramas que mandó: si no cuadraran, cada momento del análisis quedaría
+ * situado en el segundo equivocado. El navegador es de quien sube, así que lo
+ * que dice se valida, no se cree.
  */
 
 function readText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/**
- * Los formatos que se aceptan, con su extensión.
- *
- * Se valida el tipo **antes** de tocar el archivo, y la extensión sale de esta
- * tabla y no del nombre que traiga: escribir en disco con la extensión que
- * manda el navegador deja elegir el nombre del archivo a quien sube.
- */
-const ACCEPTED = new Map([
-  ["video/mp4", ".mp4"],
-  ["video/quicktime", ".mov"],
-  ["video/webm", ".webm"],
-  ["video/x-m4v", ".m4v"],
-  ["video/x-matroska", ".mkv"],
-]);
+/** Tres megas por fotograma sobra: uno de 768 px pesa unos cien kilobytes. */
+const MAX_FRAME_BYTES = 3 * 1024 * 1024;
+
+/** Un anuncio de dos minutos en WAV mono de 16 kHz ronda los cuatro megas. */
+const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 
 export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> {
   if (!isSupabaseConfigured()) {
@@ -69,114 +58,114 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
     throw new Error("No hay clave de API configurada. Añádela en Configuración.");
   }
 
-  if (!(await ffmpegReady())) {
-    throw new Error(
-      "ffmpeg no está instalado en el servidor. Entra por SSH y ejecuta: sudo apt install -y ffmpeg",
-    );
+  const files = form.getAll("frames").filter((item): item is File => item instanceof File);
+  if (files.length === 0) throw new Error("No llegó ningún fotograma.");
+  if (files.length > MAX_FRAMES) throw new Error("Llegaron más fotogramas de los que se piden.");
+
+  for (const frame of files) {
+    if (!frame.type.startsWith("image/")) throw new Error("Uno de los fotogramas no es una imagen.");
+    if (frame.size > MAX_FRAME_BYTES) throw new Error("Un fotograma pesa demasiado.");
   }
 
-  const file = form.get("video");
-  if (!(file instanceof File) || file.size === 0) throw new Error("Elige un vídeo.");
-
-  const extension = ACCEPTED.get(file.type);
-  if (!extension) {
-    throw new Error(
-      `«${file.type || "desconocido"}» no es un formato de vídeo que se pueda leer. Sirven mp4, mov, webm, m4v y mkv.`,
-    );
+  const duration = Number(form.get("duration"));
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error("No se pudo leer la duración del vídeo.");
   }
 
-  if (file.size > MAX_VIDEO_BYTES) {
-    throw new Error(
-      `El vídeo pesa ${(file.size / 1024 / 1024).toFixed(0)} MB y el tope son ${MAX_VIDEO_BYTES / 1024 / 1024} MB.`,
-    );
+  let marks: number[];
+  try {
+    const parsed: unknown = JSON.parse(readText(form.get("marks")) || "[]");
+    marks = Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+  } catch {
+    marks = [];
   }
 
-  const name = readText(form.get("name")) || file.name.replace(/\.[^.]+$/, "");
+  /*
+   * Los segundos tienen que cuadrar con los fotogramas.
+   *
+   * Si vinieran descuadrados, cada momento del análisis quedaría situado en el
+   * segundo equivocado y la línea de tiempo entera sería falsa — sin que nada
+   * fallara de forma visible.
+   */
+  if (marks.length !== files.length) {
+    throw new Error("Los fotogramas y sus tiempos no cuadran. Vuelve a intentarlo.");
+  }
+  if (marks.some((mark) => mark < 0 || mark > duration + 1)) {
+    throw new Error("Algún fotograma dice venir de fuera del vídeo.");
+  }
+
+  const name = readText(form.get("name")) || "Anuncio sin nombre";
   const sourceUrl = readText(form.get("sourceUrl"));
   const context = readText(form.get("context"));
   const language = readText(form.get("language"));
+  const width = Number(form.get("width")) || 0;
+  const height = Number(form.get("height")) || 0;
 
-  const data = Buffer.from(await file.arrayBuffer());
+  const audioFile = form.get("audio");
+  const audio =
+    audioFile instanceof File && audioFile.size > 0 && audioFile.size <= MAX_AUDIO_BYTES
+      ? Buffer.from(await audioFile.arrayBuffer())
+      : null;
+
+  const frames = await Promise.all(
+    files.map(async (frame) => ({
+      mediaType: frame.type,
+      base64: Buffer.from(await frame.arrayBuffer()).toString("base64"),
+    })),
+  );
 
   return runInBackground({
     kind: "imagenes",
     label: `Analizar anuncio · ${name}`,
     revalidate: "/products",
     work: async () => {
-      const { path, cleanup } = await withTempVideo(data, extension);
+      /*
+       * La transcripción no puede tumbar el análisis.
+       *
+       * Un anuncio de solo texto en pantalla es un formato normal, y la voz es
+       * la mitad de la información, no toda: los fotogramas cuentan la otra.
+       */
+      const transcript = audio
+        ? await transcribe(audio, language || undefined).catch(() => "")
+        : "";
 
-      try {
-        const info = await probe(path);
+      const { data: analysis, inputTokens, outputTokens } = await generateStructured<VideoAnalysis>({
+        prompt: buildAnalysisPrompt({
+          duration,
+          marks,
+          transcript,
+          context: context || undefined,
+        }),
+        schema: VIDEO_ANALYSIS_SCHEMA,
+        role: "copy",
+        maxTokens: 16_000,
+        images: frames,
+      });
 
-        if (info.duration > MAX_VIDEO_SECONDS) {
-          throw new Error(
-            `Dura ${Math.round(info.duration)} s y el tope son ${MAX_VIDEO_SECONDS}. Recorta el anuncio a lo que quieras analizar.`,
-          );
-        }
+      const review = reviewAnalysis(analysis, duration);
 
-        const marks = framePlan(info.duration);
-        const frames = await extractFrames(path, marks);
+      await saveVideoReference({
+        name,
+        sourceUrl,
+        durationSeconds: duration,
+        width,
+        height,
+        hadAudio: Boolean(audio),
+        framesAnalyzed: frames.length,
+        analysis,
+        warnings: review.warnings,
+      });
 
-        /*
-         * La transcripción no puede tumbar el análisis.
-         *
-         * Un anuncio de solo texto en pantalla es un formato normal, y la voz es
-         * la mitad de la información, no toda: los fotogramas cuentan la otra.
-         */
-        let transcript = "";
-        if (info.hasAudio) {
-          const audio = await extractAudio(path);
-          if (audio) transcript = await transcribe(audio, language || undefined).catch(() => "");
-        }
-
-        const { data: analysis, inputTokens, outputTokens } =
-          await generateStructured<VideoAnalysis>({
-            prompt: buildAnalysisPrompt({
-              duration: info.duration,
-              // Los segundos que se mandan son los de los fotogramas que
-              // **salieron**, no los que se pidieron: si alguno falló, decir el
-              // segundo equivocado descoloca toda la línea de tiempo.
-              marks: marks.slice(0, frames.length),
-              transcript,
-              context: context || undefined,
-            }),
-            schema: VIDEO_ANALYSIS_SCHEMA,
-            role: "copy",
-            maxTokens: 16_000,
-            images: frames.map((frame) => ({
-              mediaType: "image/jpeg",
-              base64: frame.toString("base64"),
-            })),
-          });
-
-        const review = reviewAnalysis(analysis, info.duration);
-
-        await saveVideoReference({
-          name,
-          sourceUrl,
-          durationSeconds: info.duration,
-          width: info.width,
-          height: info.height,
-          hadAudio: info.hasAudio,
-          framesAnalyzed: frames.length,
-          analysis,
-          warnings: review.warnings,
-        });
-
-        return {
-          summary: [
-            `${frames.length} fotogramas de ${info.duration.toFixed(0)} s`,
-            transcript ? " con voz transcrita" : info.hasAudio ? " (no se pudo transcribir)" : " sin voz",
-            `. ${analysis.beats.length} momentos, corte cada ${analysis.averageShotSeconds.toFixed(1)} s.`,
-            review.warnings.length > 0 ? ` ${review.warnings.length} aviso(s) que mirar.` : "",
-          ].join(""),
-          inputTokens,
-          outputTokens,
-        };
-      } finally {
-        // Siempre. Cada análisis dejaría si no cien megas en un disco pequeño.
-        await cleanup();
-      }
+      return {
+        summary: [
+          `${frames.length} fotogramas de ${duration.toFixed(0)} s`,
+          transcript ? " con voz transcrita" : audio ? " (no se pudo transcribir)" : " sin voz",
+          `. ${analysis.beats.length} momentos, corte cada ${analysis.averageShotSeconds.toFixed(1)} s.`,
+          review.warnings.length > 0 ? ` ${review.warnings.length} aviso(s) que mirar.` : "",
+        ].join(""),
+        inputTokens,
+        outputTokens,
+      };
     },
   });
 }

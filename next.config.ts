@@ -9,19 +9,17 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       /*
-       * Para subir un anuncio y analizarlo.
+       * Para los fotogramas de un anuncio analizado.
        *
-       * El tope por defecto es 1 MB, pensado para formularios. Un anuncio de
-       * sesenta segundos en 1080p pesa entre cinco y veinte megas, así que sin
-       * esto la función no arranca siquiera.
+       * El tope por defecto es 1 MB, pensado para formularios. Aquí suben veinte
+       * JPEG y un WAV de voz: unos cuatro megas para un anuncio de un minuto, y
+       * hasta ocho para uno de tres.
        *
-       * Sesenta y cuatro y no más: Next monta el cuerpo entero en memoria y el
-       * servidor tiene cuatro gigas. Un tope generoso aquí no habilita nada útil
-       * —no hay anuncios de doscientos megas— y sí una forma fácil de tumbar la
-       * máquina. El límite real se comprueba otra vez en la acción, con un
-       * mensaje que dice cuánto pesaba.
+       * **El vídeo no viaja**: se descompone en el navegador. Por eso esto son
+       * dieciséis megas y no sesenta — Next monta el cuerpo entero en memoria y
+       * el servidor tiene cuatro gigas.
        */
-      bodySizeLimit: "64mb",
+      bodySizeLimit: "16mb",
     },
   },
 };

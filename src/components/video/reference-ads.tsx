@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { framePlan } from "@/lib/video/analysis";
+import { grabAudio, grabFrames, probeInBrowser } from "@/lib/video/browser-frames";
 import { Button } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import {
@@ -54,6 +56,7 @@ export function ReferenceAds({
 }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [progress, setProgress] = useState("");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -138,11 +141,56 @@ export function ReferenceAds({
                 throw new Error("Elige un vídeo antes de analizar.");
               }
 
-              return analyzeVideoAction(data);
+              /*
+               * El vídeo se descompone **aquí**, en el navegador.
+               *
+               * Solo se suben los fotogramas y la voz: unos cuatro megas en vez
+               * de sesenta. El archivo no sale de este ordenador.
+               */
+              try {
+                setProgress("Leyendo el vídeo…");
+                const probe = await probeInBrowser(video);
+                const marks = framePlan(probe.duration);
+
+                const frames = await grabFrames(video, marks, (done, total) =>
+                  setProgress(`Sacando fotogramas… ${done} de ${total}`),
+                );
+
+                setProgress("Sacando la voz…");
+                const audio = await grabAudio(video);
+
+                const payload = new FormData();
+                payload.set("name", String(data.get("name") ?? ""));
+                payload.set("sourceUrl", String(data.get("sourceUrl") ?? ""));
+                payload.set("context", String(data.get("context") ?? ""));
+                payload.set("language", String(data.get("language") ?? ""));
+                payload.set("duration", String(probe.duration));
+                payload.set("width", String(probe.width));
+                payload.set("height", String(probe.height));
+
+                // Solo los segundos de los fotogramas que **salieron**: si alguno
+                // falló, decir el segundo equivocado descoloca la línea entera.
+                payload.set("marks", JSON.stringify(marks.slice(0, frames.length)));
+
+                frames.forEach((frame, index) => {
+                  payload.append("frames", frame, `f${index}.jpg`);
+                });
+
+                if (audio) payload.set("audio", audio, "audio.wav");
+
+                setProgress("Analizando…");
+                return await analyzeVideoAction(payload);
+              } finally {
+                setProgress("");
+              }
             }}
             label="Analizar el anuncio"
-            hint="Se le sacan veinte fotogramas y la voz. El vídeo no se guarda: se borra al terminar."
+            hint="Los fotogramas y la voz se sacan en tu navegador: el vídeo no se sube a ningún sitio."
           />
+
+          {progress ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">{progress}</p>
+          ) : null}
         </form>
       ) : null}
 
