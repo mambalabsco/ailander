@@ -7,6 +7,7 @@ import {
   applyThemeOrderAction,
   buildLookPlanAction,
   buildThemePlanAction,
+  clearDemoImagesAction,
   recreatePageAction,
   themesForApplyAction,
   type LookPlan,
@@ -118,8 +119,14 @@ export function ThemePlanPanel({
     const theme = themes.find((item) => item.id === targetTheme);
     if (!theme?.published) return true;
 
+    /*
+     * Sobre el tema publicado se avisa además de las imágenes prestadas.
+     *
+     * Es el único momento en que dejan de ser una maqueta y pasan a ser un
+     * problema: publicadas, la página anuncia el envase de otra marca.
+     */
     return window.confirm(
-      `«${theme.name}» es el tema PUBLICADO: el cambio lo verán tus clientes en cuanto se guarde.\n\n¿Seguro? Lo prudente es aplicarlo en una copia y publicarla después.`,
+      `«${theme.name}» es el tema PUBLICADO: el cambio lo verán tus clientes en cuanto se guarde.\n\nLas imágenes de maqueta son de la tienda de referencia. Publicadas, tu página enseñaría el envase de otra marca.\n\n¿Seguro? Lo prudente es aplicarlo en una copia, cambiar las fotos y publicarla después.`,
     );
   };
 
@@ -446,6 +453,11 @@ export function ThemePlanPanel({
             tuyas que queden duplicadas salen de la página, pero no se borran: se pueden volver a
             arrastrar desde el editor.
           </p>
+          <p className="mt-2 rounded-xl bg-amber-100 p-2 text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+            Los huecos de imagen quedan con <strong>fotos de la tienda de referencia</strong> para
+            que puedas juzgar la maqueta. Se enlazan, no se copian a tu tienda. Sustitúyelas por las
+            tuyas antes de publicar, o quítalas con el botón de abajo.
+          </p>
 
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
@@ -466,7 +478,7 @@ export function ThemePlanPanel({
             </label>
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <GenerateButton
               variant="primary"
               action={async () => {
@@ -487,6 +499,19 @@ export function ThemePlanPanel({
               }
               hint="Escribe archivos en el tema elegido. Hazlo en uno sin publicar y míralo en la vista previa."
             />
+
+            <Button
+              variant="secondary"
+              disabled={isPending || !targetTheme}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await clearDemoImagesAction(storeId, targetTheme, plan.page);
+                  setMessage(result.message);
+                })
+              }
+            >
+              {isPending ? "Quitando…" : "Quitar las imágenes de maqueta"}
+            </Button>
           </div>
         </div>
       ) : null}

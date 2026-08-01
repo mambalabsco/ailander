@@ -277,3 +277,58 @@ export function writeTemplate(
 
   return `${JSON.stringify(root, null, 2)}\n`;
 }
+
+/**
+ * Deja vacías las direcciones de las imágenes de maqueta.
+ *
+ * Solo en las secciones creadas desde aquí —las que empiezan por `lp-`— y solo
+ * en los ajustes acabados en `_url`. Una imagen elegida en el editor de Shopify
+ * vive en el ajuste del selector, que es otro, y no se toca: la idea es quitar
+ * lo prestado sin deshacer lo que alguien haya puesto a mano.
+ */
+export function clearDemoImages(json: string): { cleared: number; json: string | null } {
+  let data: unknown;
+  try {
+    data = JSON.parse(stripLeadingComments(json));
+  } catch {
+    return { cleared: 0, json: null };
+  }
+
+  if (typeof data !== "object" || data === null) return { cleared: 0, json: null };
+
+  const root = data as Record<string, unknown>;
+  const sections = root.sections;
+  if (typeof sections !== "object" || sections === null) return { cleared: 0, json: null };
+
+  let cleared = 0;
+
+  const blank = (settings: unknown) => {
+    if (typeof settings !== "object" || settings === null) return;
+
+    for (const [key, value] of Object.entries(settings as Record<string, unknown>)) {
+      if (key.endsWith("_url") && typeof value === "string" && value.trim() !== "") {
+        (settings as Record<string, unknown>)[key] = "";
+        cleared += 1;
+      }
+    }
+  };
+
+  for (const [id, section] of Object.entries(sections as Record<string, unknown>)) {
+    if (!id.startsWith("lp-")) continue;
+    if (typeof section !== "object" || section === null) continue;
+
+    const entry = section as Record<string, unknown>;
+    blank(entry.settings);
+
+    const blocks = entry.blocks;
+    if (typeof blocks === "object" && blocks !== null) {
+      for (const block of Object.values(blocks as Record<string, unknown>)) {
+        if (typeof block === "object" && block !== null) {
+          blank((block as Record<string, unknown>).settings);
+        }
+      }
+    }
+  }
+
+  return { cleared, json: cleared > 0 ? `${JSON.stringify(root, null, 2)}\n` : json };
+}

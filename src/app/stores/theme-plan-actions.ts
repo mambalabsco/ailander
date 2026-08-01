@@ -1,7 +1,7 @@
 "use server";
 
 import { findStore } from "@/lib/store-registry";
-import { listShopProducts, listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
+import { listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
 import {
   orderFor,
   parseTemplate,
@@ -21,6 +21,7 @@ import { SECTION_CODE_SCHEMA } from "@/lib/generation-schemas";
 import { buildSectionCodePrompt } from "@/lib/section-code-prompt";
 import {
   buildTemplateEntry,
+  clearDemoImages,
   orderAfterRecreate,
   planRecreate,
   writeTemplate,
@@ -35,7 +36,6 @@ import {
   sectionFilename,
   sectionType,
 } from "@/lib/theme-liquid";
-import { bestMatch } from "@/lib/product-match";
 import type { LaunchResult } from "@/types/jobs";
 import {
   PAGE_KINDS,
@@ -315,38 +315,25 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
       const vibe = describeVibe(blueprint.identity);
 
       /*
-       * Las fotos salen de **tu** producto en Shopify, no de la otra tienda.
+       * Las fotos son **de la tienda de referencia**, y son provisionales.
        *
-       * Dos razones, y la segunda es la que decide. La primera: sus fotos son
-       * suyas. La segunda: en un suplemento el bote **es** el producto, así que
-       * una página con el frasco de otro no es un marcador de posición — es una
-       * página que anuncia algo distinto de lo que llega en el paquete, y eso lo
-       * descubre el cliente al abrirlo.
+       * Sirven para poder juzgar la maqueta: una sección con el hueco vacío no
+       * dice si la foto va a la izquierda, cuánto pesa al lado del texto ni si
+       * el titular respira. Con una imagen del tamaño correcto puesta, sí.
        *
-       * Y tienen que ser las de Shopify: las de la plataforma viven en un bucket
-       * privado con dirección firmada, que caduca. Escribir una de esas en la
-       * plantilla dejaría los huecos rotos unas horas después, cuando ya nadie
-       * está mirando.
+       * Se **enlazan**, no se copian: nada se descarga ni se sube a esta tienda,
+       * así que quitarlas es borrar un texto y no queda rastro. Hay una acción
+       * que las quita todas de golpe, y el resumen dice cuántas quedaron.
+       *
+       * Hay que sustituirlas antes de publicar. En un suplemento el envase es el
+       * producto: una página publicada con el frasco de otro anuncia algo
+       * distinto de lo que llega en el paquete.
        */
-      let photos: string[] = [];
-      let photoNote = "";
-
-      try {
-        const shopProducts = await listShopProducts(store, { search: product.name, limit: 10 });
-        const matched = bestMatch(product.name, shopProducts);
-
-        if (matched) {
-          photos = matched.images.map((image) => image.url);
-          if (photos.length === 0) {
-            photoNote = `«${matched.title}» no tiene fotos en Shopify: los huecos quedan vacíos.`;
-          }
-        } else {
-          photoNote = `No se encontró «${product.name}» en tu Shopify: los huecos de imagen quedan vacíos para no poner la foto de otro producto.`;
-        }
-      } catch {
-        // Quedarse sin fotos no justifica quedarse sin secciones.
-        photoNote = "No se pudieron leer las fotos de tu tienda; los huecos quedan vacíos.";
-      }
+      const photos = blueprint.images.map((image) => image.url);
+      const photoNote =
+        photos.length === 0
+          ? "Ese análisis no trae imágenes; si es anterior a esta versión, vuelve a analizar la tienda."
+          : "";
 
       const created: TemplateEntry[] = [];
       const files: { filename: string; content: string }[] = [];
@@ -480,7 +467,9 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
           `${created.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           `. ${written} archivo(s) escritos.`,
-          filledPhotos > 0 ? ` ${filledPhotos} hueco(s) de imagen con tus fotos.` : "",
+          filledPhotos > 0
+            ? ` ${filledPhotos} imagen(es) de ${blueprint.storeName} puestas para maquetar: sustitúyelas antes de publicar.`
+            : "",
           photoNote ? ` ${photoNote}` : "",
           skipped.length > 0 ? ` No salieron: ${skipped.join("; ")}.` : "",
           " Míralo en la vista previa antes de publicar.",
@@ -532,6 +521,56 @@ function paletteOf(colors: { hex: string; role: string }[]): {
     text: byRole("texto") ?? "#121212",
     accent: byRole("botón") ?? byRole("acento") ?? byRole("texto") ?? "#121212",
   };
+}
+
+/**
+ * Quita las imágenes de maqueta de una plantilla.
+ *
+ * Existe porque son de otra tienda y están puestas para poder juzgar la
+ * disposición, no para publicarlas. Quitarlas es borrar el texto de la dirección
+ * en cada sección creada: como nunca se descargó ni se subió nada, no queda
+ * ningún archivo que limpiar después.
+ *
+ * Solo toca las secciones que empiezan por `lp-` —las creadas desde aquí— y solo
+ * los ajustes acabados en `_url`. Una imagen que hayas elegido tú con el selector
+ * del editor vive en otro ajuste y no se toca.
+ */
+export async function clearDemoImagesAction(
+  storeId: unknown,
+  themeId: unknown,
+  pageKind: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const theme = readText(themeId);
+  const page = readPage(pageKind);
+  const templateName = TEMPLATE_FOR[page];
+
+  if (!theme) return { ok: false, message: "Falta el tema." };
+
+  try {
+    const store = await findStore(readText(storeId));
+    if (!store) return { ok: false, message: "No se encontró la tienda." };
+
+    const [file] = await listThemeFiles(store, theme, [templateName]);
+    if (!file?.body) return { ok: false, message: `No se pudo leer ${templateName} de ese tema.` };
+
+    const { cleared, json } = clearDemoImages(file.body);
+
+    if (cleared === 0) {
+      return { ok: true, message: "No había ninguna imagen de maqueta. No se ha escrito nada." };
+    }
+    if (!json) {
+      return { ok: false, message: "La plantilla no tiene el formato esperado; no se ha tocado." };
+    }
+
+    await writeThemeFiles(store, theme, [{ filename: templateName, content: json }]);
+
+    return {
+      ok: true,
+      message: `${cleared} imagen(es) de maqueta quitadas. Los huecos vuelven a estar vacíos: elige las tuyas en el editor.`,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo quitar." };
+  }
 }
 
 /* ------------------------- El aspecto: color y letra ----------------------- */

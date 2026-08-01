@@ -721,6 +721,8 @@ type StoreBlueprintRow = {
   scripts: unknown;
   /** {colors, fonts, buttonRadius} — la paleta y las tipografías leídas. */
   identity: unknown;
+  /** [{url, alt, width}] — direcciones, nunca los archivos. */
+  images: unknown;
   pages: unknown;
   notes: string;
   created_at: string;

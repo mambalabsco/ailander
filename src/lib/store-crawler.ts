@@ -2,6 +2,7 @@ import "server-only";
 
 import { classifyScripts, type DetectedScript } from "@/lib/store-blueprint";
 import { readVisualIdentity, type VisualIdentity } from "@/lib/visual-identity";
+import { IMAGE_LIMIT, extractImages, imageKey, type PageImage } from "@/lib/store-images";
 import { htmlToText, pageTitle, scriptSources } from "@/lib/html-text";
 
 /**
@@ -51,6 +52,14 @@ export interface CrawlResult {
    * secundario y daría la paleta de la excepción por la de la marca.
    */
   identity: VisualIdentity;
+  /**
+   * Las imágenes de contenido, de la más ancha a la menos.
+   *
+   * De todas las páginas y no solo de la portada: la ficha de producto trae los
+   * planos del envase y los antes-y-después, que son los que rellenan bien los
+   * huecos de en medio.
+   */
+  images: PageImage[];
   /** Lo que no se pudo abrir, con su motivo. */
   failed: { url: string; reason: string }[];
 }
@@ -121,6 +130,7 @@ export async function crawlStore(
   const failed: { url: string; reason: string }[] = [];
   const scripts: string[] = [];
   let identity: VisualIdentity = { colors: [], fonts: [], buttonRadius: null };
+  const images = new Map<string, PageImage>();
 
   const queue = [origin, `${origin}/collections/all`];
   const seen = new Set<string>();
@@ -138,6 +148,13 @@ export async function crawlStore(
       // La portada es la primera de la cola, así que esto se cumple una vez y
       // con la página correcta.
       if (pages.length === 0) identity = readVisualIdentity(html);
+
+      // Por clave, para que la misma foto en dos páginas no cuente dos veces.
+      for (const image of extractImages(html, origin)) {
+        const key = imageKey(image.url);
+        const existing = images.get(key);
+        if (!existing || image.width > existing.width) images.set(key, image);
+      }
 
       const text = htmlToText(html);
       pages.push({
@@ -187,6 +204,7 @@ export async function crawlStore(
     pages,
     scripts: classifyScripts(scripts),
     identity,
+    images: [...images.values()].sort((a, b) => b.width - a.width).slice(0, IMAGE_LIMIT),
     failed,
   };
 }

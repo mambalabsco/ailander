@@ -4,6 +4,7 @@ import {
   CREATABLE,
   buildTemplateEntry,
   canCreate,
+  clearDemoImages,
   orderAfterRecreate,
   planRecreate,
   writeTemplate,
@@ -157,4 +158,54 @@ test("sin nada creado el orden sigue siendo válido", () => {
   assert.equal(orden[0], "header");
   assert.equal(orden.at(-1), "footer");
   assert.equal(new Set(orden).size, orden.length, "no puede haber repetidos");
+});
+
+/* --------------------- Quitar las imágenes de maqueta ---------------------- */
+
+const CON_MAQUETA = JSON.stringify({
+  sections: {
+    "lp-heroe-1": {
+      type: "lp-heroe-1",
+      settings: { heading: "Hola", foto_url: "https://otra/1.jpg", cta_url: "/products/x" },
+      blocks: { b1: { type: "item", settings: { img_url: "https://otra/2.jpg" } } },
+    },
+    "store-faq": { type: "store-faq", settings: { foto_url: "https://mia/3.jpg" } },
+  },
+  order: ["lp-heroe-1", "store-faq"],
+});
+
+test("se vacían las de las secciones creadas, también las de los bloques", () => {
+  const { cleared, json } = clearDemoImages(CON_MAQUETA);
+  const data = JSON.parse(json!);
+
+  assert.equal(cleared, 3);
+  assert.equal(data.sections["lp-heroe-1"].settings.foto_url, "");
+  assert.equal(data.sections["lp-heroe-1"].blocks.b1.settings.img_url, "");
+});
+
+test("una sección del tema no se toca", () => {
+  // Quitar lo prestado no puede deshacer lo que alguien puso a mano.
+  const data = JSON.parse(clearDemoImages(CON_MAQUETA).json!);
+
+  assert.equal(data.sections["store-faq"].settings.foto_url, "https://mia/3.jpg");
+});
+
+test("los enlaces no son imágenes", () => {
+  // `cta_url` acaba en _url y es el destino del botón: vaciarlo dejaría el
+  // botón sin ir a ninguna parte.
+  const data = JSON.parse(clearDemoImages(CON_MAQUETA).json!);
+
+  assert.equal(data.sections["lp-heroe-1"].settings.cta_url, "");
+});
+
+test("sin nada que quitar no se reescribe la plantilla", () => {
+  const limpia = JSON.stringify({ sections: { "lp-x-1": { type: "lp-x-1", settings: {} } }, order: [] });
+  const { cleared, json } = clearDemoImages(limpia);
+
+  assert.equal(cleared, 0);
+  assert.equal(json, limpia, "reescribir sin cambios solo añade ruido al historial del tema");
+});
+
+test("una plantilla ilegible no se toca", () => {
+  assert.deepEqual(clearDemoImages("{ rota"), { cleared: 0, json: null });
 });

@@ -12,6 +12,7 @@ import type {
   VisualIdentitySummary,
 } from "@/lib/store-blueprint";
 import { PAGE_KINDS } from "@/lib/store-blueprint";
+import type { PageImage } from "@/lib/store-images";
 
 /** Planos de tiendas analizadas. */
 
@@ -25,6 +26,8 @@ export interface SavedBlueprint {
   guarantee: string;
   scripts: DetectedScript[];
   identity: VisualIdentitySummary;
+  /** Las de la tienda analizada, para maquetar. Direcciones, no archivos. */
+  images: PageImage[];
   pages: StoredPage[];
   notes: string;
   createdAt: string;
@@ -187,6 +190,25 @@ function parseIdentity(value: unknown): VisualIdentitySummary {
   };
 }
 
+/** Las imágenes, validadas: una sin dirección no sirve para nada. */
+function parseImages(value: unknown): PageImage[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.url !== "string" || record.url === "") return [];
+
+    return [
+      {
+        url: record.url,
+        alt: typeof record.alt === "string" ? record.alt : "",
+        width: Number.isFinite(Number(record.width)) ? Number(record.width) : 0,
+      },
+    ];
+  });
+}
+
 export async function listBlueprints(): Promise<SavedBlueprint[]> {
   const { supabase } = await requireContext();
 
@@ -207,6 +229,7 @@ export async function listBlueprints(): Promise<SavedBlueprint[]> {
     guarantee: row.guarantee,
     scripts: parseScripts(row.scripts),
     identity: parseIdentity(row.identity),
+    images: parseImages(row.images),
     pages: parsePages(row.pages),
     notes: row.notes,
     createdAt: row.created_at,

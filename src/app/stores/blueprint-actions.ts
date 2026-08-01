@@ -112,6 +112,7 @@ Si un texto de la página te parece especialmente bueno, **describe por qué fun
         guarantee: analysis.data.guarantee,
         scripts: crawl.scripts,
         identity: crawl.identity,
+        images: crawl.images,
         /*
          * El texto se guarda, no solo la lista de direcciones.
          *
@@ -140,6 +141,7 @@ Si un texto de la página te parece especialmente bueno, **describe por qué fun
           crawl.identity.colors.length > 0
             ? ` Paleta de ${crawl.identity.colors.length} colores${crawl.identity.fonts.length > 0 ? ` y ${crawl.identity.fonts.length} tipografía(s)` : ""}.`
             : "",
+          crawl.images.length > 0 ? ` ${crawl.images.length} imágenes para maquetar.` : "",
           `${crawl.scripts.length} script(s) detectados`,
           pixels > 0 ? `, ${pixels} de ellos pixeles que no se importan.` : ".",
           crawl.failed.length > 0 ? ` No se pudo abrir ${crawl.failed.length} página(s).` : "",
