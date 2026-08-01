@@ -146,11 +146,51 @@ if ! npm test --silent; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Memoria: la causa de que un despliegue se quede clavado
+#
+# Esta máquina tiene 4 GB y al compilar hay **dos** cosas grandes a la vez: el
+# compilador y el servidor viejo, que sigue atendiendo visitas. Sin espacio de
+# intercambio, el núcleo mata a una de las dos — normalmente al servidor — y el
+# resultado es el sitio caído a mitad de actualización, que es justo cuando nadie
+# está mirando los registros.
+#
+# Se avisa en vez de crearlo solo: el intercambio es un archivo permanente en tu
+# disco y esa decisión es tuya.
+# ---------------------------------------------------------------------------
+
+SWAP_KB=$(awk '/SwapTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+
+if [ "${SWAP_KB:-0}" -lt 262144 ]; then
+  rojo "AVISO: esta máquina no tiene espacio de intercambio."
+  rojo "Compilar con 4 GB y el servidor en marcha puede dejar el sitio caído."
+  rojo "Se arregla una sola vez, con esto:"
+  gris "  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile"
+  gris "  sudo mkswap /swapfile && sudo swapon /swapfile"
+  gris "  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab"
+fi
+
 echo "== Compilando =="
-como npm run build
+# Con el techo puesto, el compilador se contiene en vez de crecer hasta que el
+# núcleo tenga que elegir a quién matar.
+como env NODE_OPTIONS=--max-old-space-size=2048 npm run build
+
+# ---------------------------------------------------------------------------
+# Reiniciar, con plazo
+#
+# `systemctl restart` espera a que el proceso viejo muera. Si no atiende la
+# señal, se queda esperando el plazo entero de systemd y parece colgado; quien
+# lo está mirando cierra la terminal y se queda sin saber en qué estado quedó.
+# ---------------------------------------------------------------------------
 
 echo "== Reiniciando =="
-systemctl restart plataforma
+
+if ! timeout 90 systemctl restart plataforma; then
+  rojo "No terminó de reiniciar en 90 s. Forzando."
+  systemctl kill -s SIGKILL plataforma || true
+  sleep 2
+  systemctl start plataforma
+fi
 
 # ---------------------------------------------------------------------------
 # Comprobar que quedó viva
