@@ -375,6 +375,51 @@ export async function listThemeFiles(
  * fallar: quien edita una sección suele tocar dos archivos, pero un cambio de
  * plantilla completa puede pasar de cincuenta.
  */
+/**
+ * Escribe archivos y devuelve **cuáles fallaron**, en vez de tirar la tanda.
+ *
+ * Shopify valida el lote entero: si un solo archivo tiene un esquema que no le
+ * gusta, rechaza los doce y devuelve una lista de mensajes que nombran ajustes
+ * —`setting with id="badge_url"`— sin decir en qué archivo están. Con eso no se
+ * puede ni arreglar ni saber qué se salvó.
+ *
+ * Así que al fallar se escriben **uno a uno**. Son unas cuantas llamadas más,
+ * pero solo por el camino del error, y a cambio se sabe exactamente cuál falla y
+ * los demás sí se guardan. Una página con once secciones de doce se completa a
+ * mano; una con cero hay que volver a lanzarla entera.
+ */
+export async function writeThemeFilesLenient(
+  store: Store,
+  themeId: string,
+  files: { filename: string; content: string }[],
+): Promise<{ written: number; failed: { filename: string; reason: string }[] }> {
+  try {
+    const written = await writeThemeFiles(store, themeId, files);
+    return { written, failed: [] };
+  } catch (firstError) {
+    // Un fallo de permisos no mejora escribiendo de uno en uno: sería repetir el
+    // mismo rechazo doce veces y tardar doce veces más en decir lo mismo.
+    const message = firstError instanceof Error ? firstError.message : "";
+    if (/write_theme_code|access|denied|scope/i.test(message)) throw firstError;
+
+    let written = 0;
+    const failed: { filename: string; reason: string }[] = [];
+
+    for (const file of files) {
+      try {
+        written += await writeThemeFiles(store, themeId, [file]);
+      } catch (error) {
+        failed.push({
+          filename: file.filename,
+          reason: error instanceof Error ? error.message : "no se pudo escribir",
+        });
+      }
+    }
+
+    return { written, failed };
+  }
+}
+
 export async function writeThemeFiles(
   store: Store,
   themeId: string,

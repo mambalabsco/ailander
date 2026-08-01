@@ -1,7 +1,12 @@
 "use server";
 
 import { findStore } from "@/lib/store-registry";
-import { listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
+import {
+  listThemeFiles,
+  listThemes,
+  writeThemeFiles,
+  writeThemeFilesLenient,
+} from "@/lib/shopify-store";
 import {
   orderFor,
   parseTemplate,
@@ -621,25 +626,43 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
 
       await report(`Guardando ${created.length} sección(es) en el tema`);
 
-      const order = orderAfterRecreate(plan, created, current);
-      const nextTemplate = writeTemplate(file.body!, created, order);
+      /*
+       * Las secciones primero, y sin que una mala tire a las demás.
+       *
+       * Shopify valida el lote entero: un esquema que no le gusta rechaza los
+       * doce archivos y devuelve mensajes que nombran ajustes sin decir en qué
+       * archivo están. Escribiéndolas primero y por separado se sabe cuáles
+       * entraron, y la plantilla se arma **solo con esas**.
+       *
+       * Un archivo de sección que no usa nadie es inofensivo; una plantilla que
+       * apunta a una sección que no existe es la página caída. Por eso este
+       * orden y no el contrario.
+       */
+      const write = await writeThemeFilesLenient(store, themeId, files);
+
+      const rejected = new Set(write.failed.map((item) => item.filename));
+
+      const usable = created.filter(
+        (section) => !rejected.has(sectionFilename(String(section.entry.type))),
+      );
+
+      if (usable.length === 0) {
+        throw new Error(
+          `Shopify rechazó todas las secciones. La primera: ${write.failed[0]?.reason ?? "sin detalle"}`,
+        );
+      }
+
+      const order = orderAfterRecreate(plan, usable, current);
+      const nextTemplate = writeTemplate(file.body!, usable, order);
       if (!nextTemplate) throw new Error("La plantilla no tiene el formato esperado; no se ha tocado.");
 
-      /*
-       * Las secciones y la plantilla, en la misma escritura.
-       *
-       * Si fueran dos llamadas y fallara la segunda, quedarían archivos sueltos
-       * que no usa nadie; si fallara al revés, una plantilla apuntando a
-       * secciones que no existen — o sea, la página caída.
-       */
-      const written = await writeThemeFiles(store, themeId, [
-        ...files,
-        { filename: templateName, content: nextTemplate },
-      ]);
+      await writeThemeFiles(store, themeId, [{ filename: templateName, content: nextTemplate }]);
+
+      const written = write.written + 1;
 
       return {
         summary: [
-          `${created.length} sección(es) creadas en ${templateName}`,
+          `${usable.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           `. ${written} archivo(s) escritos.`,
           reused > 0 ? ` ${reused} venían ya escritas y no se han vuelto a pagar.` : "",
@@ -652,6 +675,11 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
             : "",
           photoNote ? ` ${photoNote}` : "",
           skipped.length > 0 ? ` No salieron: ${skipped.join("; ")}.` : "",
+          write.failed.length > 0
+            ? ` Shopify rechazó ${write.failed.length}: ${write.failed
+                .map((item) => `${item.filename} — ${item.reason}`)
+                .join(" | ")}`
+            : "",
           " Míralo en la vista previa antes de publicar.",
         ].join(""),
         inputTokens,

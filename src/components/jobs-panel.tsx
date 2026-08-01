@@ -125,7 +125,7 @@ export function JobsPanel({
               key={job.id}
               className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2 last:border-0 last:pb-0 dark:border-slate-900"
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
                   {JOB_KIND_LABELS[job.kind] ?? job.kind} · {job.label}
                 </p>
@@ -142,11 +142,30 @@ export function JobsPanel({
                 ) : null}
 
                 {job.status === "done" && job.summary ? (
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{job.summary}</p>
+                  <p className="text-sm break-words text-slate-600 dark:text-slate-300">
+                    {job.summary}
+                  </p>
                 ) : null}
 
+                {/*
+                  El error, entero y legible.
+
+                  Uno de Shopify llega como una ristra de mensajes separados por
+                  punto y coma en una sola línea; en un renglón que no rompe, se
+                  sale del cuadro y solo se lee el principio — que es la parte
+                  que menos dice. Se parte por los puntos y coma y cada trozo va
+                  en su línea.
+                */}
                 {job.status === "error" && job.error ? (
-                  <p className="text-sm text-rose-600 dark:text-rose-400">{job.error}</p>
+                  <ul className="mt-1 space-y-0.5 text-sm break-words whitespace-pre-wrap text-rose-600 dark:text-rose-400">
+                    {job.error
+                      .split(/\s*;\s*/)
+                      .map((line) => line.trim())
+                      .filter(Boolean)
+                      .map((line, index) => (
+                        <li key={index}>{line}</li>
+                      ))}
+                  </ul>
                 ) : null}
 
                 {/* Un trabajo que lleva media hora «en marcha» es casi seguro
