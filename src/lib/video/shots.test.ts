@@ -281,3 +281,37 @@ test("detecta tomas sin escena o sin movimiento", () => {
   assert.ok(problems.some((problem) => /no hay keyframe/.test(problem.problem)));
   assert.ok(problems.some((problem) => /flotando en el vacío/.test(problem.problem)));
 });
+
+const ANCLA = { render: "soft volumetric light, 35mm lens", accent: "warm amber" };
+
+test("en la toma de producto el envase es el de la referencia, no uno inventado", () => {
+  // Sin decirlo, el modelo se inventa un frasco entero con su etiqueta y queda
+  // convincente: no se ve que está mal hasta comparar con el bote de verdad.
+  const prompt = keyframePrompt(shot({ role: "producto" }), ANCLA, {
+    name: "Naturox Metabolic Balance",
+    hasReference: true,
+  });
+
+  assert.match(prompt, /EXACTLY the one in the attached reference/);
+  assert.match(prompt, /do not rewrite the label/);
+});
+
+test("sin foto de referencia se pide un frasco liso, no uno con etiqueta inventada", () => {
+  // Una etiqueta inventada se lee como real; un frasco liso se ve claramente
+  // como pendiente de sustituir.
+  const prompt = keyframePrompt(shot({ role: "producto" }), ANCLA, {
+    name: "X",
+    hasReference: false,
+  });
+
+  assert.match(prompt, /no label, no text/);
+});
+
+test("las tomas que no son de producto no arrastran nada de eso", () => {
+  const prompt = keyframePrompt(shot({ role: "story" }), ANCLA, {
+    name: "X",
+    hasReference: true,
+  });
+
+  assert.ok(!prompt.includes("reference image"));
+});

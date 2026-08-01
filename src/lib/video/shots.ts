@@ -346,16 +346,48 @@ export interface StyleAnchor {
  * es lo único que hace que catorce imágenes generadas por separado parezcan del
  * mismo vídeo. Sin ella cada toma sale con su propia luz y su propia paleta.
  */
-export function keyframePrompt(shot: Shot, anchor: StyleAnchor): string {
-  return [
+export function keyframePrompt(
+  shot: Shot,
+  anchor: StyleAnchor,
+  product?: { name: string; hasReference: boolean },
+): string {
+  const parts = [
     shot.scene,
     ROLE_META[shot.role].style,
     anchor.render,
     `color accent: ${anchor.accent}`,
     "vertical 9:16 composition",
-  ]
-    .filter(Boolean)
-    .join(". ");
+  ];
+
+  /*
+   * En la toma de producto, el envase **es** el de la referencia.
+   *
+   * Sin decirlo, el modelo se inventa un frasco entero —forma, tapa y etiqueta
+   * con el nombre bien escrito— y queda convincente. Ese es el problema: no se
+   * ve que está mal hasta que alguien compara con el bote de verdad, y para
+   * entonces el vídeo ya está montado y pagado.
+   *
+   * Y en un suplemento el envase es el producto. Un anuncio que enseña un frasco
+   * que no es el que llega es una devolución.
+   */
+  if (shot.role === "producto" && product?.hasReference) {
+    parts.push(
+      `the product is EXACTLY the one in the attached reference image: same bottle shape, same cap, same label, same colours, same text`,
+      `do not redesign the packaging, do not rewrite the label, do not invent any text`,
+    );
+  }
+
+  /*
+   * Sin foto de referencia, mejor sin etiqueta que con una inventada.
+   *
+   * Una etiqueta inventada se lee como real; un frasco liso se ve claramente
+   * como pendiente de sustituir, y eso es lo que se quiere que se note.
+   */
+  if (shot.role === "producto" && product && !product.hasReference) {
+    parts.push("plain unbranded bottle, no label, no text of any kind");
+  }
+
+  return parts.filter(Boolean).join(". ");
 }
 
 /**

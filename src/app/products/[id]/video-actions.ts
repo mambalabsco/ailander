@@ -348,6 +348,7 @@ export async function generateKeyframesAction(
   const { readProductImages } = await import("@/lib/image-store");
   const images = await readProductImages(productId);
   const productShot = images.find((image) => image.isPrimary) ?? images[0];
+  const product = await findProductAnywhere(productId);
 
   return runStep(ctx, {
     productId,
@@ -374,10 +375,11 @@ export async function generateKeyframesAction(
 
         try {
           const url = await keyframe({
-            prompt: keyframePrompt(shot, {
-              render: video.styleRender,
-              accent: video.styleAccent,
-            }),
+            prompt: keyframePrompt(
+              shot,
+              { render: video.styleRender, accent: video.styleAccent },
+              { name: product?.name ?? "", hasReference: Boolean(productShot) },
+            ),
             // Solo la toma de producto lleva la foto real: en las demás, una
             // referencia del envase mete el frasco donde no pinta nada.
             references: shot.role === "producto" && productShot ? [productShot.url] : [],
@@ -399,11 +401,23 @@ export async function generateKeyframesAction(
 
       const head = stopped ? "Cancelado. " : "";
 
+      /*
+       * Si falta la foto del producto se dice, y aquí importa de verdad.
+       *
+       * Sin ella la toma de producto sale con un frasco liso a propósito —una
+       * etiqueta inventada se lee como real y no se detecta hasta comparar con
+       * el bote de verdad, con el vídeo ya montado y pagado—.
+       */
+      const sinFoto =
+        !productShot && pending.some((shot) => shot.role === "producto")
+          ? " Ese producto no tiene imagen principal: la toma de producto salió sin etiqueta. Súbela y rehaz esa toma."
+          : "";
+
       return {
         summary:
           failures.length > 0
-            ? `${head}${done} imagen(es) listas, ${failures.length} fallaron. ${failures[0]}`
-            : `${head}${done} imagen(es) listas. Míralas antes de animar.`,
+            ? `${head}${done} imagen(es) listas, ${failures.length} fallaron. ${failures[0]}${sinFoto}`
+            : `${head}${done} imagen(es) listas. Míralas antes de animar.${sinFoto}`,
       };
     },
   });
