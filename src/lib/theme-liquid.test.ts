@@ -4,6 +4,8 @@ import {
   MAX_SECTION_BYTES,
   blockSettingsOf,
   coerceSettings,
+  fillImageUrls,
+  imageUrlSlots,
   reviewSection,
   sectionFilename,
   sectionType,
@@ -217,4 +219,59 @@ test("los ajustes de un tipo de bloque salen del esquema", () => {
 
   assert.deepEqual(blockSettingsOf(schema, "item"), [{ id: "title", type: "text" }]);
   assert.deepEqual(blockSettingsOf(schema, "otro"), []);
+});
+
+/* --------------------------------- Las imágenes ---------------------------- */
+
+const CON_FOTOS = {
+  settings: [
+    { type: "image_picker", id: "foto" },
+    { type: "text", id: "foto_url" },
+    { type: "text", id: "heading" },
+    // Un texto acabado en _url sin su selector: puede ser cualquier cosa.
+    { type: "text", id: "cta_url" },
+  ],
+};
+
+test("solo se rellena el texto que hace pareja con un selector de imagen", () => {
+  assert.deepEqual(imageUrlSlots(CON_FOTOS), ["foto_url"]);
+});
+
+test("la foto se deja puesta en el hueco vacío", () => {
+  const { settings, used } = fillImageUrls({ heading: "Hola" }, ["foto_url"], ["https://cdn/1.jpg"]);
+
+  assert.equal(settings.foto_url, "https://cdn/1.jpg");
+  assert.equal(used, 1);
+});
+
+test("no se pisa una dirección que ya venía escrita", () => {
+  const { settings, used } = fillImageUrls(
+    { foto_url: "https://cdn/elegida.jpg" },
+    ["foto_url"],
+    ["https://cdn/otra.jpg"],
+  );
+
+  assert.equal(settings.foto_url, "https://cdn/elegida.jpg");
+  assert.equal(used, 0);
+});
+
+test("con más huecos que fotos se repiten en vez de dejar vacíos", () => {
+  // Una página con la misma foto dos veces se entiende y se arregla; una con
+  // dos huecos vacíos parece rota.
+  const { settings } = fillImageUrls({}, ["a_url", "b_url", "c_url"], ["1.jpg", "2.jpg"]);
+
+  assert.deepEqual(settings, { a_url: "1.jpg", b_url: "2.jpg", c_url: "1.jpg" });
+});
+
+test("se sigue por donde se quedó la sección anterior", () => {
+  const { settings } = fillImageUrls({}, ["a_url"], ["1.jpg", "2.jpg"], 1);
+
+  assert.equal(settings.a_url, "2.jpg");
+});
+
+test("sin fotos no se toca nada", () => {
+  const { settings, used } = fillImageUrls({ heading: "Hola" }, ["foto_url"], []);
+
+  assert.deepEqual(settings, { heading: "Hola" });
+  assert.equal(used, 0);
 });

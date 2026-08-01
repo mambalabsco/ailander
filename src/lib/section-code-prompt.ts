@@ -106,7 +106,23 @@ Estas no son estilo: si fallas una, la sección no aparece o rompe la tienda.
 - Rejillas con \`grid-template-columns: repeat(auto-fit, minmax(...))\` o un \`@media\`, para que en el móvil caiga a una columna.
 - Las imágenes, con \`max-width: 100%\` y \`height: auto\`.
 - Una tabla ancha, dentro de un contenedor con \`overflow-x: auto\`: la página nunca debe irse de lado.
-- Las imágenes de \`image_picker\` con \`{{ ajuste | image_url: width: 1200 }}\`, \`loading="lazy"\` y sus \`width\`/\`height\`.
+## Las imágenes van declaradas por partida doble
+
+Cada imagen necesita **dos ajustes**: un \`image_picker\` llamado, por ejemplo, \`foto\`, y un \`text\` llamado \`foto_url\` justo detrás.
+
+Y se pintan así, el elegido primero:
+
+\`\`\`liquid
+{% if section.settings.foto %}
+  <img src="{{ section.settings.foto | image_url: width: 1200 }}" alt="{{ section.settings.heading | escape }}" loading="lazy" width="1200" height="1200">
+{% elsif section.settings.foto_url != blank %}
+  <img src="{{ section.settings.foto_url }}" alt="{{ section.settings.heading | escape }}" loading="lazy" width="1200" height="1200">
+{% endif %}
+\`\`\`
+
+El motivo es práctico: el valor de un \`image_picker\` es una referencia interna de Shopify que solo se consigue subiendo el archivo, mientras que una dirección se escribe y ya. Con el par, la sección **sale con foto puesta** desde el primer momento y quien la edite puede cambiarla con el selector de siempre, que es lo normal.
+
+Deja \`foto_url\` **vacío** en lo que devuelvas: se rellena después con las fotos reales del producto.
 
 ## Lo que devuelves
 

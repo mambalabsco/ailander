@@ -341,6 +341,65 @@ export function blockSettingsOf(schema: SectionSchema, type: string): { id?: str
   return schema.blocks?.find((block) => block.type === type)?.settings ?? [];
 }
 
+/* --------------------------------- Las imágenes ---------------------------- */
+
+/**
+ * Los huecos de imagen que se pueden rellenar sin subir nada.
+ *
+ * Una sección declara la imagen por partida doble: un `image_picker` para
+ * elegirla en el editor y un texto con su dirección para poder dejarla puesta
+ * desde aquí. La razón es que el valor de un `image_picker` es una referencia
+ * interna de Shopify que solo se obtiene subiendo el archivo; una dirección del
+ * CDN de la propia tienda se escribe y ya.
+ *
+ * Se busca el par: por cada `image_picker` llamado `foto`, un texto `foto_url`.
+ * Sin la pareja no se toca — un texto suelto puede ser cualquier cosa.
+ */
+export function imageUrlSlots(schema: SectionSchema): string[] {
+  const settings = schema.settings ?? [];
+  const pickers = new Set(
+    settings.flatMap((setting) =>
+      setting.type === "image_picker" && typeof setting.id === "string" ? [setting.id] : [],
+    ),
+  );
+
+  return settings.flatMap((setting) => {
+    if (typeof setting.id !== "string" || !setting.id.endsWith("_url")) return [];
+
+    const base = setting.id.slice(0, -"_url".length);
+    return pickers.has(base) ? [setting.id] : [];
+  });
+}
+
+/**
+ * Deja puestas las imágenes que haya, sin pisar las que el modelo ya escribió.
+ *
+ * Se reparten en orden y se repiten cuando hay más huecos que imágenes: una
+ * página con la misma foto dos veces se entiende y se arregla; una con dos
+ * huecos vacíos parece rota.
+ */
+export function fillImageUrls(
+  settings: Record<string, unknown>,
+  slots: string[],
+  urls: string[],
+  startAt = 0,
+): { settings: Record<string, unknown>; used: number } {
+  if (urls.length === 0) return { settings, used: 0 };
+
+  const next = { ...settings };
+  let used = 0;
+
+  for (const slot of slots) {
+    const current = next[slot];
+    if (typeof current === "string" && current.trim() !== "") continue;
+
+    next[slot] = urls[(startAt + used) % urls.length];
+    used += 1;
+  }
+
+  return { settings: next, used };
+}
+
 /* ------------------------------ El nombre del archivo ---------------------- */
 
 /**

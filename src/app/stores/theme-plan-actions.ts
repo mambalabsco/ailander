@@ -1,7 +1,7 @@
 "use server";
 
 import { findStore } from "@/lib/store-registry";
-import { listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
+import { listShopProducts, listThemeFiles, listThemes, writeThemeFiles } from "@/lib/shopify-store";
 import {
   orderFor,
   parseTemplate,
@@ -29,10 +29,13 @@ import {
 import {
   blockSettingsOf,
   coerceSettings,
+  fillImageUrls,
+  imageUrlSlots,
   reviewSection,
   sectionFilename,
   sectionType,
 } from "@/lib/theme-liquid";
+import { bestMatch } from "@/lib/product-match";
 import type { LaunchResult } from "@/types/jobs";
 import {
   PAGE_KINDS,
@@ -311,12 +314,49 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
       const palette = paletteOf(blueprint.identity.colors);
       const vibe = describeVibe(blueprint.identity);
 
+      /*
+       * Las fotos salen de **tu** producto en Shopify, no de la otra tienda.
+       *
+       * Dos razones, y la segunda es la que decide. La primera: sus fotos son
+       * suyas. La segunda: en un suplemento el bote **es** el producto, así que
+       * una página con el frasco de otro no es un marcador de posición — es una
+       * página que anuncia algo distinto de lo que llega en el paquete, y eso lo
+       * descubre el cliente al abrirlo.
+       *
+       * Y tienen que ser las de Shopify: las de la plataforma viven en un bucket
+       * privado con dirección firmada, que caduca. Escribir una de esas en la
+       * plantilla dejaría los huecos rotos unas horas después, cuando ya nadie
+       * está mirando.
+       */
+      let photos: string[] = [];
+      let photoNote = "";
+
+      try {
+        const shopProducts = await listShopProducts(store, { search: product.name, limit: 10 });
+        const matched = bestMatch(product.name, shopProducts);
+
+        if (matched) {
+          photos = matched.images.map((image) => image.url);
+          if (photos.length === 0) {
+            photoNote = `«${matched.title}» no tiene fotos en Shopify: los huecos quedan vacíos.`;
+          }
+        } else {
+          photoNote = `No se encontró «${product.name}» en tu Shopify: los huecos de imagen quedan vacíos para no poner la foto de otro producto.`;
+        }
+      } catch {
+        // Quedarse sin fotos no justifica quedarse sin secciones.
+        photoNote = "No se pudieron leer las fotos de tu tienda; los huecos quedan vacíos.";
+      }
+
       const created: TemplateEntry[] = [];
       const files: { filename: string; content: string }[] = [];
       const skipped: string[] = [];
 
       let inputTokens = 0;
       let outputTokens = 0;
+      // Se va avanzando por las fotos para no repetir la misma en cada sección
+      // mientras queden otras sin usar.
+      let filledPhotos = 0;
 
       /*
        * Una llamada por sección, en serie.
@@ -372,13 +412,22 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
             continue;
           }
 
+          const settings = coerceSettings(generated.data.settings, review.schema.settings ?? []);
+          const withPhotos = fillImageUrls(
+            settings,
+            imageUrlSlots(review.schema),
+            photos,
+            filledPhotos,
+          );
+          filledPhotos += withPhotos.used;
+
           built = {
             file: generated.data.liquid,
             entry: buildTemplateEntry({
               kind: wanted.kind,
               type,
               index,
-              settings: coerceSettings(generated.data.settings, review.schema.settings ?? []),
+              settings: withPhotos.settings,
               blocks: generated.data.blocks.map((block) => ({
                 type: block.type,
                 settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
@@ -431,6 +480,8 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
           `${created.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           `. ${written} archivo(s) escritos.`,
+          filledPhotos > 0 ? ` ${filledPhotos} hueco(s) de imagen con tus fotos.` : "",
+          photoNote ? ` ${photoNote}` : "",
           skipped.length > 0 ? ` No salieron: ${skipped.join("; ")}.` : "",
           " Míralo en la vista previa antes de publicar.",
         ].join(""),
