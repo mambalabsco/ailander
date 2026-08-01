@@ -160,6 +160,7 @@ export function ReferenceAds({
                 const audio = await grabAudio(video);
 
                 const payload = new FormData();
+                payload.set("productId", productId);
                 payload.set("name", String(data.get("name") ?? ""));
                 payload.set("sourceUrl", String(data.get("sourceUrl") ?? ""));
                 payload.set("context", String(data.get("context") ?? ""));

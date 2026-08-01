@@ -94,6 +94,16 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
     throw new Error("Algún fotograma dice venir de fuera del vídeo.");
   }
 
+  /*
+   * El producto al que pertenece, que faltaba.
+   *
+   * Sin él, el trabajo se creaba sin dueño y **no aparecía en el panel**: el
+   * panel de un producto lista por producto. Así que el análisis corría de
+   * verdad en segundo plano pero no había forma de ver por dónde iba ni de
+   * cancelarlo, que se lee como que no funciona.
+   */
+  const productId = readText(form.get("productId"));
+
   const name = readText(form.get("name")) || "Anuncio sin nombre";
   const sourceUrl = readText(form.get("sourceUrl"));
   const context = readText(form.get("context"));
@@ -115,10 +125,12 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
   );
 
   return runInBackground({
+    productId: productId || null,
     kind: "imagenes",
     label: `Analizar anuncio · ${name}`,
-    revalidate: "/products",
-    work: async () => {
+    revalidate: productId ? `/products/${productId}` : "/products",
+    work: async (report, cancelled) => {
+      await report("Transcribiendo la voz");
       /*
        * La transcripción no puede tumbar el análisis.
        *
@@ -128,6 +140,12 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
       const transcript = audio
         ? await transcribe(audio, language || undefined).catch(() => "")
         : "";
+
+      if (await cancelled()) {
+        return { summary: "Cancelado antes de analizar. No se ha gastado casi nada." };
+      }
+
+      await report(`Mirando ${frames.length} fotogramas`);
 
       const { data: analysis, inputTokens, outputTokens } = await generateStructured<VideoAnalysis>({
         prompt: buildAnalysisPrompt({
@@ -141,6 +159,8 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
         maxTokens: 16_000,
         images: frames,
       });
+
+      await report("Guardando el análisis");
 
       const review = reviewAnalysis(analysis, duration);
 

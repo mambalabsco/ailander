@@ -130,7 +130,8 @@ export async function createVideoFromCopyAction(input: unknown): Promise<LaunchR
     productId,
     kind: "imagenes",
     label: `Guion de vídeo · ${copy.driverLabel}`,
-    work: async () => {
+    work: async (report) => {
+      await report("Fijando el estilo visual");
       const audience = product.targetAudience || "el público objetivo";
       const country = product.country || "México";
 
@@ -147,6 +148,8 @@ export async function createVideoFromCopyAction(input: unknown): Promise<LaunchR
         role: "copy",
         maxTokens: 2_000,
       });
+
+      await report("Escribiendo el guion");
 
       const script = await generateStructured<{
         title: string;
@@ -246,10 +249,13 @@ export async function generateVoiceAction(input: unknown): Promise<LaunchResult>
     productId,
     kind: "imagenes",
     label: `Voz · ${video.title}`,
-    work: async () => {
+    work: async (report) => {
+      await report("Generando la voz toma a toma");
       const text = video.shots.map((shot) => shot.guion).join(" ");
 
       const voice = await speak({ text, voiceId: video.voiceId });
+
+      await report("Guardando el audio");
 
       const audioUrl = await uploadVideoAsset({
         videoId,
@@ -257,6 +263,8 @@ export async function generateVoiceAction(input: unknown): Promise<LaunchResult>
         data: voice.audio,
         contentType: "audio/mpeg",
       });
+
+      await report("Calculando los cortes de cada toma");
 
       const { cuts, missing } = deriveCuts(video.shots, voice.words);
 
@@ -335,11 +343,25 @@ export async function generateKeyframesAction(input: unknown): Promise<LaunchRes
     productId,
     kind: "imagenes",
     label: `Keyframes · ${video.title}`,
-    work: async () => {
+    work: async (report, cancelled) => {
       let done = 0;
+      let stopped = false;
       const failures: string[] = [];
 
-      for (const shot of pending) {
+      for (const [index, shot] of pending.entries()) {
+        /*
+         * Se mira entre tomas, no en medio.
+         *
+         * La que está a medias ya está pagada, así que se termina y se guarda.
+         * Las que faltan ni se empiezan, y volver a lanzarlo solo hace esas.
+         */
+        if (await cancelled()) {
+          stopped = true;
+          break;
+        }
+
+        await report(`Toma ${shot.n} — ${index + 1} de ${pending.length}`);
+
         try {
           const url = await keyframe({
             prompt: keyframePrompt(shot, {
@@ -365,11 +387,13 @@ export async function generateKeyframesAction(input: unknown): Promise<LaunchRes
         addSpent: done * DEFAULT_RATES.keyframe,
       });
 
+      const head = stopped ? "Cancelado. " : "";
+
       return {
         summary:
           failures.length > 0
-            ? `${done} imagen(es) listas, ${failures.length} fallaron. ${failures[0]}`
-            : `${done} imagen(es) listas. Míralas antes de animar.`,
+            ? `${head}${done} imagen(es) listas, ${failures.length} fallaron. ${failures[0]}`
+            : `${head}${done} imagen(es) listas. Míralas antes de animar.`,
       };
     },
   });
@@ -427,14 +451,26 @@ export async function generateClipsAction(input: unknown): Promise<LaunchResult>
     productId,
     kind: "imagenes",
     label: `Clips · ${video.title}`,
-    work: async () => {
+    work: async (report, cancelled) => {
       let done = 0;
       let seconds = 0;
+      let stopped = false;
       const failures: string[] = [];
 
-      for (const shot of pending) {
+      for (const [index, shot] of pending.entries()) {
         const plan = plans.find((item) => item.n === shot.n);
         if (!plan) continue;
+
+        /*
+         * Aquí la parada es la que más vale: animar es casi todo el gasto de un
+         * vídeo. Cancelar a mitad ahorra las tomas que faltan de verdad.
+         */
+        if (await cancelled()) {
+          stopped = true;
+          break;
+        }
+
+        await report(`Animando la toma ${shot.n} — ${index + 1} de ${pending.length}`);
 
         try {
           const url = await animate({
@@ -459,11 +495,13 @@ export async function generateClipsAction(input: unknown): Promise<LaunchResult>
         addSpent: seconds * DEFAULT_RATES.videoPerSecond,
       });
 
+      const head = stopped ? "Cancelado. " : "";
+
       return {
         summary:
           failures.length > 0
-            ? `${done} clip(s) listos, ${failures.length} fallaron. ${failures[0]}`
-            : `${done} clip(s) listos, ${seconds} s generados.`,
+            ? `${head}${done} clip(s) listos, ${failures.length} fallaron. ${failures[0]}`
+            : `${head}${done} clip(s) listos, ${seconds} s generados.`,
       };
     },
   });
@@ -496,7 +534,10 @@ export async function assembleVideoAction(input: unknown): Promise<LaunchResult>
     productId,
     kind: "imagenes",
     label: `Montaje · ${video.title}`,
-    work: async () => {
+    work: async (report) => {
+      // El montaje es una sola llamada larga, así que no hay pasos que contar:
+      // decir que está esperando ya evita pensar que se colgó.
+      await report("Montando el vídeo: esto tarda un rato");
       const timeline = buildTimeline({
         cuts: video.shots
           .filter((shot) => shot.cutStart !== null && shot.cutEnd !== null)
