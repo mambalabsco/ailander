@@ -183,6 +183,21 @@ como env NODE_OPTIONS=--max-old-space-size=2048 npm run build
 # lo está mirando cierra la terminal y se queda sin saber en qué estado quedó.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Un reinicio mata lo que esté generándose
+#
+# El trabajo corre dentro del proceso del servidor: reiniciar a mitad de una
+# tanda de secciones la corta y hay que retomarla. Se reutiliza lo hecho, así que
+# no se pierde dinero, pero sí el rato — y pasó varias veces por no saberlo.
+#
+# Se avisa y se sigue: parar el despliegue por esto sería peor, porque el arreglo
+# que trae suele ser justo el que hacía falta.
+# ---------------------------------------------------------------------------
+
+if curl -s --max-time 5 http://localhost:3000/auth/login >/dev/null 2>&1; then
+  gris "Si tenías algo generándose, el reinicio lo corta: retómalo con «Continuar»."
+fi
+
 echo "== Reiniciando =="
 
 if ! timeout 90 systemctl restart plataforma; then

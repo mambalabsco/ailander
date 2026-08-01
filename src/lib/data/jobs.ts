@@ -151,6 +151,56 @@ export async function finishJob(
 }
 
 /**
+ * Cuándo arrancó este proceso.
+ *
+ * Es la pieza que permite saber, sin margen de duda, qué trabajos murieron: la
+ * plataforma corre en un solo proceso, así que **un trabajo creado antes de que
+ * este arrancara y que siga marcado «en marcha» no puede estar corriendo**. Se
+ * lo llevó el reinicio.
+ */
+const BOOTED_AT = new Date().toISOString();
+
+/**
+ * Marca como cortados los trabajos que se llevó un reinicio.
+ *
+ * Sin esto, un despliegue a mitad de una generación deja el trabajo diciendo «en
+ * marcha» durante hora y media —lo que tarda en caducar por tiempo— antes de
+ * admitir que murió. Y mientras tanto no ofrece el botón de continuar, porque
+ * para la interfaz sigue vivo: hay que esperar a que caduque para poder
+ * retomarlo, que es lo contrario de lo que hace falta.
+ *
+ * Comparando contra el arranque se sabe **en el acto**, y el aviso aparece con
+ * su botón en la primera carga.
+ *
+ * Corre una vez por proceso: es una escritura, y repetirla en cada pantalla no
+ * encontraría nada nuevo.
+ */
+let sweeping: Promise<void> | null = null;
+
+function sweepInterrupted(): Promise<void> {
+  sweeping ??= (async () => {
+    try {
+      const { supabase } = await requireContext();
+
+      await supabase
+        .from("background_jobs")
+        .update({
+          status: "error",
+          error:
+            "Se cortó al reiniciarse el servidor. Continúalo: lo que ya estuviera hecho se reutiliza y no se vuelve a pagar.",
+          finished_at: new Date().toISOString(),
+        })
+        .eq("status", "running")
+        .lt("created_at", BOOTED_AT);
+    } catch {
+      // Es cortesía: si falla, los trabajos caducan por tiempo como antes.
+    }
+  })();
+
+  return sweeping;
+}
+
+/**
  * Los trabajos de un producto.
  *
  * Se piden los recientes, no solo los activos: al terminar uno hay que poder
@@ -158,6 +208,8 @@ export async function finishJob(
  * persona sin saber si funcionó.
  */
 export async function listJobs(productId: string, limit = 12): Promise<BackgroundJob[]> {
+  await sweepInterrupted();
+
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
@@ -181,6 +233,8 @@ export async function listJobs(productId: string, limit = 12): Promise<Backgroun
  * modo exacto en que un dato mal sale sin que nadie se entere.
  */
 export async function listJobsByKind(kind: JobKind, limit = 12): Promise<BackgroundJob[]> {
+  await sweepInterrupted();
+
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
