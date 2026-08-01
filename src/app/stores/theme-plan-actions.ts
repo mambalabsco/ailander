@@ -310,7 +310,7 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
     kind: "tema",
     label: `Recrear ${page} · ${blueprint.storeName}`,
     revalidate: "/stores",
-    work: async () => {
+    work: async (report) => {
       const palette = paletteOf(blueprint.identity.colors);
       const vibe = describeVibe(blueprint.identity);
 
@@ -356,6 +356,10 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
       for (const [index, wanted] of plan.create.entries()) {
         const type = sectionType(wanted.kind, index);
 
+        // Antes de cada sección, no después: si se queda colgada en la cuarta,
+        // el cartel dice «cuarta» y no «tercera terminada».
+        await report(`Escribiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`);
+
         let problems: string[] = [];
         let built: { entry: TemplateEntry; file: string } | null = null;
 
@@ -367,6 +371,12 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
          * problema no es un descuido y otra vuelta solo gasta.
          */
         for (let attempt = 0; attempt < 2 && !built; attempt += 1) {
+          if (attempt > 0) {
+            await report(
+              `Corrigiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`,
+            );
+          }
+
           const generated = await generateStructured<{
             liquid: string;
             settings: { id: string; value: string }[];
@@ -445,6 +455,8 @@ export async function recreatePageAction(input: unknown): Promise<LaunchResult> 
           `No se pudo escribir ninguna sección. ${skipped[0] ?? "Vuelve a intentarlo."}`,
         );
       }
+
+      await report(`Guardando ${created.length} sección(es) en el tema`);
 
       const order = orderAfterRecreate(plan, created, current);
       const nextTemplate = writeTemplate(file.body!, created, order);

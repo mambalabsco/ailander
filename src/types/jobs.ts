@@ -49,6 +49,8 @@ export interface BackgroundJob {
   /** Lo que se le enseña a la persona. */
   label: string;
   status: "running" | "done" | "error";
+  /** Por dónde va, mientras corre. Vacío cuando no dice nada. */
+  progress: string;
   summary: string | null;
   error: string | null;
   /** Payload para los trabajos cuyo resultado la interfaz necesita en mano. */

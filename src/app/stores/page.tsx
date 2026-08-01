@@ -6,6 +6,8 @@ import { StoreBlueprints } from "@/components/store-blueprints";
 import { ShopProducts } from "@/components/shop-products";
 import { ThemePlanPanel } from "@/components/theme-plan";
 import { listBlueprints } from "@/lib/data/blueprints";
+import { listJobsByKind } from "@/lib/data/jobs";
+import { JobsPanel } from "@/components/jobs-panel";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 // Los datos viven en disco: no se puede prerenderizar.
@@ -17,6 +19,25 @@ export default async function StoresPage() {
   // Sin tumbar la página si fallan: son un añadido y las tiendas tienen que
   // aparecer igual.
   const blueprints = isSupabaseConfigured() ? await listBlueprints().catch(() => []) : [];
+
+  /*
+   * Los trabajos de esta pantalla, que no tenían dónde verse.
+   *
+   * Analizar una tienda y escribir sus secciones corren en segundo plano y
+   * pueden tardar minutos, pero aquí no había panel: el botón se quedaba
+   * girando y no había forma de saber por dónde iba ni cuándo acababa. Los de
+   * producto tienen el suyo desde el principio; este faltaba.
+   */
+  const jobs = isSupabaseConfigured()
+    ? (
+        await Promise.all([
+          listJobsByKind("competidores", 6).catch(() => []),
+          listJobsByKind("tema", 6).catch(() => []),
+        ])
+      )
+        .flat()
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    : [];
 
   const productsByMarket: Record<string, number> = {};
   for (const product of products) {
@@ -34,6 +55,8 @@ export default async function StoresPage() {
           productos que se crean duplicando, porque su investigación de mercado no es la misma.
         </p>
       </header>
+
+      {jobs.length > 0 ? <JobsPanel productId="" jobs={jobs} storeLevel /> : null}
 
       <StoresManager stores={stores} productsByMarket={productsByMarket} />
 

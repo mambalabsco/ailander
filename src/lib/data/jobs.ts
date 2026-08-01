@@ -17,6 +17,7 @@ function toJob(row: {
   kind: string;
   label: string;
   status: string;
+  progress?: string | null;
   summary: string | null;
   error: string | null;
   result: unknown;
@@ -32,6 +33,7 @@ function toJob(row: {
     kind: row.kind as JobKind,
     label: row.label,
     status: row.status === "done" ? "done" : row.status === "error" ? "error" : "running",
+    progress: row.progress ?? "",
     summary: row.summary,
     error: row.error,
     result: row.result ?? null,
@@ -68,6 +70,22 @@ export async function createJob(input: {
   if (error) throw new Error(`No se pudo registrar el trabajo: ${error.message}`);
 
   return data.id;
+}
+
+/**
+ * Deja dicho por dónde va el trabajo.
+ *
+ * No falla nunca hacia fuera: es información de cortesía, y perder el hilo del
+ * progreso no puede tumbar la generación que sí importa. Si la escritura falla,
+ * el trabajo sigue y el cartel se queda como estaba.
+ */
+export async function reportProgress(jobId: string, progress: string): Promise<void> {
+  try {
+    const { supabase } = await requireContext();
+    await supabase.from("background_jobs").update({ progress }).eq("id", jobId);
+  } catch {
+    return;
+  }
 }
 
 export async function finishJob(

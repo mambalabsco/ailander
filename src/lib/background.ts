@@ -2,7 +2,7 @@ import "server-only";
 
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
-import { createJob, finishJob } from "@/lib/data/jobs";
+import { createJob, finishJob, reportProgress } from "@/lib/data/jobs";
 import { describeApiError } from "@/lib/api-errors";
 import { logError } from "@/lib/data/errors";
 import type { JobKind, LaunchResult } from "@/types/jobs";
@@ -50,7 +50,14 @@ export async function runInBackground(options: {
   productId?: string | null;
   kind: JobKind;
   label: string;
-  work: () => Promise<JobOutcome>;
+  /**
+   * El trabajo. Recibe con qué ir contando por dónde va.
+   *
+   * Se le pasa en vez de exponer el identificador porque así quien escribe el
+   * trabajo no tiene que saber que existen las filas de trabajos: llama a
+   * `report("Comparativa (4 de 11)")` y ya.
+   */
+  work: (report: (progress: string) => Promise<void>) => Promise<JobOutcome>;
   /** Ruta a refrescar al terminar. Por defecto, la del producto. */
   revalidate?: string;
 }): Promise<StartedJob> {
@@ -65,7 +72,7 @@ export async function runInBackground(options: {
 
   after(async () => {
     try {
-      const outcome = await options.work();
+      const outcome = await options.work((progress) => reportProgress(jobId, progress));
 
       await finishJob(jobId, {
         status: "done",

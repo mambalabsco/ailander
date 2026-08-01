@@ -114,6 +114,17 @@ export function JobsPanel({
                   {JOB_KIND_LABELS[job.kind] ?? job.kind} · {job.label}
                 </p>
 
+                {/*
+                  Por dónde va, mientras corre.
+
+                  Sin esto, una tanda que escribe once secciones son varios
+                  minutos mirando un botón girando sin saber si va por la segunda
+                  o por la décima, ni si se ha colgado.
+                */}
+                {job.status === "running" && job.progress ? (
+                  <p className="text-sm text-violet-700 dark:text-violet-300">{job.progress}</p>
+                ) : null}
+
                 {job.status === "done" && job.summary ? (
                   <p className="text-sm text-slate-600 dark:text-slate-300">{job.summary}</p>
                 ) : null}

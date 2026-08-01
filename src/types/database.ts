@@ -431,6 +431,8 @@ type BackgroundJobRow = {
   kind: string;
   label: string;
   status: string;
+  /** Por dónde va mientras corre. */
+  progress: string;
   summary: string | null;
   error: string | null;
   result: unknown;
