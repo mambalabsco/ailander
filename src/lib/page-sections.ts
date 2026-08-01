@@ -98,8 +98,14 @@ export function selectorsIn(html: string): Set<string> {
   return found;
 }
 
-/** Cuánto CSS se le pasa al modelo por sección. Más allá es ruido y coste. */
-export const CSS_LIMIT = 12_000;
+/**
+ * Cuánto CSS se le pasa al modelo por sección.
+ *
+ * Subió de doce mil a treinta al descubrir que solo se estaban bajando cuatro de
+ * las veintiséis hojas que enlaza la página: ahora llega el CSS de verdad y
+ * recortarlo a doce mil habría cambiado un problema por otro.
+ */
+export const CSS_LIMIT = 30_000;
 
 /**
  * Las reglas que pintan ese trozo, y solo esas.
@@ -115,7 +121,21 @@ export function relevantCss(css: string, selectors: Set<string>, limit = CSS_LIM
   const kept: string[] = [];
 
   const matches = (selector: string): boolean => {
-    if (/^:root\b/.test(selector.trim())) return true;
+    const clean = selector.trim();
+
+    if (/^:root\b/.test(clean)) return true;
+
+    /*
+     * Las reglas de elemento suelto también entran.
+     *
+     * `h2 { font-family: … }` o `p { line-height: … }` no mencionan ninguna
+     * clase, así que el filtro las tiraba — y ahí es justo donde viven el tamaño
+     * y la letra base. Sin ellas se copiaba la estructura con la tipografía por
+     * defecto, que es la mitad de por qué no se parecía.
+     */
+    if (/^(html|body|\*|h[1-6]|p|a|ul|ol|li|img|button|figure|blockquote|small|strong|em)\b/.test(clean)) {
+      return true;
+    }
 
     for (const name of selectors) {
       // Con el límite de palabra por detrás: `.card` no debe llevarse
@@ -329,7 +349,7 @@ export function sectionFonts(css: string): string[] {
 /* ------------------------------- Recortar el HTML -------------------------- */
 
 /** Cuánto marcado se le pasa al modelo por sección. */
-export const HTML_LIMIT = 14_000;
+export const HTML_LIMIT = 24_000;
 
 /**
  * El marcado, sin lo que no aporta a entender la disposición.

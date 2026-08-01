@@ -240,3 +240,20 @@ test("los sellos de pago y los espaciadores no son contenido", () => {
 
   assert.deepEqual(sectionImages(html, ORIGIN), []);
 });
+
+test("las reglas de elemento suelto no se pierden", () => {
+  // `h2 { font-family: … }` no menciona ninguna clase, y ahí es donde viven el
+  // tamaño y la letra base: sin ellas se copiaba la estructura con la
+  // tipografía por defecto.
+  const hoja = `
+    h2 { font-family: Trirong; font-size: 3rem }
+    body { line-height: 1.6 }
+    .carrito__total { font-weight: 700 }
+  `;
+
+  const css = relevantCss(hoja, selectorsIn(`<div class="hero"><h2></h2></div>`));
+
+  assert.match(css, /Trirong/);
+  assert.match(css, /line-height/);
+  assert.ok(!css.includes("carrito__total"), "sigue sin colarse lo del carrito");
+});

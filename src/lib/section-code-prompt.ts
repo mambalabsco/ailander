@@ -78,7 +78,17 @@ Y estas son las reglas de estilo que la pintan:
 ${options.reference.css}
 \`\`\`
 
-**Léelo para sacar las medidas.** Cuántas columnas y en qué proporción, el tamaño del titular contra el del cuerpo, el aire entre bloques, el radio y el relleno de los botones, dónde cae la imagen y hasta dónde llega, qué cambia en el móvil.
+## Pórtalo, no lo reinterpretes
+
+El objetivo es que **se vea exactamente igual**. Así que no mires ese CSS para inspirarte: pásalo, declaración por declaración.
+
+Recorre sus reglas y **conserva todos los valores que afectan a cómo se ve**: los tamaños de letra con su unidad, los pesos, el interletrado, la altura de línea, los márgenes y rellenos exactos, las proporciones de la retícula, los radios, las sombras, los degradados, las transiciones, las transformaciones, los \`object-fit\`, los \`z-index\`, y lo que cambia en cada \`@media\`.
+
+Lo único que cambia son **los nombres de las clases**, que pasan a ser los tuyos y van encerrados en \`#shopify-section-{{ section.id }}\`. Sus clases no existen en este tema: si las dejas, la sección sale sin estilo.
+
+Si una regla usa una variable del tema —\`var(--color-foreground)\`— sustitúyela por el valor al que resuelve, que lo tienes en las variables de arriba, o por el ajuste de color de tu sección. Una variable que aquí no existe deja la propiedad sin valor y el navegador la ignora en silencio.
+
+**No simplifiques.** Si el original tiene una sombra de tres capas y una transición de 0,4 s con una curva concreta, van las tres capas y esa curva. «Parecido» es lo que se lleva pidiendo varias vueltas y no funciona.
 
 Y tres cosas que se escapan si no se miran a propósito:
 
@@ -96,9 +106,9 @@ Lo que sí importa aunque falte la fuente: si el titular es serif y el cuerpo sa
     : ""
 }
 
-**Y escribe el tuyo.** Ese CSS está atado al armazón de su tema —sus variables, sus clases, su retícula— y pegado aquí daría un diseño roto, no uno idéntico. Reproduce las medidas con CSS propio, encerrado en tu sección y sin depender de nada de fuera. Sus clases no existen en este tema: usa las tuyas.
+El marcado, igual: la misma estructura de elementos anidados, en el mismo orden, con las mismas etiquetas. Si su titular es un \`h1\` dentro de un \`div\` con dos hijos, hazlo así — el CSS que estás portando cuenta con esa estructura y con otra no encaja.
 
-Del texto que veas ahí, nada. El contenido sale de la investigación de arriba.
+Del **texto** que veas ahí, nada: el contenido sale de la investigación de arriba. Se porta cómo se ve, no lo que dice.
 
 `
     : ""

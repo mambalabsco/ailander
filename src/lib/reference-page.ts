@@ -32,8 +32,19 @@ import {
 const USER_AGENT =
   "Mozilla/5.0 (compatible; PlataformaIA/1.0; analisis-de-estructura)";
 
-/** Cuántas hojas de estilo se bajan. Un tema reparte el suyo en dos o tres. */
-const MAX_SHEETS = 4;
+/**
+ * Cuántas hojas de estilo se bajan.
+ *
+ * Eran cuatro, y esa era la razón de fondo de que las secciones no se parecieran.
+ * La portada real de la referencia enlaza **veintiséis**: los temas de Shopify
+ * parten su CSS por secciones —`section-hero.css`, `component-card.css`— así que
+ * con cuatro se bajaba lo genérico y se perdía justo lo que pinta cada bloque.
+ *
+ * Se bajan en paralelo y una vez por generación, no por sección. Lo que evita
+ * que crezca sin control no es este número sino el filtro: de todo lo bajado solo
+ * viaja lo que toca el trozo que se está copiando.
+ */
+const MAX_SHEETS = 26;
 
 async function get(url: string, timeoutMs: number): Promise<string> {
   const controller = new AbortController();
