@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   MAX_SECTION_BYTES,
   blockSettingsOf,
+  coerceBlockType,
   coerceSettings,
   fillImageUrls,
   imageUrlSlots,
@@ -348,4 +349,35 @@ test("un esquema ilegible no se toca aquí: ya lo caza la revisión", () => {
   const roto = `<div>x</div>\n{% schema %}\n{ "name": "X", }\n{% endschema %}`;
 
   assert.deepEqual(stripBlankDefaults(roto), { source: roto, removed: 0 });
+});
+
+/* --------------------------- El tipo de los bloques ------------------------ */
+
+const CON_BLOQUES = {
+  blocks: [
+    { type: "resena", settings: [{ id: "cita" }, { id: "autor" }] },
+    { type: "dato", settings: [{ id: "cifra" }, { id: "pie" }] },
+  ],
+};
+
+test("un tipo que sí está declarado se respeta", () => {
+  assert.equal(coerceBlockType(CON_BLOQUES, "dato", ["cifra"]), "dato");
+});
+
+test("un tipo inventado se lleva al que más ajustes comparte", () => {
+  // Shopify rechaza el archivo entero con «Type must be defined in schema».
+  // Meterlos todos en el primero dejaría medio bloque vacío sin fallar nada.
+  assert.equal(coerceBlockType(CON_BLOQUES, "estadistica", ["cifra", "pie"]), "dato");
+  assert.equal(coerceBlockType(CON_BLOQUES, "testimonio", ["cita", "autor"]), "resena");
+});
+
+test("con un solo tipo declarado va ahí, comparta o no", () => {
+  const uno = { blocks: [{ type: "item", settings: [{ id: "titulo" }] }] };
+
+  assert.equal(coerceBlockType(uno, "loquesea", ["nada"]), "item");
+});
+
+test("si el esquema no declara bloques, sobran", () => {
+  // Colocarlos igualmente sería el mismo fallo por el otro lado.
+  assert.equal(coerceBlockType({ settings: [] }, "item", []), null);
 });

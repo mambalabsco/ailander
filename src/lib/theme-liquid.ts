@@ -407,6 +407,54 @@ export function coerceSettings(
   return settings;
 }
 
+/**
+ * El tipo de bloque, ajustado al que declara el esquema.
+ *
+ * Shopify rechaza el archivo con «Invalid value for type in block \'b1\'. Type
+ * must be defined in schema». Pasa porque el modelo escribe el marcado y el
+ * contenido en la misma respuesta y a veces los nombra distinto: declara un
+ * bloque `item` y devuelve los contenidos como `resena`.
+ *
+ * Se arregla aquí y no pidiéndoselo, igual que los `default` vacíos: el nombre
+ * del tipo no cambia nada de lo que se ve —solo tiene que coincidir— así que
+ * corregirlo siempre acierta.
+ *
+ * Con varios tipos declarados se elige **el que más ajustes comparte** con el
+ * bloque. Una sección que declara «reseña» y «estadística» tiene contenidos
+ * distintos en cada uno, y meterlos todos en el primero dejaría medio bloque
+ * vacío sin que nada fallara.
+ *
+ * Devuelve `null` si el esquema no declara bloques: entonces sobran, y colocarlos
+ * sería volver a lo mismo por el otro lado.
+ */
+export function coerceBlockType(
+  schema: SectionSchema,
+  type: string,
+  settingIds: string[],
+): string | null {
+  const declared = (schema.blocks ?? []).flatMap((block) =>
+    typeof block?.type === "string" ? [block] : [],
+  );
+
+  if (declared.length === 0) return null;
+  if (declared.some((block) => block.type === type)) return type;
+
+  let best = declared[0];
+  let bestScore = -1;
+
+  for (const candidate of declared) {
+    const ids = new Set((candidate.settings ?? []).map((setting) => setting?.id));
+    const score = settingIds.filter((id) => ids.has(id)).length;
+
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best.type ?? null;
+}
+
 /** Los ajustes que declara un tipo de bloque del esquema. */
 export function blockSettingsOf(schema: SectionSchema, type: string): { id?: string; type?: string }[] {
   return schema.blocks?.find((block) => block.type === type)?.settings ?? [];

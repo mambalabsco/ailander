@@ -46,6 +46,7 @@ import {
 } from "@/lib/theme-sections";
 import {
   blockSettingsOf,
+  coerceBlockType,
   coerceSettings,
   fillImageUrls,
   imageUrlSlots,
@@ -480,10 +481,30 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           sectionType: job.type,
           liquid,
           settings: withPhotos.settings,
-          blocks: generated.data.blocks.map((block) => ({
-            type: block.type,
-            settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
-          })),
+          /*
+           * El tipo de cada bloque se ajusta al que declara el esquema.
+           *
+           * El modelo escribe el marcado y el contenido en la misma respuesta y
+           * a veces los nombra distinto —declara `item` y devuelve `resena`—.
+           * Shopify rechaza el archivo entero por eso, y el nombre del tipo no
+           * cambia nada de lo que se ve: solo tiene que coincidir.
+           */
+          blocks: generated.data.blocks.flatMap((block) => {
+            const type = coerceBlockType(
+              review.schema!,
+              block.type,
+              block.settings.map((setting) => setting.id),
+            );
+
+            if (!type) return [];
+
+            return [
+              {
+                type,
+                settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, type)),
+              },
+            ];
+          }),
         };
 
         return {
@@ -536,12 +557,27 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           // mismo rechazo para siempre.
           job.type = saved.sectionType;
           job.file = stripBlankDefaults(saved.liquid).source;
+
+          /*
+           * Lo guardado se repara con su propio esquema.
+           *
+           * Los borradores anteriores a este arreglo llevan tipos de bloque que
+           * Shopify rechaza. Sin repararlos, la caché —que está para no pagar dos
+           * veces— devolvería el mismo rechazo para siempre.
+           */
+          const schema = reviewSection(job.file).schema;
+
           job.entry = buildTemplateEntry({
             kind: job.wanted.kind,
             type: saved.sectionType,
             index: job.index,
             settings: saved.settings,
-            blocks: saved.blocks,
+            blocks: schema
+              ? saved.blocks.flatMap((block) => {
+                  const type = coerceBlockType(schema, block.type, Object.keys(block.settings));
+                  return type ? [{ type, settings: block.settings }] : [];
+                })
+              : saved.blocks,
           });
           reused += 1;
           continue;
