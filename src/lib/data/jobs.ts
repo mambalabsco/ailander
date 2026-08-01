@@ -111,6 +111,41 @@ export async function reportProgress(jobId: string, progress: string): Promise<v
   }
 }
 
+/** Pide que un trabajo se pare. Él lo mira entre pasos. */
+export async function requestCancel(jobId: string): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("background_jobs")
+    .update({ cancel_requested: true })
+    .eq("id", jobId)
+    .eq("status", "running");
+
+  if (error) throw new Error(`No se pudo cancelar: ${error.message}`);
+}
+
+/**
+ * Si le han pedido pararse.
+ *
+ * Falla hacia «sigue»: perder la consulta no puede detener una generación que va
+ * bien, y quien quiera pararla puede volver a pulsar.
+ */
+export async function cancelRequested(jobId: string): Promise<boolean> {
+  try {
+    const { supabase } = await requireContext();
+
+    const { data } = await supabase
+      .from("background_jobs")
+      .select("cancel_requested")
+      .eq("id", jobId)
+      .maybeSingle();
+
+    return data?.cancel_requested === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function finishJob(
   jobId: string,
   input: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, SelectField } from "@/components/ui";
 import {
   applyLookAction,
@@ -85,6 +85,18 @@ export function ThemePlanPanel({
   const [targetTheme, setTargetTheme] = useState("");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const shotsRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+
+  /*
+   * El aviso sale arriba del panel y los botones están abajo.
+   *
+   * Pulsando «Escribirlas otra vez» la acción se ejecutaba y la respuesta
+   * aparecía fuera de la pantalla: se leía como que el botón no hacía nada. Se
+   * lleva la vista hasta el aviso en cuanto cambia.
+   */
+  useEffect(() => {
+    if (message) messageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [message]);
   const [isPending, startTransition] = useTransition();
 
   if (blueprints.length === 0) {
@@ -177,7 +189,7 @@ export function ThemePlanPanel({
       </div>
 
       {message ? (
-        <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <p ref={messageRef} className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           {message}
         </p>
       ) : null}
@@ -552,20 +564,27 @@ export function ThemePlanPanel({
             <Button
               variant="ghost"
               disabled={isPending}
-              onClick={() =>
-                startTransition(async () => {
-                  if (
-                    !window.confirm(
-                      "Las secciones ya escritas se reutilizan sin volver a pagarlas.\n\n¿Olvidarlas y escribirlas de nuevo? La próxima vez se vuelven a cobrar.",
-                    )
-                  ) {
-                    return;
-                  }
+              onClick={() => {
+                /*
+                 * El aviso va **fuera** de la transición.
+                 *
+                 * Dentro, el diálogo se abre desde una llamada asíncrona y hay
+                 * navegadores que ya no la consideran parte del gesto del
+                 * usuario: no aparece nada y el botón parece roto.
+                 */
+                if (
+                  !window.confirm(
+                    "Las secciones ya escritas se reutilizan sin volver a pagarlas.\n\n¿Olvidarlas y escribirlas de nuevo? La próxima vez se vuelven a cobrar.",
+                  )
+                ) {
+                  return;
+                }
 
+                startTransition(async () => {
                   const result = await clearSectionDraftsAction(blueprintId, plan.page);
                   setMessage(result.message);
-                })
-              }
+                });
+              }}
             >
               Escribirlas otra vez desde cero
             </Button>

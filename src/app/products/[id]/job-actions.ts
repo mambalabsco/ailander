@@ -7,6 +7,7 @@ import {
   readJob,
   readJobResume,
   readLatestJob,
+  requestCancel,
 } from "@/lib/data/jobs";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { BackgroundJob, JobKind } from "@/types/jobs";
@@ -82,6 +83,29 @@ export async function resumeJobAction(
   }
 
   return { ok: false, message: "Ese tipo de trabajo todavía no se puede continuar desde aquí." };
+}
+
+/**
+ * Pide a un trabajo que se pare.
+ *
+ * No lo mata: el trabajo vive dentro del proceso del servidor y matarlo desde
+ * fuera sería matar el servidor. Se le deja la petición y él la mira entre
+ * pasos, así que puede tardar lo que dure el paso en curso — que además conviene
+ * terminar, porque ya está pagado.
+ */
+export async function cancelJobAction(jobId: unknown): Promise<{ ok: boolean; message: string }> {
+  if (typeof jobId !== "string" || !jobId) return { ok: false, message: "Falta el trabajo." };
+
+  try {
+    await requestCancel(jobId);
+
+    return {
+      ok: true,
+      message: "Se parará al terminar el paso en curso. Lo hecho queda guardado.",
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo cancelar." };
+  }
 }
 
 /** Limpia los terminados. Los que siguen en marcha no se tocan. */

@@ -2,7 +2,7 @@ import "server-only";
 
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
-import { createJob, finishJob, reportProgress } from "@/lib/data/jobs";
+import { cancelRequested, createJob, finishJob, reportProgress } from "@/lib/data/jobs";
 import { describeApiError } from "@/lib/api-errors";
 import { logError } from "@/lib/data/errors";
 import type { JobKind, LaunchResult } from "@/types/jobs";
@@ -57,7 +57,17 @@ export async function runInBackground(options: {
    * trabajo no tiene que saber que existen las filas de trabajos: llama a
    * `report("Comparativa (4 de 11)")` y ya.
    */
-  work: (report: (progress: string) => Promise<void>) => Promise<JobOutcome>;
+  work: (
+    report: (progress: string) => Promise<void>,
+    /**
+     * Si han pedido parar.
+     *
+     * Se consulta entre pasos, no en medio de uno: el paso que está a medias ya
+     * está pagado, así que se termina y se guarda. Los que faltaban ni se
+     * empiezan, y continuar después reutiliza todo lo hecho.
+     */
+    cancelled: () => Promise<boolean>,
+  ) => Promise<JobOutcome>;
   /** Ruta a refrescar al terminar. Por defecto, la del producto. */
   revalidate?: string;
   /**
@@ -81,7 +91,10 @@ export async function runInBackground(options: {
 
   after(async () => {
     try {
-      const outcome = await options.work((progress) => reportProgress(jobId, progress));
+      const outcome = await options.work(
+        (progress) => reportProgress(jobId, progress),
+        () => cancelRequested(jobId),
+      );
 
       await finishJob(jobId, {
         status: "done",

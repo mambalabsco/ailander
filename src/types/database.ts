@@ -435,6 +435,8 @@ type BackgroundJobRow = {
   progress: string;
   /** Con qué relanzarlo si se corta. Solo identificadores. */
   resume: unknown;
+  /** Si se ha pedido que se pare. Lo mira él entre pasos. */
+  cancel_requested: boolean;
   summary: string | null;
   error: string | null;
   result: unknown;

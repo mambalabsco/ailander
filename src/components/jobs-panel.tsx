@@ -3,7 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { clearJobsAction, resumeJobAction } from "@/app/products/[id]/job-actions";
+import {
+  cancelJobAction,
+  clearJobsAction,
+  resumeJobAction,
+} from "@/app/products/[id]/job-actions";
 import { clearDataJobsAction } from "@/app/datos/actions";
 import { JOB_KIND_LABELS, isStale, type BackgroundJob } from "@/types/jobs";
 
@@ -186,6 +190,29 @@ export function JobsPanel({
                   página—; con una equivocada, el trabajo sale distinto sin
                   avisar.
                 */}
+                {/*
+                  Cancelar lo que está en marcha.
+
+                  No lo mata —el trabajo vive dentro del proceso del servidor—:
+                  le deja la petición y él se para al terminar el paso en curso,
+                  que además conviene terminar porque ya está pagado.
+                */}
+                {job.status === "running" && !abandoned ? (
+                  <Button
+                    variant="secondary"
+                    disabled={isPending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const result = await cancelJobAction(job.id);
+                        setNote(result.message);
+                        router.refresh();
+                      })
+                    }
+                  >
+                    {isPending ? "Cancelando…" : "Cancelar"}
+                  </Button>
+                ) : null}
+
                 {resumable ? (
                   <Button
                     variant="secondary"

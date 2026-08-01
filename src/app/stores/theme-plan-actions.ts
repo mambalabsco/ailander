@@ -371,7 +371,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
      * resultado salvo que se hubieran subido para algo muy concreto.
      */
     resume: { storeId, themeId, blueprintId, page, productId },
-    work: async (report) => {
+    work: async (report, cancelled) => {
       const palette = paletteOf(blueprint.identity.colors);
       const vibe = describeVibe(blueprint.identity);
 
@@ -512,7 +512,20 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
         entry: null,
       }));
 
+      let stopped = false;
+
       for (const job of jobs) {
+        /*
+         * Se mira antes de empezar cada sección, no en medio.
+         *
+         * La que esté a medias ya está pagada, así que se termina y se guarda.
+         * Las que faltan ni se empiezan, y al continuar se reutiliza todo.
+         */
+        if (await cancelled()) {
+          stopped = true;
+          break;
+        }
+
         const saved = drafts.get(`${job.wanted.kind}:${job.ordinal}`);
 
         if (saved) {
@@ -633,6 +646,15 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
 
       const usable = jobs.filter((job) => job.written && job.entry).map((job) => job.entry!);
 
+      if (usable.length === 0 && stopped) {
+        return {
+          summary:
+            "Cancelado antes de escribir nada. Lo que se hubiera generado queda guardado: al continuar no se vuelve a pagar.",
+          inputTokens,
+          outputTokens,
+        };
+      }
+
       if (usable.length === 0) {
         const first = jobs.find((job) => job.rejectedBy || job.problems.length > 0);
         throw new Error(
@@ -657,6 +679,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
 
       return {
         summary: [
+          stopped ? "Cancelado. " : "",
           `${usable.length} de ${jobs.length} secciones en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           ".",
@@ -673,6 +696,9 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
                     `${job.wanted.kind} — ${job.rejectedBy ?? job.problems[0] ?? "no pasó la revisión"}`,
                 )
                 .join(" | ")}`
+            : "",
+          stopped
+            ? " Las que faltan siguen pendientes: continúa el trabajo cuando quieras y no se vuelve a pagar lo hecho."
             : "",
           " Míralo en la vista previa antes de publicar.",
         ].join(""),
