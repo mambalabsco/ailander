@@ -3,6 +3,7 @@ import "server-only";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { cancelRequested, createJob, finishJob, reportProgress } from "@/lib/data/jobs";
+import { requireBudget } from "@/lib/permissions";
 import { describeApiError } from "@/lib/api-errors";
 import { logError } from "@/lib/data/errors";
 import type { JobKind, LaunchResult } from "@/types/jobs";
@@ -79,6 +80,15 @@ export async function runInBackground(options: {
    */
   resume?: Record<string, unknown>;
 }): Promise<StartedJob> {
+  /*
+   * El permiso y el presupuesto se comprueban **aquí**.
+   *
+   * Es el único sitio por el que pasa todo lo que cuesta dinero: cada
+   * generación de la plataforma acaba llamando a esto. Comprobarlo en cada
+   * acción sería repetirlo en veinte sitios y olvidarlo en el veintiuno.
+   */
+  await requireBudget();
+
   const jobId = await createJob({
     productId: options.productId,
     kind: options.kind,

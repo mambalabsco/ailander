@@ -57,6 +57,12 @@ export type DbImageSource = "subida" | "generada";
 type ProfileRow = {
   id: string;
   display_name: string;
+  email: string;
+  /** dueño, admin, editor, redactor, analista, invitado. Ver `src/lib/roles.ts`. */
+  role: string;
+  /** `numeric`: llega como texto. `null` es sin tope de gasto. */
+  monthly_limit_usd: number | null;
+  disabled: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -781,6 +787,15 @@ type AdaptedImageRow = {
   created_at: string;
 };
 
+type AuditLogRow = {
+  id: string;
+  user_id: string;
+  action: string;
+  target: string;
+  detail: unknown;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -1068,6 +1083,8 @@ export type Database = {
         >,
         [Belongs<"store_id", "stores">]
       >;
+
+      audit_log: Table<AuditLogRow, Insertable<AuditLogRow, Exclude<keyof AuditLogRow, "user_id" | "action">>>;
       adapted_images: Table<
         AdaptedImageRow,
         Insertable<AdaptedImageRow, Exclude<keyof AdaptedImageRow, "user_id" | "product_id" | "source_url">>

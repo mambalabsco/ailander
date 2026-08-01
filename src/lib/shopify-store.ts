@@ -1,5 +1,7 @@
 import "server-only";
 
+import { record, requireCapability } from "@/lib/permissions";
+
 import { shopifyGraphql } from "@/lib/shopify";
 import type { Store } from "@/types/store";
 
@@ -425,6 +427,18 @@ export async function writeThemeFiles(
   themeId: string,
   files: { filename: string; content: string }[],
 ): Promise<number> {
+  /*
+   * Escribir en un tema es lo que ven los clientes en cuanto se guarda.
+   *
+   * Se exige el permiso aquí, pegado a la llamada, y no en el botón: ocultar el
+   * botón no impide llamar a la acción de servidor. Y queda anotado, porque
+   * cuando algo sale mal la pregunta es siempre quién y cuándo.
+   */
+  await requireCapability("publicar");
+  await record("tema.escribir", `${store.shopifyShopDomain ?? store.name} · ${themeId}`, {
+    archivos: files.map((file) => file.filename),
+  });
+
   let written = 0;
 
   for (let index = 0; index < files.length; index += 50) {

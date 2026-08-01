@@ -6,19 +6,31 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { THEME_STORAGE_KEY } from "@/components/theme-script";
 import { signOut } from "@/app/auth/actions";
 
-const navigation = [
+import type { Capability } from "@/lib/roles";
+
+/**
+ * El menú, con el permiso que hace falta para cada sitio.
+ *
+ * Recortarlo es **cortesía, no protección**: un enlace escondido se puede
+ * escribir en la barra de direcciones, y la acción de servidor sigue estando
+ * ahí. Lo que protege son las comprobaciones pegadas al dato. Esto solo evita
+ * enseñar puertas que se van a cerrar en la cara.
+ */
+const navigation: { href: string; label: string; icon: string; needs?: Capability }[] = [
   { href: "/", label: "Dashboard", icon: "◉" },
   { href: "/products", label: "Productos propios", icon: "◌" },
   { href: "/stores", label: "Tiendas y mercados", icon: "⌂" },
-  { href: "/datos", label: "Datos y beneficio", icon: "◈" },
+  { href: "/datos", label: "Datos y beneficio", icon: "◈", needs: "dinero" },
   { href: "/competitors", label: "Competidores", icon: "◎" },
   { href: "/ads", label: "Biblioteca de anuncios", icon: "⬢" },
-  { href: "/imagenes", label: "Adaptador de imágenes", icon: "▦" },
+  { href: "/imagenes", label: "Adaptador de imágenes", icon: "▦", needs: "gastar" },
   { href: "/analyzer", label: "Analizador", icon: "◍" },
   { href: "/copy", label: "Generador de copy", icon: "✦" },
   { href: "/comparisons", label: "Comparaciones", icon: "▣" },
   { href: "/history", label: "Historial", icon: "◫" },
-  { href: "/settings", label: "Configuración", icon: "⚙" },
+  { href: "/cuenta", label: "Tu cuenta", icon: "◑" },
+  { href: "/admin", label: "Administración", icon: "◭", needs: "personas" },
+  { href: "/settings", label: "Configuración", icon: "⚙", needs: "ajustes" },
 ];
 
 function isActiveRoute(pathname: string, href: string) {
@@ -46,9 +58,21 @@ interface LayoutShellProps {
   userEmail?: string | null;
   /** Si Supabase todavía no está configurado, la plataforma va con datos locales. */
   demoMode?: boolean;
+  /** Lo que puede quien está dentro, para no enseñarle puertas cerradas. */
+  capabilities?: string[];
 }
 
-export function LayoutShell({ children, userEmail, demoMode }: LayoutShellProps) {
+export function LayoutShell({ children, userEmail, demoMode, capabilities }: LayoutShellProps) {
+  /*
+   * Sin lista de permisos se enseña todo.
+   *
+   * Es el caso de la demo, sin Supabase configurado: ahí no hay perfiles y
+   * esconder medio menú haría parecer que la plataforma no tiene esas pantallas.
+   */
+  const visible = capabilities
+    ? navigation.filter((item) => !item.needs || capabilities.includes(item.needs))
+    : navigation;
+
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const darkMode = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => false);
@@ -106,7 +130,7 @@ export function LayoutShell({ children, userEmail, demoMode }: LayoutShellProps)
           </div>
 
           <nav className="mt-8 space-y-2">
-            {navigation.map((item) => {
+            {visible.map((item) => {
               const active = isActiveRoute(pathname, item.href);
               return (
                 <Link
