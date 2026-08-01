@@ -24,9 +24,14 @@ import { generateStructured } from "@/lib/generators";
 import { runInBackground } from "@/lib/background";
 import { SECTION_CODE_SCHEMA } from "@/lib/generation-schemas";
 import { buildSectionCodePrompt } from "@/lib/section-code-prompt";
-import { readReferenceSections, takeForRole } from "@/lib/reference-page";
+import {
+  readReferenceSections,
+  takeForRole,
+  type ReferenceSection,
+} from "@/lib/reference-page";
 import {
   clearSectionDrafts,
+  forgetSectionDraft,
   readSectionDrafts,
   saveSectionDraft,
   type SectionDraft,
@@ -371,36 +376,19 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       const vibe = describeVibe(blueprint.identity);
 
       /*
-       * Las fotos son **de la tienda de referencia**, y son provisionales.
-       *
-       * Sirven para poder juzgar la maqueta: una sección con el hueco vacío no
-       * dice si la foto va a la izquierda, cuánto pesa al lado del texto ni si
-       * el titular respira. Con una imagen del tamaño correcto puesta, sí.
+       * Las fotos son de la tienda de referencia y son provisionales.
        *
        * Se **enlazan**, no se copian: nada se descarga ni se sube a esta tienda,
-       * así que quitarlas es borrar un texto y no queda rastro. Hay una acción
-       * que las quita todas de golpe, y el resumen dice cuántas quedaron.
-       *
-       * Hay que sustituirlas antes de publicar. En un suplemento el envase es el
-       * producto: una página publicada con el frasco de otro anuncia algo
-       * distinto de lo que llega en el paquete.
+       * así que quitarlas es borrar un texto. Hay que sustituirlas antes de
+       * publicar — en un suplemento el envase es el producto.
        */
-      /*
-       * La página de referencia se descarga y se parte en sus secciones.
-       *
-       * Es lo que evita tener que pedir capturas: la página ya se sabe
-       * descargar, solo faltaba quedarse con el trozo de cada sección y las
-       * reglas que lo pintan. Con eso delante se ven las medidas —cuántas
-       * columnas, qué tamaño tiene el titular, cuánto aire hay— que no se
-       * deducen de una frase.
-       */
-      /*
-       * Lo que ya se escribió antes no se vuelve a pagar.
-       *
-       * Un corte a mitad —un reinicio del servidor— tiraba las secciones ya
-       * hechas y había que pagarlas de nuevo. Ahora se leen las guardadas y solo
-       * se genera lo que falta.
-       */
+      const photos = blueprint.images.map((image) => image.url);
+      const photoNote =
+        photos.length === 0
+          ? " Ese análisis no trae imágenes; vuelve a analizar la tienda si quieres maqueta."
+          : "";
+
+      // Lo escrito en un intento anterior no se vuelve a pagar.
       const drafts = await readSectionDrafts(blueprintId, page);
 
       await report("Leyendo la página de referencia");
@@ -412,243 +400,238 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
 
       const pool = await readReferenceSections(referencePage);
 
-      const photos = blueprint.images.map((image) => image.url);
-      const photoNote =
-        photos.length === 0
-          ? "Ese análisis no trae imágenes; si es anterior a esta versión, vuelve a analizar la tienda."
-          : "";
-
-      const created: TemplateEntry[] = [];
-      const files: { filename: string; content: string }[] = [];
-      const skipped: string[] = [];
-
       let inputTokens = 0;
       let outputTokens = 0;
-      // Se va avanzando por las fotos para no repetir la misma en cada sección
-      // mientras queden otras sin usar.
       let filledPhotos = 0;
-      // Cuántas se escribieron con su sección de referencia delante, para poder
-      // decirlo: la diferencia entre eso y no tenerla se nota en el resultado.
       let matched = 0;
-      // Cuántas venían ya escritas de un intento anterior.
       let reused = 0;
 
-      /*
-       * Una llamada por sección, en serie.
+      /**
+       * Escribe una sección y la deja revisada.
        *
-       * En paralelo iría más rápido, pero cada sección son unos miles de tokens
-       * de salida y lanzarlas todas a la vez choca con el límite de la cuenta
-       * justo cuando la página tiene muchas secciones — o sea, en el caso que
-       * más importa. En serie tarda un minuto y termina siempre.
+       * `problems` es lo que hay que corregir: puede venir de la revisión propia
+       * o **del propio Shopify** cuando rechazó el archivo. Es el mismo camino
+       * en los dos casos, y por eso se repara igual de bien un `{% for %}` sin
+       * cerrar que una regla de esquema que aquí no se conocía.
        */
-      for (const [index, wanted] of plan.create.entries()) {
-        const type = sectionType(wanted.kind, index);
+      const writeOne = async (
+        job: SectionJob,
+        problems: string[],
+      ): Promise<{ file: string; entry: TemplateEntry; draft: SectionDraft } | null> => {
+        const generated = await generateStructured<{
+          liquid: string;
+          settings: { id: string; value: string }[];
+          blocks: { type: string; settings: { id: string; value: string }[] }[];
+        }>({
+          prompt: buildSectionCodePrompt({
+            product,
+            research,
+            store,
+            section: job.wanted,
+            type: job.type,
+            palette,
+            vibe,
+            offers: job.wanted.kind === "oferta" ? blueprint.offers : undefined,
+            guarantee: job.wanted.kind === "garantia" ? blueprint.guarantee : undefined,
+            hasShots: shots.length > 0,
+            reference: job.model
+              ? { type: job.model.type, html: job.model.html, css: job.model.css }
+              : undefined,
+            problems,
+          }),
+          schema: SECTION_CODE_SCHEMA,
+          role: "copy",
+          maxTokens: 24_000,
+          images: shots,
+        });
+
+        inputTokens += generated.inputTokens;
+        outputTokens += generated.outputTokens;
 
         /*
-         * Se consume al usarla: una página puede tener dos secciones del mismo
-         * papel y cada una debe emparejarse con la suya. Buscar cada vez desde
-         * el principio devolvería siempre la primera — es el mismo fallo que
-         * rompió el orden de las plantillas.
+         * Se arregla antes de revisar: Shopify rechaza el archivo entero si un
+         * ajuste declara `default` vacío, y quitarlo es determinista.
          */
-        /*
-         * El número de orden distingue dos secciones del mismo papel dentro de
-         * la misma página, que es lo que hace que la caché acierte con la suya.
-         */
-        const ordinal = plan.create
-          .slice(0, index)
-          .filter((other) => other.kind === wanted.kind).length;
+        const liquid = stripBlankDefaults(generated.data.liquid).source;
+        const review = reviewSection(liquid);
 
-        const saved = drafts.get(`${wanted.kind}:${ordinal}`);
+        if (!review.ok || !review.schema) {
+          job.problems = review.problems;
+          return null;
+        }
+
+        const settings = coerceSettings(generated.data.settings, review.schema.settings ?? []);
+        const withPhotos = fillImageUrls(
+          settings,
+          imageUrlSlots(review.schema),
+          photos,
+          filledPhotos,
+        );
+        filledPhotos += withPhotos.used;
+
+        const draft: SectionDraft = {
+          kind: job.wanted.kind,
+          ordinal: job.ordinal,
+          sectionType: job.type,
+          liquid,
+          settings: withPhotos.settings,
+          blocks: generated.data.blocks.map((block) => ({
+            type: block.type,
+            settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
+          })),
+        };
+
+        return {
+          file: liquid,
+          draft,
+          entry: buildTemplateEntry({
+            kind: job.wanted.kind,
+            type: job.type,
+            index: job.index,
+            settings: draft.settings,
+            blocks: draft.blocks,
+          }),
+        };
+      };
+
+      /* ------------------------- Primera pasada -------------------------- */
+
+      const jobs: SectionJob[] = plan.create.map((wanted, index) => ({
+        wanted,
+        index,
+        ordinal: plan.create.slice(0, index).filter((other) => other.kind === wanted.kind).length,
+        type: sectionType(wanted.kind, index),
+        model: null,
+        problems: [],
+        file: null,
+        entry: null,
+      }));
+
+      for (const job of jobs) {
+        const saved = drafts.get(`${job.wanted.kind}:${job.ordinal}`);
 
         if (saved) {
-          await report(
-            `${wanted.kind} ya estaba escrita — ${index + 1} de ${plan.create.length}`,
-          );
+          await report(`${job.wanted.kind} ya estaba escrita — ${job.index + 1} de ${jobs.length}`);
 
-          created.push(
-            buildTemplateEntry({
-              kind: wanted.kind,
-              type: saved.sectionType,
-              index,
-              settings: saved.settings,
-              blocks: saved.blocks,
-            }),
-          );
-          /*
-           * Lo guardado se repara al leerlo.
-           *
-           * Las secciones que se escribieron antes de este arreglo llevan dentro
-           * el `default` vacío que Shopify rechaza. Sin repararlas aquí,
-           * reutilizarlas devolvería el mismo error para siempre y la caché —que
-           * está para no pagar dos veces— dejaría la página imposible de escribir.
-           */
-          files.push({
-            filename: sectionFilename(saved.sectionType),
-            content: stripBlankDefaults(saved.liquid).source,
+          // Lo guardado se repara al leerlo: lo escrito antes del arreglo del
+          // `default` vacío lo lleva dentro, y sin esto la caché devolvería el
+          // mismo rechazo para siempre.
+          job.type = saved.sectionType;
+          job.file = stripBlankDefaults(saved.liquid).source;
+          job.entry = buildTemplateEntry({
+            kind: job.wanted.kind,
+            type: saved.sectionType,
+            index: job.index,
+            settings: saved.settings,
+            blocks: saved.blocks,
           });
           reused += 1;
           continue;
         }
 
-        // Antes de escribir, no después: si se queda colgada en la cuarta, el
-        // cartel dice «cuarta» y no «tercera terminada».
-        await report(`Escribiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`);
+        await report(`Escribiendo ${job.wanted.kind} — ${job.index + 1} de ${jobs.length}`);
 
-        const model = takeForRole(pool, wanted.kind);
+        // Se consume: dos secciones del mismo papel deben emparejarse con la
+        // suya, y buscar desde el principio devolvería siempre la primera.
+        job.model = takeForRole(pool, job.wanted.kind);
 
-        let problems: string[] = [];
-        let built: { entry: TemplateEntry; file: string } | null = null;
-
-        /*
-         * Dos intentos, no más.
-         *
-         * El primero suele pasar; el segundo arregla lo que la revisión señaló,
-         * que llega con el mensaje concreto. Si el segundo tampoco pasa, el
-         * problema no es un descuido y otra vuelta solo gasta.
-         */
-        for (let attempt = 0; attempt < 2 && !built; attempt += 1) {
+        for (let attempt = 0; attempt < 2 && !job.entry; attempt += 1) {
           if (attempt > 0) {
-            await report(
-              `Corrigiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`,
-            );
+            await report(`Corrigiendo ${job.wanted.kind} — ${job.index + 1} de ${jobs.length}`);
           }
 
-          const generated = await generateStructured<{
-            liquid: string;
-            settings: { id: string; value: string }[];
-            blocks: { type: string; settings: { id: string; value: string }[] }[];
-          }>({
-            prompt: buildSectionCodePrompt({
-              product,
-              research,
-              store,
-              section: wanted,
-              type,
-              palette,
-              vibe,
-              offers: wanted.kind === "oferta" ? blueprint.offers : undefined,
-              guarantee: wanted.kind === "garantia" ? blueprint.guarantee : undefined,
-              hasShots: shots.length > 0,
-              reference: model
-                ? { type: model.type, html: model.html, css: model.css }
-                : undefined,
-              problems,
-            }),
-            schema: SECTION_CODE_SCHEMA,
-            role: "copy",
-            maxTokens: 24_000,
-            images: shots,
-          });
+          const built = await writeOne(job, job.problems);
+          if (!built) continue;
 
-          inputTokens += generated.inputTokens;
-          outputTokens += generated.outputTokens;
+          if (job.model) matched += 1;
+          await saveSectionDraft(blueprintId, page, built.draft);
 
-          /*
-           * Se arregla antes de revisar.
-           *
-           * Shopify rechaza el archivo entero si un ajuste declara `default`
-           * vacío, y el modelo lo escribe con toda naturalidad —es lo que uno
-           * pondría—. Quitarlo es determinista y no cambia el comportamiento: un
-           * ajuste sin `default` se comporta igual que uno con el valor vacío.
-           */
-          const liquid = stripBlankDefaults(generated.data.liquid).source;
-          const review = reviewSection(liquid);
+          job.file = built.file;
+          job.entry = built.entry;
+        }
+      }
 
-          if (!review.ok || !review.schema) {
-            problems = review.problems;
+      /* --------------- Escribir, y reparar lo que Shopify rechace -------- */
+
+      /*
+       * Hasta tres vueltas contra Shopify.
+       *
+       * Shopify valida cosas que aquí no se conocen —y su mensaje nombra el
+       * ajuste, que es justo lo que hace falta para arreglarlo—. Así que su
+       * error se le devuelve al modelo como un problema más y se vuelve a
+       * escribir **solo esa sección**: las que ya entraron se quedan.
+       *
+       * Tres y no más: si a la tercera sigue sin entrar, no es un descuido y
+       * otra vuelta solo gasta.
+       */
+      const rounds = 3;
+
+      for (let round = 0; round < rounds; round += 1) {
+        const pending = jobs.filter((job) => job.file && !job.written);
+        if (pending.length === 0) break;
+
+        await report(
+          round === 0
+            ? `Guardando ${pending.length} sección(es) en el tema`
+            : `Reparando ${pending.length} que Shopify rechazó — vuelta ${round + 1}`,
+        );
+
+        const result = await writeThemeFilesLenient(
+          store,
+          themeId,
+          pending.map((job) => ({ filename: sectionFilename(job.type), content: job.file! })),
+        );
+
+        const failed = new Map(
+          result.failed.map((item) => [item.filename, item.reason] as const),
+        );
+
+        for (const job of pending) {
+          const reason = failed.get(sectionFilename(job.type));
+
+          if (!reason) {
+            job.written = true;
             continue;
           }
 
-          const settings = coerceSettings(generated.data.settings, review.schema.settings ?? []);
-          const withPhotos = fillImageUrls(
-            settings,
-            imageUrlSlots(review.schema),
-            photos,
-            filledPhotos,
-          );
-          filledPhotos += withPhotos.used;
+          job.problems = [reason];
+          job.rejectedBy = reason;
 
-          if (model) matched += 1;
-
-          const draft: SectionDraft = {
-            kind: wanted.kind,
-            ordinal,
-            sectionType: type,
-            liquid,
-            settings: withPhotos.settings,
-            blocks: generated.data.blocks.map((block) => ({
-              type: block.type,
-              settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
-            })),
-          };
-
-          // Se guarda **aquí**, en cuanto pasa la revisión. Guardar al terminar
-          // todas es justo lo que hacía que un corte a mitad tirara el trabajo.
-          await saveSectionDraft(blueprintId, page, draft);
-
-          built = {
-            file: liquid,
-            entry: buildTemplateEntry({
-              kind: wanted.kind,
-              type,
-              index,
-              settings: withPhotos.settings,
-              blocks: generated.data.blocks.map((block) => ({
-                type: block.type,
-                settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
-              })),
-            }),
-          };
-        }
-
-        if (!built) {
           /*
-           * Una sección que no pasa la revisión se salta y se dice cuál.
+           * El borrador se tira antes de reintentar.
            *
-           * La alternativa era escribir algo genérico en su lugar, y eso es
-           * justo lo que había antes y lo que no servía: una página con una
-           * sección menos se completa a mano; una llena de secciones que no se
-           * parecen a nada hay que rehacerla entera.
+           * Si no, una sección que Shopify rechaza queda guardada y el siguiente
+           * intento la reutilizaría tal cual, repitiendo el mismo rechazo para
+           * siempre — la caché, que está para ahorrar, dejaría la página
+           * imposible de escribir.
            */
-          skipped.push(`${wanted.kind} (${problems[0] ?? "no pasó la revisión"})`);
-          continue;
+          await forgetSectionDraft(blueprintId, page, job.wanted.kind, job.ordinal);
         }
 
-        created.push(built.entry);
-        files.push({ filename: sectionFilename(type), content: built.file });
+        const broken = pending.filter((job) => !job.written);
+        if (broken.length === 0) break;
+
+        // La última vuelta no regenera: no habría dónde volver a probarlo.
+        if (round === rounds - 1) break;
+
+        for (const job of broken) {
+          const built = await writeOne(job, job.problems);
+          if (!built) continue;
+
+          await saveSectionDraft(blueprintId, page, built.draft);
+          job.file = built.file;
+          job.entry = built.entry;
+        }
       }
 
-      if (created.length === 0) {
-        throw new Error(
-          `No se pudo escribir ninguna sección. ${skipped[0] ?? "Vuelve a intentarlo."}`,
-        );
-      }
+      /* ------------------------- La plantilla ---------------------------- */
 
-      await report(`Guardando ${created.length} sección(es) en el tema`);
-
-      /*
-       * Las secciones primero, y sin que una mala tire a las demás.
-       *
-       * Shopify valida el lote entero: un esquema que no le gusta rechaza los
-       * doce archivos y devuelve mensajes que nombran ajustes sin decir en qué
-       * archivo están. Escribiéndolas primero y por separado se sabe cuáles
-       * entraron, y la plantilla se arma **solo con esas**.
-       *
-       * Un archivo de sección que no usa nadie es inofensivo; una plantilla que
-       * apunta a una sección que no existe es la página caída. Por eso este
-       * orden y no el contrario.
-       */
-      const write = await writeThemeFilesLenient(store, themeId, files);
-
-      const rejected = new Set(write.failed.map((item) => item.filename));
-
-      const usable = created.filter(
-        (section) => !rejected.has(sectionFilename(String(section.entry.type))),
-      );
+      const usable = jobs.filter((job) => job.written && job.entry).map((job) => job.entry!);
 
       if (usable.length === 0) {
+        const first = jobs.find((job) => job.rejectedBy || job.problems.length > 0);
         throw new Error(
-          `Shopify rechazó todas las secciones. La primera: ${write.failed[0]?.reason ?? "sin detalle"}`,
+          `No entró ninguna sección. ${first?.rejectedBy ?? first?.problems[0] ?? "Vuelve a intentarlo."}`,
         );
       }
 
@@ -656,28 +639,34 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       const nextTemplate = writeTemplate(file.body!, usable, order);
       if (!nextTemplate) throw new Error("La plantilla no tiene el formato esperado; no se ha tocado.");
 
+      /*
+       * La plantilla, al final y sola.
+       *
+       * Un archivo de sección que no usa nadie es inofensivo; una plantilla que
+       * apunta a una sección que no se llegó a escribir es la página caída. Por
+       * eso este orden y no el contrario.
+       */
       await writeThemeFiles(store, themeId, [{ filename: templateName, content: nextTemplate }]);
 
-      const written = write.written + 1;
+      const lost = jobs.filter((job) => !job.written);
 
       return {
         summary: [
-          `${usable.length} sección(es) creadas en ${templateName}`,
+          `${usable.length} de ${jobs.length} secciones en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
-          `. ${written} archivo(s) escritos.`,
+          ".",
           reused > 0 ? ` ${reused} venían ya escritas y no se han vuelto a pagar.` : "",
-          matched > 0
-            ? ` ${matched} escritas mirando su sección real.`
-            : " Sin poder leer la página de referencia: salen solo de su descripción.",
-          shots.length > 0 ? ` Con ${shots.length} captura(s) además.` : "",
+          matched > 0 ? ` ${matched} escritas mirando su sección real.` : "",
           filledPhotos > 0
-            ? ` ${filledPhotos} imagen(es) de ${blueprint.storeName} puestas para maquetar: sustitúyelas antes de publicar.`
+            ? ` ${filledPhotos} imagen(es) de ${blueprint.storeName} para maquetar: sustitúyelas antes de publicar.`
             : "",
-          photoNote ? ` ${photoNote}` : "",
-          skipped.length > 0 ? ` No salieron: ${skipped.join("; ")}.` : "",
-          write.failed.length > 0
-            ? ` Shopify rechazó ${write.failed.length}: ${write.failed
-                .map((item) => `${item.filename} — ${item.reason}`)
+          photoNote,
+          lost.length > 0
+            ? ` No entraron: ${lost
+                .map(
+                  (job) =>
+                    `${job.wanted.kind} — ${job.rejectedBy ?? job.problems[0] ?? "no pasó la revisión"}`,
+                )
                 .join(" | ")}`
             : "",
           " Míralo en la vista previa antes de publicar.",
@@ -687,6 +676,23 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       };
     },
   });
+}
+
+/** Una sección en curso: lo que hace falta para escribirla y para repararla. */
+interface SectionJob {
+  wanted: { kind: string; purpose: string; angle: string };
+  index: number;
+  /** Su posición entre las de su mismo papel, para acertar con su borrador. */
+  ordinal: number;
+  type: string;
+  /** La sección equivalente en la tienda de referencia, si se encontró. */
+  model: ReferenceSection | null;
+  /** Lo que hay que corregir: de la revisión propia o del propio Shopify. */
+  problems: string[];
+  file: string | null;
+  entry: TemplateEntry | null;
+  written?: boolean;
+  rejectedBy?: string;
 }
 
 /**

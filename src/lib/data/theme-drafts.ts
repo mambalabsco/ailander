@@ -104,6 +104,34 @@ export async function saveSectionDraft(
   }
 }
 
+/**
+ * Olvida una sección concreta.
+ *
+ * Se usa cuando Shopify la rechaza: si se quedara guardada, el siguiente intento
+ * la reutilizaría tal cual y repetiría el mismo rechazo para siempre — la caché,
+ * que está para ahorrar, dejaría la página imposible de escribir.
+ */
+export async function forgetSectionDraft(
+  blueprintId: string,
+  page: string,
+  kind: string,
+  ordinal: number,
+): Promise<void> {
+  try {
+    const { supabase } = await requireContext();
+
+    await supabase
+      .from("theme_section_drafts")
+      .delete()
+      .eq("blueprint_id", blueprintId)
+      .eq("page", page)
+      .eq("kind", kind)
+      .eq("ordinal", ordinal);
+  } catch {
+    return;
+  }
+}
+
 /** Tira lo guardado de una página, para volver a escribirla desde cero. */
 export async function clearSectionDrafts(blueprintId: string, page: string): Promise<number> {
   const { supabase } = await requireContext();
