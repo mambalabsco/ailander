@@ -242,12 +242,21 @@ test("el resumen cuenta cada tipo de cambio", () => {
 
 /* ------------------------------- Los límites ------------------------------- */
 
-test("está escrito que el plan no trae contenido de la referencia", () => {
+test("está escrito que el plan no trae nada de la referencia", () => {
+  // Va a la vista de quien lo usa, no solo en el código: la diferencia entre
+  // reproducir una disposición y copiar una página es justo lo que separa esto
+  // de un problema.
   const texto = PLAN_LIMITS.join(" ");
 
-  assert.match(texto, /No copia texto ni imágenes/);
-  assert.match(texto, /No importa código de tema/);
-  assert.match(texto, /sale de tu producto/);
+  assert.match(texto, /sale de tu producto y de tu investigación/);
+  assert.match(texto, /No se copia su código/);
+  assert.match(texto, /ni una frase, ni un dato, ni un ingrediente/);
+});
+
+test("y que lo que hace vender no se toca", () => {
+  // Se dice donde se lee porque es la línea que decide si esto se puede usar en
+  // la tienda publicada sin miedo.
+  assert.match(PLAN_LIMITS.join(" "), /no se retira nunca/);
 });
 
 /* ------------------------------- Aplicarlo --------------------------------- */
