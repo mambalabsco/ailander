@@ -370,3 +370,42 @@ export async function compose(tracks: Track[]): Promise<{ videoUrl: string; thum
 
   return { videoUrl: payload.video_url, thumbnailUrl: payload.thumbnail_url ?? "" };
 }
+
+/* ------------------------------ Transcribir -------------------------------- */
+
+/**
+ * El audio de un vídeo, pasado a texto.
+ *
+ * Se usa **solo para analizar anuncios ajenos**, no para el pipeline propio: ahí
+ * la voz se genera con sus tiempos de palabra y transcribir sería dar una vuelta
+ * para acabar con menos precisión de la que ya se tiene.
+ *
+ * Devuelve cadena vacía en vez de fallar cuando no hay voz o no se entiende. Un
+ * anuncio de solo texto en pantalla es un formato normal, y quedarse sin análisis
+ * por eso sería absurdo: los fotogramas siguen contando la mitad de la historia.
+ */
+export async function transcribe(audio: Buffer, languageCode?: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(audio)], { type: "audio/mpeg" }), "audio.mp3");
+  form.append("model_id", "scribe_v1");
+  if (languageCode) form.append("language_code", languageCode);
+
+  const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+    method: "POST",
+    headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
+    body: form,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("ElevenLabs rechazó la clave. Comprueba ELEVENLABS_API_KEY.");
+    }
+
+    // Los demás fallos no tumban el análisis: se sigue con lo visual.
+    return "";
+  }
+
+  const data = (await response.json()) as { text?: string };
+  return typeof data.text === "string" ? data.text.trim() : "";
+}

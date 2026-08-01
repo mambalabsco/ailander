@@ -44,11 +44,34 @@ export async function generateStructured<T>(options: {
   webSearch?: boolean;
   maxTokens?: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /**
+   * Imágenes que mirar, en orden.
+   *
+   * Van **antes** del texto a propósito: con la imagen delante, el modelo lee la
+   * pregunta ya mirándola. Es lo que recomienda Anthropic y se nota justo en
+   * esto —describir fotogramas de un anuncio—, donde la instrucción cambia según
+   * lo que se ve.
+   */
+  images?: { mediaType: string; base64: string }[];
 }): Promise<GenerationOutcome<T>> {
   const client = await createClaudeClient();
   const model = options.role === "copy" ? await copyModel() : await researchModel();
 
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: options.prompt }];
+  const content: Anthropic.ContentBlockParam[] = [
+    ...(options.images ?? []).map(
+      (image): Anthropic.ContentBlockParam => ({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: image.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+          data: image.base64,
+        },
+      }),
+    ),
+    { type: "text", text: options.prompt },
+  ];
+
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content }];
 
   let inputTokens = 0;
   let outputTokens = 0;

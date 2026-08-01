@@ -456,3 +456,29 @@ export const THEME_SECTIONS_SCHEMA = object({
     }),
   },
 });
+
+/**
+ * Cómo está construido un anuncio en vídeo.
+ *
+ * Describe la construcción —el gancho, los momentos, el ritmo, el cierre— y en
+ * ningún campo se pide su guion: lo que se reutiliza es cómo se monta, y el
+ * texto del anuncio nuevo sale de la investigación del producto propio.
+ */
+export const VIDEO_ANALYSIS_SCHEMA = object({
+  hook: str,
+  promise: str,
+  voice: str,
+  beats: {
+    type: "array",
+    items: object({
+      at: num,
+      shot: str,
+      role: str,
+      onScreenText: str,
+    }),
+  },
+  averageShotSeconds: num,
+  productMoment: str,
+  callToAction: str,
+  whyItWorks: str,
+});

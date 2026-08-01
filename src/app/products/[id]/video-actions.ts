@@ -106,6 +106,26 @@ export async function createVideoFromCopyAction(input: unknown): Promise<LaunchR
   const shots = Math.min(Math.max(Number(raw.shots) || 6, 3), 12);
   const seconds = Math.min(Math.max(Number(raw.seconds) || 60, 15), 180);
 
+  /*
+   * El guion puede seguir la construcción de un anuncio ya analizado.
+   *
+   * Es lo que convierte el análisis en algo útil: sin esto, saber que un anuncio
+   * entra por el síntoma y corta cada dos segundos se queda en una ficha bonita
+   * que nadie usa al escribir el siguiente.
+   */
+  const referenceId = readText(raw.referenceId);
+  let reference: string | undefined;
+
+  if (referenceId) {
+    const { listVideoReferences } = await import("@/lib/data/video-references");
+    const { asScriptReference } = await import("@/lib/video/analysis");
+
+    const found = (await listVideoReferences()).find((item) => item.id === referenceId);
+    if (!found) throw new Error("Ese anuncio analizado ya no existe.");
+
+    reference = asScriptReference(found.analysis, found.name);
+  }
+
   return runInBackground({
     productId,
     kind: "imagenes",
@@ -147,6 +167,7 @@ export async function createVideoFromCopyAction(input: unknown): Promise<LaunchR
           body: copy.content.primaryText,
           shots,
           seconds,
+          reference,
         }),
         schema: SCRIPT_SCHEMA,
         role: "copy",

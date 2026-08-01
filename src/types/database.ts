@@ -726,6 +726,23 @@ type StoreBlueprintRow = {
   created_at: string;
 };
 
+type VideoReferenceRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  source_url: string;
+  /** `numeric`: llega como cadena desde PostgREST. */
+  duration_seconds: number;
+  width: number;
+  height: number;
+  had_audio: boolean;
+  frames_analyzed: number;
+  /** La construcción descrita, nunca el guion. */
+  analysis: unknown;
+  warnings: unknown;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -1012,6 +1029,10 @@ export type Database = {
           Exclude<keyof CostGatewayFeeRow, "user_id" | "store_id" | "gateway">
         >,
         [Belongs<"store_id", "stores">]
+      >;
+      video_references: Table<
+        VideoReferenceRow,
+        Insertable<VideoReferenceRow, Exclude<keyof VideoReferenceRow, "user_id">>
       >;
       store_blueprints: Table<
         StoreBlueprintRow,

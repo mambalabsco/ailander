@@ -119,6 +119,26 @@ else
   gris "Dependencias al día."
 fi
 
+# ---------------------------------------------------------------------------
+# ffmpeg, para analizar anuncios en vídeo
+#
+# Se instala si falta, y **no frena el despliegue si no se puede**. Solo lo
+# necesita el analizador de anuncios: dejar la plataforma entera sin actualizar
+# porque apt no responde sería cambiar un fallo pequeño por uno grande.
+# ---------------------------------------------------------------------------
+
+if ! command -v ffprobe >/dev/null 2>&1; then
+  echo "== Instalando ffmpeg (para analizar anuncios) =="
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg; then
+    verde "ffmpeg instalado."
+  else
+    rojo "No se pudo instalar ffmpeg. El resto sigue; el análisis de anuncios no funcionará."
+    rojo "Instálalo a mano:  sudo apt install -y ffmpeg"
+  fi
+else
+  gris "ffmpeg al día."
+fi
+
 # Las migraciones se lanzan **siempre**.
 #
 # `db:push` ya es idempotente: lleva su propio registro y solo aplica las que

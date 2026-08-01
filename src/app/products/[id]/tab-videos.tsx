@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, EmptyState, SelectField } from "@/components/ui";
 import { SectionCard } from "@/components/section-card";
+import { ReferenceAds, type ReferenceAd } from "@/components/video/reference-ads";
 import { GenerateButton } from "@/components/generate-button";
 import { VoicePicker } from "@/components/video/voice-picker";
 import { ShotBoard } from "@/components/video/shot-board";
@@ -31,17 +32,21 @@ export function VideosTab({
   videos,
   copies,
   providers,
+  references,
 }: {
   productId: string;
   videos: Video[];
   copies: GeneratedCopy[];
   providers: { voice: boolean; images: boolean; compose: boolean };
+  /** Anuncios ya analizados, para escribir siguiendo su construcción. */
+  references: ReferenceAd[];
 }) {
   const router = useRouter();
   const [copyId, setCopyId] = useState(copies[0]?.id ?? "");
   const [voiceId, setVoiceId] = useState("");
   const [shots, setShots] = useState(6);
   const [seconds, setSeconds] = useState(60);
+  const [referenceId, setReferenceId] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const missing = [
@@ -124,6 +129,31 @@ export function VideosTab({
                   ))}
                 </SelectField>
               </label>
+
+              {/*
+                Seguir un anuncio analizado. Es lo que convierte el análisis en
+                algo útil: sin esto, saber cómo entra un anuncio que funciona se
+                queda en una ficha que nadie usa al escribir el siguiente.
+              */}
+              {references.length > 0 ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Seguir la construcción de
+                  </span>
+                  <SelectField
+                    value={referenceId}
+                    onChange={(event) => setReferenceId(event.target.value)}
+                    className="min-w-52"
+                  >
+                    <option value="">Sin referencia</option>
+                    {references.map((reference) => (
+                      <option key={reference.id} value={reference.id}>
+                        {reference.name}
+                      </option>
+                    ))}
+                  </SelectField>
+                </label>
+              ) : null}
             </div>
 
             {/*
@@ -135,7 +165,14 @@ export function VideosTab({
             <GenerateButton
               variant="primary"
               action={() =>
-                createVideoFromCopyAction({ productId, copyId, voiceId, shots, seconds })
+                createVideoFromCopyAction({
+                  productId,
+                  copyId,
+                  voiceId,
+                  shots,
+                  seconds,
+                  referenceId,
+                })
               }
               label="Escribir el guion"
               disabled={!copyId || !voiceId}
@@ -145,6 +182,13 @@ export function VideosTab({
           </div>
         )}
       </SectionCard>
+
+      {/*
+        Los anuncios de referencia van **debajo** del panel de escribir y no
+        arriba: se analizan una vez y se consultan poco, mientras que escribir un
+        guion es lo que se hace cada día.
+      */}
+      <ReferenceAds productId={productId} references={references} />
 
       {videos.length === 0 ? (
         <EmptyState

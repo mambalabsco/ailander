@@ -4,6 +4,7 @@ import { StatusPill } from "@/components/status-pill";
 import { JobsPanel } from "@/components/jobs-panel";
 import { listLandings } from "@/lib/data/landings";
 import { listBlueprints } from "@/lib/data/blueprints";
+import { listVideoReferences } from "@/lib/data/video-references";
 import { modelOptions } from "@/lib/store-blueprint";
 import { listSwipeCopies } from "@/lib/data/swipe";
 import { renderLandingHtml } from "@/lib/landing-html";
@@ -229,18 +230,24 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
    */
   let modelPages: { id: string; title: string }[] = [];
 
+  /** Anuncios en vídeo ya analizados, para escribir guiones que los sigan. */
+  let videoReferences: Awaited<ReturnType<typeof listVideoReferences>> = [];
+
   if (isSupabaseConfigured()) {
-    const [loadedLandings, loadedSwipe, loadedVideos, blueprints] = await Promise.all([
+    const [loadedLandings, loadedSwipe, loadedVideos, blueprints, loadedReferences] =
+      await Promise.all([
       listLandings(product.id).catch(() => []),
       listSwipeCopies().catch(() => []),
       listVideos(product.id).catch(() => []),
       listBlueprints().catch(() => []),
+      listVideoReferences().catch(() => []),
     ]);
 
     landings = loadedLandings;
     swipeCopies = loadedSwipe;
     videos = loadedVideos;
     modelPages = modelOptions(blueprints);
+    videoReferences = loadedReferences;
   }
 
   let experiments: Awaited<ReturnType<typeof listExperiments>> = [];
@@ -447,6 +454,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           videos={videos}
           /* Solo los largos: de un anuncio corto no sale una historia que contar. */
           copies={copies.filter((copy) => copy.format !== "short-ad")}
+          references={videoReferences}
           providers={videoProvidersReady()}
         />
       ) : null}

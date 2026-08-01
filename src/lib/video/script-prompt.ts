@@ -39,6 +39,16 @@ export interface ScriptInput {
   seconds: number;
   /** Qué claims puede sostener el producto. */
   allowedClaims?: string;
+  /**
+   * La construcción de un anuncio que ya funciona, descrita.
+   *
+   * Va **antes** del texto de partida en el prompt: primero se decide la forma
+   * —por dónde entra, cada cuánto corta, cuándo aparece el producto— y después
+   * se rellena con lo que dice el copy. Al revés, el modelo escribe el guion que
+   * le pide el copy y luego intenta encajarlo, que es de donde salen los vídeos
+   * que empiezan bien y se deshacen a la mitad.
+   */
+  reference?: string;
 }
 
 /**
@@ -56,6 +66,9 @@ export function buildScriptPrompt(input: ScriptInput): string {
   const perShot = input.seconds / Math.max(1, input.shots);
 
   return `Eres guionista de anuncios en vídeo de respuesta directa. Vas a convertir un texto escrito en un guion de vídeo vertical.
+${input.reference ? `
+${input.reference}
+` : ""}
 
 ## El producto
 
