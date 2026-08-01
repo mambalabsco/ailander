@@ -449,8 +449,9 @@ export function ThemePlanPanel({
         <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900 dark:bg-violet-950/20">
           <p className="text-sm font-medium">4 · Crear las secciones que te faltan</p>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Escribe en tu tema las secciones que el plano pide y tú no tienes —comparativa, oferta
-            por tramos, preguntas— con los colores de la referencia y el texto de tu producto. Las
+            Descarga la página de referencia, lee cómo está hecha cada sección —su marcado y las
+            reglas que la pintan— y escribe la tuya con las mismas medidas, en tu tema y con el
+            texto de tu producto. Las
             tuyas que queden duplicadas salen de la página, pero no se borran: se pueden volver a
             arrastrar desde el editor.
           </p>
@@ -486,7 +487,7 @@ export function ThemePlanPanel({
             */}
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Capturas de la página de referencia
+                Capturas de la referencia (opcional)
               </span>
               <input
                 ref={shotsRef}
@@ -496,7 +497,8 @@ export function ThemePlanPanel({
                 className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
               />
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                Hasta cuatro. Es lo que más se nota: sin verla, se escribe a ciegas.
+                La página se lee sola —su marcado y su estilo—, así que no hacen falta. Súbelas
+                solo si quieres copiar algo que no se deduce del código.
               </span>
             </label>
           </div>

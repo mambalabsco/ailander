@@ -43,6 +43,8 @@ export function buildSectionCodePrompt(options: {
   guarantee?: string;
   /** Si van adjuntas capturas de la página de referencia. */
   hasShots?: boolean;
+  /** El marcado y el estilo de esa sección en la tienda de referencia. */
+  reference?: { type: string; html: string; css: string };
   /** Lo que falló en el intento anterior, si lo hubo. */
   problems?: string[];
 }): string {
@@ -55,6 +57,30 @@ export function buildSectionCodePrompt(options: {
 Tienes que devolver **el archivo entero** de una sección de Online Store 2.0, lista para guardar en \`sections/${options.type}.liquid\`.
 
 ${
+  options.reference
+    ? `## La sección de la referencia, tal como está hecha
+
+Su tema la llama \`${options.reference.type}\`. Este es su marcado:
+
+\`\`\`html
+${options.reference.html}
+\`\`\`
+
+Y estas son las reglas de estilo que la pintan:
+
+\`\`\`css
+${options.reference.css}
+\`\`\`
+
+**Léelo para sacar las medidas.** Cuántas columnas y en qué proporción, el tamaño del titular contra el del cuerpo, el aire entre bloques, el radio y el relleno de los botones, dónde cae la imagen y hasta dónde llega, qué cambia en el móvil.
+
+**Y escribe el tuyo.** Ese CSS está atado al armazón de su tema —sus variables, sus clases, su retícula— y pegado aquí daría un diseño roto, no uno idéntico. Reproduce las medidas con CSS propio, encerrado en tu sección y sin depender de nada de fuera. Sus clases no existen en este tema: usa las tuyas.
+
+Del texto que veas ahí, nada. El contenido sale de la investigación de arriba.
+
+`
+    : ""
+}${
   options.hasShots
     ? `## Tienes la página delante
 

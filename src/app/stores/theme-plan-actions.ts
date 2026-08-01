@@ -19,6 +19,7 @@ import { generateStructured } from "@/lib/generators";
 import { runInBackground } from "@/lib/background";
 import { SECTION_CODE_SCHEMA } from "@/lib/generation-schemas";
 import { buildSectionCodePrompt } from "@/lib/section-code-prompt";
+import { readReferenceSections, takeForRole } from "@/lib/reference-page";
 import {
   buildTemplateEntry,
   clearDemoImages,
@@ -364,6 +365,24 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
        * producto: una página publicada con el frasco de otro anuncia algo
        * distinto de lo que llega en el paquete.
        */
+      /*
+       * La página de referencia se descarga y se parte en sus secciones.
+       *
+       * Es lo que evita tener que pedir capturas: la página ya se sabe
+       * descargar, solo faltaba quedarse con el trozo de cada sección y las
+       * reglas que lo pintan. Con eso delante se ven las medidas —cuántas
+       * columnas, qué tamaño tiene el titular, cuánto aire hay— que no se
+       * deducen de una frase.
+       */
+      await report("Leyendo la página de referencia");
+
+      const referencePage =
+        blueprint.pages.find((item) => item.kind === page)?.url ??
+        blueprint.pages.find((item) => item.kind === "producto")?.url ??
+        blueprint.url;
+
+      const pool = await readReferenceSections(referencePage);
+
       const photos = blueprint.images.map((image) => image.url);
       const photoNote =
         photos.length === 0
@@ -379,6 +398,9 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       // Se va avanzando por las fotos para no repetir la misma en cada sección
       // mientras queden otras sin usar.
       let filledPhotos = 0;
+      // Cuántas se escribieron con su sección de referencia delante, para poder
+      // decirlo: la diferencia entre eso y no tenerla se nota en el resultado.
+      let matched = 0;
 
       /*
        * Una llamada por sección, en serie.
@@ -394,6 +416,14 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
         // Antes de cada sección, no después: si se queda colgada en la cuarta,
         // el cartel dice «cuarta» y no «tercera terminada».
         await report(`Escribiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`);
+
+        /*
+         * Se consume al usarla: una página puede tener dos secciones del mismo
+         * papel y cada una debe emparejarse con la suya. Buscar cada vez desde
+         * el principio devolvería siempre la primera — es el mismo fallo que
+         * rompió el orden de las plantillas.
+         */
+        const model = takeForRole(pool, wanted.kind);
 
         let problems: string[] = [];
         let built: { entry: TemplateEntry; file: string } | null = null;
@@ -428,6 +458,9 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
               offers: wanted.kind === "oferta" ? blueprint.offers : undefined,
               guarantee: wanted.kind === "garantia" ? blueprint.guarantee : undefined,
               hasShots: shots.length > 0,
+              reference: model
+                ? { type: model.type, html: model.html, css: model.css }
+                : undefined,
               problems,
             }),
             schema: SECTION_CODE_SCHEMA,
@@ -454,6 +487,8 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
             filledPhotos,
           );
           filledPhotos += withPhotos.used;
+
+          if (model) matched += 1;
 
           built = {
             file: generated.data.liquid,
@@ -516,7 +551,10 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           `${created.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           `. ${written} archivo(s) escritos.`,
-          shots.length > 0 ? ` Con ${shots.length} captura(s) de referencia delante.` : "",
+          matched > 0
+            ? ` ${matched} escritas mirando su sección real.`
+            : " Sin poder leer la página de referencia: salen solo de su descripción.",
+          shots.length > 0 ? ` Con ${shots.length} captura(s) además.` : "",
           filledPhotos > 0
             ? ` ${filledPhotos} imagen(es) de ${blueprint.storeName} puestas para maquetar: sustitúyelas antes de publicar.`
             : "",
