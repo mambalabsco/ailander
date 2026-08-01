@@ -41,6 +41,10 @@ export function buildSectionCodePrompt(options: {
   /** Los tramos de la oferta, solo cuando la sección es la oferta. */
   offers?: { quantity: number; price: number; compareAt: number | null; highlighted: boolean }[];
   guarantee?: string;
+  /** Cuántas imágenes lleva la sección de referencia. */
+  referenceImages?: number;
+  /** Cuántas fotos hay disponibles para dejar puestas. */
+  availableImages?: number;
   /** Si van adjuntas capturas de la página de referencia. */
   hasShots?: boolean;
   /** El marcado y el estilo de esa sección en la tienda de referencia. */
@@ -73,6 +77,14 @@ ${options.reference.css}
 \`\`\`
 
 **Léelo para sacar las medidas.** Cuántas columnas y en qué proporción, el tamaño del titular contra el del cuerpo, el aire entre bloques, el radio y el relleno de los botones, dónde cae la imagen y hasta dónde llega, qué cambia en el móvil.
+
+Y tres cosas que se escapan si no se miran a propósito:
+
+- **El fondo de la sección.** Si ocupa todo el ancho con un color, tu sección también. Nada de una caja blanca centrada donde la referencia tiene un bloque de color a sangre.
+- **Cuánto texto hay.** Cuenta las palabras del titular y los párrafos del cuerpo, y **no te pases**. Si la referencia tiene un titular de ocho palabras y tres líneas de apoyo, eso es lo que va: cinco párrafos donde había tres líneas no se parece, por muy bien escritos que estén.
+- **Las imágenes y hasta dónde llegan.** Si la foto ocupa media pantalla y se sale por el borde, hazla así —\`object-fit: cover\` y sin margen por ese lado—; si son tarjetas pequeñas, tarjetas pequeñas.
+
+Copia también lo que se mueve: transiciones al pasar por encima, sombras, degradados, esquinas redondeadas. Con CSS, que da para todo eso.
 
 **Y escribe el tuyo.** Ese CSS está atado al armazón de su tema —sus variables, sus clases, su retícula— y pegado aquí daría un diseño roto, no uno idéntico. Reproduce las medidas con CSS propio, encerrado en tu sección y sin depender de nada de fuera. Sus clases no existen en este tema: usa las tuyas.
 
@@ -163,7 +175,17 @@ Y se pintan así, el elegido primero:
 
 El motivo es práctico: el valor de un \`image_picker\` es una referencia interna de Shopify que solo se consigue subiendo el archivo, mientras que una dirección se escribe y ya. Con el par, la sección **sale con foto puesta** desde el primer momento y quien la edite puede cambiarla con el selector de siempre, que es lo normal.
 
-Deja \`foto_url\` **vacío** en lo que devuelvas: se rellena después con las fotos reales del producto.
+Deja \`foto_url\` **vacío** en lo que devuelvas: se rellena después.
+
+${
+  options.referenceImages && options.referenceImages > 0
+    ? `**Esa sección de la referencia lleva ${options.referenceImages} imagen(es): declara los mismos huecos**, con su par cada uno. Una sección con menos huecos de los que tiene el original sale más pobre, y los que sobren se quedan vacíos sin molestar.${
+        options.availableImages
+          ? ` Hay ${options.availableImages} fotos disponibles para dejarlas puestas.`
+          : ""
+      }`
+    : ""
+}
 
 ## Lo que devuelves
 

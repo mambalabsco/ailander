@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   CSS_LIMIT,
   relevantCss,
+  sectionPalette,
   selectorsIn,
   splitShopifySections,
   trimSectionHtml,
@@ -139,4 +140,56 @@ test("un marcado enorme se recorta y lo dice", () => {
 
   assert.ok(html.length < 1_100);
   assert.match(html, /recortado/);
+});
+
+/* --------------------------- El color de esa sección ----------------------- */
+
+test("el color sale de la sección, no del tema", () => {
+  // Es la diferencia entre una réplica y una página blanca: casi toda tienda
+  // tiene fondo blanco global, pero un héroe puede estar entero sobre rosa.
+  const css = `
+    :root { --color-fondo: #ffffff }
+    .hero { background: #d98c9e; color: #ffffff }
+    .hero__sub { color: #ffffff }
+    .hero__cta { background: #ffffff; color: #1a1a1a }
+  `;
+
+  const palette = sectionPalette(css)!;
+
+  assert.equal(palette.background, "#d98c9e");
+  assert.equal(palette.text, "#ffffff");
+});
+
+test("las variables se resuelven", () => {
+  const css = `:root { --marca: #c0202a } .hero { background: var(--marca); color: #fff }`;
+
+  assert.equal(sectionPalette(css)!.background, "#c0202a");
+});
+
+test("rgb también es un color", () => {
+  const css = `.hero { background: rgb(217, 140, 158); color: rgba(255,255,255,.9) }`;
+  const palette = sectionPalette(css)!;
+
+  assert.equal(palette.background, "#d98c9e");
+  assert.equal(palette.text, "#ffffff");
+});
+
+test("el acento es el primero que no es fondo ni texto", () => {
+  const css = `
+    .hero { background: #d98c9e; color: #ffffff }
+    .hero__cta { background: #1a1a1a }
+  `;
+
+  assert.equal(sectionPalette(css)!.accent, "#1a1a1a");
+});
+
+test("sin colores legibles no se inventa una paleta", () => {
+  // Manda entonces la del tema, que es mejor que un invento.
+  assert.equal(sectionPalette(".hero { display: grid }"), null);
+});
+
+test("una variable que apunta a otra no se queda en bucle", () => {
+  const css = `:root { --a: var(--b); --b: var(--a) } .hero { background: var(--a) }`;
+
+  assert.equal(sectionPalette(css), null);
 });

@@ -181,6 +181,113 @@ function splitRules(css: string): { selector: string; body: string }[] {
   return rules;
 }
 
+/* --------------------------- El color de esa sección ----------------------- */
+
+export interface SectionPalette {
+  background: string;
+  text: string;
+  accent: string;
+}
+
+/** Resuelve `var(--x)` con las variables declaradas en la misma hoja. */
+function resolveVars(css: string): Map<string, string> {
+  const vars = new Map<string, string>();
+
+  for (const match of css.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;}]+)/gi)) {
+    vars.set(match[1].trim(), match[2].trim());
+  }
+
+  return vars;
+}
+
+/** Deja un color en `#rrggbb`, resolviendo variables y `rgb()`. */
+function readColor(raw: string, vars: Map<string, string>, depth = 0): string {
+  const value = raw.trim().toLowerCase();
+  if (depth > 3) return "";
+
+  const variable = /^var\(\s*(--[a-z0-9-]+)/i.exec(value);
+  if (variable) {
+    const found = vars.get(variable[1]);
+    return found ? readColor(found, vars, depth + 1) : "";
+  }
+
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})\b/.exec(value);
+  if (hex) {
+    const digits = hex[1];
+    return digits.length === 3
+      ? `#${digits[0]}${digits[0]}${digits[1]}${digits[1]}${digits[2]}${digits[2]}`
+      : `#${digits}`;
+  }
+
+  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/.exec(value);
+  if (rgb) {
+    const parts = [rgb[1], rgb[2], rgb[3]].map(Number);
+    if (parts.some((part) => part > 255)) return "";
+    return `#${parts.map((part) => part.toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  return "";
+}
+
+/**
+ * Los colores **de esa sección**, no los del tema.
+ *
+ * Es la diferencia entre una réplica y una página blanca. La paleta global de
+ * una tienda suele ser fondo blanco y texto negro —lo es en casi todas— pero un
+ * héroe puede estar entero sobre rosa. Pasando la global, la sección salía
+ * blanca y no se parecía a nada, por muy bien copiada que estuviera la
+ * disposición.
+ *
+ * Se lee de las reglas que pintan esa sección: el fondo que más veces aparece,
+ * el color de texto que más veces aparece, y como acento el primero que no sea
+ * ninguno de los dos. Devuelve `null` si no hay nada legible, y entonces manda
+ * la del tema, que es mejor que inventarse una.
+ */
+export function sectionPalette(css: string): SectionPalette | null {
+  const vars = resolveVars(css);
+
+  const backgrounds = new Map<string, number>();
+  const texts = new Map<string, number>();
+
+  const count = (map: Map<string, number>, hex: string) => {
+    if (!hex) return;
+    map.set(hex, (map.get(hex) ?? 0) + 1);
+  };
+
+  for (const match of css.matchAll(/\bbackground(?:-color)?\s*:\s*([^;}]+)/gi)) {
+    count(backgrounds, readColor(match[1], vars));
+  }
+
+  for (const match of css.matchAll(/(?:^|[;{\s])color\s*:\s*([^;}]+)/gi)) {
+    count(texts, readColor(match[1], vars));
+  }
+
+  const top = (map: Map<string, number>) =>
+    [...map.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+
+  const background = top(backgrounds);
+  const text = top(texts);
+
+  if (!background && !text) return null;
+
+  /*
+   * El acento es el primer color que no es ni el fondo ni el texto.
+   *
+   * En un héroe suele ser el del botón. Si no hay ninguno distinto se usa el
+   * texto: un acento inventado se ve mal en toda la sección, y repetir el texto
+   * al menos queda coherente.
+   */
+  const others = [...backgrounds.keys(), ...texts.keys()].filter(
+    (hex) => hex !== background && hex !== text,
+  );
+
+  return {
+    background: background || "#ffffff",
+    text: text || "#121212",
+    accent: others[0] ?? text ?? "#121212",
+  };
+}
+
 /* ------------------------------- Recortar el HTML -------------------------- */
 
 /** Cuánto marcado se le pasa al modelo por sección. */
