@@ -106,6 +106,23 @@ const PATTERNS: Pattern[] = [
     }),
   },
   {
+    /*
+     * Este mensaje viene de Postgres y no dice dónde está el problema.
+     *
+     * «new row violates row-level security policy» nombra la política de
+     * escritura, pero la causa suele ser otra —una de lectura que falta, una
+     * migración sin aplicar— y quien lo lee se pone a mirar los permisos de
+     * escritura, que están bien.
+     */
+    matches: /row-level security policy/i,
+    advice: () => ({
+      title: "La base de datos rechazó la escritura por permisos",
+      explanation:
+        "Casi siempre es una migración sin aplicar: las políticas de una tabla o de un bucket se crean ahí. Aplícalas y vuelve a intentarlo; si sigue, dime en qué acción salió.",
+      command: "cd /home/plataforma/plataforma-ia && sudo ./actualizar.sh",
+    }),
+  },
+  {
     matches: /Supabase|todavía no está configurado/i,
     advice: () => ({
       title: "Falta configurar Supabase",
