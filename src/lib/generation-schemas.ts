@@ -472,3 +472,19 @@ export const VIDEO_ANALYSIS_SCHEMA = object({
   callToAction: str,
   whyItWorks: str,
 });
+
+/**
+ * Lo que se lee de una imagen ajena antes de rehacerla.
+ *
+ * `textFits` es booleano y no una escala a propósito: «medio encaja» no lleva a
+ * ninguna decisión, y la decisión aquí es binaria — o el texto se conserva o se
+ * sustituye.
+ */
+export const IMAGE_READING_SCHEMA = object({
+  scene: str,
+  text: str,
+  textFits: { type: "boolean" },
+  textReason: str,
+  suggestedText: str,
+  brandNames: strList,
+});

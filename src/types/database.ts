@@ -765,6 +765,22 @@ type ThemeSectionDraftRow = {
   created_at: string;
 };
 
+type AdaptedImageRow = {
+  id: string;
+  user_id: string;
+  product_id: string;
+  source_url: string;
+  width: number;
+  height: number;
+  aspect_ratio: string;
+  reading: unknown;
+  prompt: string;
+  result_url: string;
+  warnings: unknown;
+  parent_id: string | null;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -1051,6 +1067,10 @@ export type Database = {
           Exclude<keyof CostGatewayFeeRow, "user_id" | "store_id" | "gateway">
         >,
         [Belongs<"store_id", "stores">]
+      >;
+      adapted_images: Table<
+        AdaptedImageRow,
+        Insertable<AdaptedImageRow, Exclude<keyof AdaptedImageRow, "user_id" | "product_id" | "source_url">>
       >;
       theme_section_drafts: Table<
         ThemeSectionDraftRow,

@@ -13,6 +13,7 @@ const navigation = [
   { href: "/datos", label: "Datos y beneficio", icon: "◈" },
   { href: "/competitors", label: "Competidores", icon: "◎" },
   { href: "/ads", label: "Biblioteca de anuncios", icon: "⬢" },
+  { href: "/imagenes", label: "Adaptador de imágenes", icon: "▦" },
   { href: "/analyzer", label: "Analizador", icon: "◍" },
   { href: "/copy", label: "Generador de copy", icon: "✦" },
   { href: "/comparisons", label: "Comparaciones", icon: "▣" },
