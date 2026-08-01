@@ -41,6 +41,8 @@ export function buildSectionCodePrompt(options: {
   /** Los tramos de la oferta, solo cuando la sección es la oferta. */
   offers?: { quantity: number; price: number; compareAt: number | null; highlighted: boolean }[];
   guarantee?: string;
+  /** Las tipografías de la sección de referencia. */
+  referenceFonts?: string[];
   /** Cuántas imágenes lleva la sección de referencia. */
   referenceImages?: number;
   /** Cuántas fotos hay disponibles para dejar puestas. */
@@ -85,6 +87,14 @@ Y tres cosas que se escapan si no se miran a propósito:
 - **Las imágenes y hasta dónde llegan.** Si la foto ocupa media pantalla y se sale por el borde, hazla así —\`object-fit: cover\` y sin margen por ese lado—; si son tarjetas pequeñas, tarjetas pequeñas.
 
 Copia también lo que se mueve: transiciones al pasar por encima, sombras, degradados, esquinas redondeadas. Con CSS, que da para todo eso.
+
+${
+  options.referenceFonts && options.referenceFonts.length > 0
+    ? `**Sus tipografías son ${options.referenceFonts.join(" y ")}.** Declara esa misma pila en tu CSS, con un respaldo del sistema detrás —\`font-family: "${options.referenceFonts[0]}", Georgia, serif\` si es serif, o \`, system-ui, sans-serif\` si no—. Si el tema no las tiene cargadas se verá el respaldo, que ya se parece más que la letra por defecto; y quien quiera la exacta la activa en la configuración del tema. **No las cargues de fuera.**
+
+Lo que sí importa aunque falte la fuente: si el titular es serif y el cuerpo sans, esa diferencia se nota más que la familia concreta. Respétala.`
+    : ""
+}
 
 **Y escribe el tuyo.** Ese CSS está atado al armazón de su tema —sus variables, sus clases, su retícula— y pegado aquí daría un diseño roto, no uno idéntico. Reproduce las medidas con CSS propio, encerrado en tu sección y sin depender de nada de fuera. Sus clases no existen en este tema: usa las tuyas.
 

@@ -288,6 +288,42 @@ export function sectionPalette(css: string): SectionPalette | null {
   };
 }
 
+/**
+ * Las tipografías que usa esa sección, por orden de aparición.
+ *
+ * Se leen del CSS y no de los archivos de fuente. Un tema puede servirlas desde
+ * Google, desde su propio dominio o desde el CDN de Shopify, y la única forma de
+ * saber **cuál usa el titular** es mirar la declaración.
+ *
+ * Se descartan las que apuntan a una variable sin resolver y las genéricas
+ * sueltas —`sans-serif`, `inherit`— que no dicen nada de la marca.
+ */
+export function sectionFonts(css: string): string[] {
+  const vars = resolveVars(css);
+  const found: string[] = [];
+
+  for (const match of css.matchAll(/font-family\s*:\s*([^;}]+)/gi)) {
+    let value = match[1].trim();
+
+    const variable = /^var\(\s*(--[a-z0-9-]+)/i.exec(value);
+    if (variable) value = vars.get(variable[1]) ?? "";
+
+    // Solo la primera de la pila: las de detrás son el respaldo.
+    const first = value.split(",")[0]?.trim().replace(/^["']|["']$/g, "") ?? "";
+
+    if (!first) continue;
+    if (/^(inherit|initial|unset|serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(first)) {
+      continue;
+    }
+    if (first.startsWith("var(")) continue;
+    if (found.includes(first)) continue;
+
+    found.push(first);
+  }
+
+  return found.slice(0, 4);
+}
+
 /* ------------------------------- Recortar el HTML -------------------------- */
 
 /** Cuánto marcado se le pasa al modelo por sección. */
@@ -311,4 +347,68 @@ export function trimSectionHtml(html: string, limit = HTML_LIMIT): string {
     .trim();
 
   return clean.length > limit ? `${clean.slice(0, limit)}\n<!-- …recortado -->` : clean;
+}
+
+/* --------------------------- Emparejar con la propia ----------------------- */
+
+export interface ReferenceSection {
+  /** El papel, con el mismo vocabulario que el plano: `heroe`, `faq`… */
+  role: string;
+  /** El tipo tal cual lo llama su tema: `hero-banner`. */
+  type: string;
+  html: string;
+  css: string;
+  /**
+   * Los colores de **esa** sección, cuando se pueden leer.
+   *
+   * No los del tema: casi toda tienda tiene fondo blanco global, y un héroe
+   * puede estar entero sobre rosa. Pasar el global era lo que hacía que la
+   * sección saliera blanca por bien copiada que estuviera la disposición.
+   */
+  palette: SectionPalette | null;
+  /** Cuántas imágenes lleva, para declarar los mismos huecos. */
+  images: number;
+  /** Las tipografías que usa: es la otra mitad de por qué no se parecen. */
+  fonts: string[];
+}
+
+/**
+ * La sección de referencia que le toca, consumiéndola.
+ *
+ * ## Primero por papel, y si no, por orden
+ *
+ * El emparejamiento por papel usa el nombre que le puso su tema, y ese nombre lo
+ * eligió alguien: en la portada real de la referencia, cinco de doce secciones se
+ * llaman `slider`, `standards`, `clinically`, `percents` y `beats`. Ninguno de
+ * esos nombres dice qué hace la sección, así que ninguno emparejaba — y esas
+ * cinco se escribían **a ciegas**, sin marcado, sin CSS y sin color, que es
+ * justo lo que hacía que no se parecieran a nada.
+ *
+ * Cuando no hay coincidencia de papel se coge **la primera que quede sin usar**.
+ * Las secciones del plano salieron de leer esa misma página de arriba abajo, así
+ * que el orden es un emparejamiento razonable: la tercera de la lista suele
+ * corresponder a la tercera de la página. Y aunque se desvíe, tener delante una
+ * sección real de esa tienda —sus colores, su letra, su ritmo— acerca mucho más
+ * que no tener ninguna.
+ *
+ * Se gasta al usarla: una página con dos bloques de preguntas debe emparejar cada
+ * uno con el suyo. Es el mismo fallo que rompió el orden de las plantillas —
+ * buscar cada vez desde el principio devuelve siempre la primera.
+ */
+export function takeForRole(pool: ReferenceSection[], role: string): ReferenceSection | null {
+  const byRole = pool.findIndex((section) => section.role === role);
+  if (byRole !== -1) return pool.splice(byRole, 1)[0];
+
+  /*
+   * La cabecera y el pie no se reparten como comodín.
+   *
+   * Son las dos que **sí** emparejan siempre por nombre, así que si quedan en la
+   * bolsa es porque nadie las pidió. Dárselas a una comparativa le pasaría el
+   * marcado de un menú, que es peor que no darle nada.
+   */
+  const byOrder = pool.findIndex(
+    (section) => !["cabecera", "pie", "anuncio"].includes(section.role),
+  );
+
+  return byOrder === -1 ? null : pool.splice(byOrder, 1)[0];
 }

@@ -432,6 +432,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
             // La de la sección manda sobre la del tema: es lo que hace que un
             // héroe rosa salga rosa y no blanco.
             palette: job.model?.palette ?? palette,
+            referenceFonts: job.model?.fonts ?? [],
             referenceImages: job.model?.images ?? 0,
             availableImages: photos.length,
             vibe,

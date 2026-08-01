@@ -3,6 +3,7 @@ import "server-only";
 import { roleOf } from "@/lib/theme-structure";
 import {
   relevantCss,
+  sectionFonts,
   sectionPalette,
   selectorsIn,
   splitShopifySections,
@@ -77,7 +78,9 @@ function sheetUrls(html: string, origin: string): string[] {
   return urls.slice(0, MAX_SHEETS);
 }
 
-export interface ReferenceSection {
+export type { ReferenceSection } from "@/lib/page-sections";
+
+interface Built {
   /** El papel, con el mismo vocabulario que el plano: `heroe`, `faq`… */
   role: string;
   /** El tipo tal cual lo llama su tema: `hero-banner`. */
@@ -94,6 +97,8 @@ export interface ReferenceSection {
   palette: ReturnType<typeof sectionPalette>;
   /** Cuántas imágenes lleva, para declarar los mismos huecos. */
   images: number;
+  /** Las tipografías que usa: es la mitad de por qué dos páginas no se parecen. */
+  fonts: string[];
 }
 
 /**
@@ -105,7 +110,7 @@ export interface ReferenceSection {
 export async function readReferenceSections(
   pageUrl: string,
   timeoutMs = 20_000,
-): Promise<ReferenceSection[]> {
+): Promise<Built[]> {
   let html: string;
   let origin: string;
 
@@ -148,21 +153,9 @@ export async function readReferenceSections(
       css: own,
       palette: sectionPalette(own),
       images: (trimmed.match(/<img\b/gi) ?? []).length,
+      fonts: sectionFonts(own),
     };
   });
 }
 
-/**
- * La sección de referencia que corresponde a un papel, consumiéndola.
- *
- * Se gasta al usarla porque una página puede tener dos secciones del mismo
- * papel —dos bloques de preguntas— y ambas deben emparejarse con una distinta.
- * Es el mismo fallo que rompió el orden de las plantillas: buscar cada vez desde
- * el principio devuelve siempre la primera.
- */
-export function takeForRole(pool: ReferenceSection[], role: string): ReferenceSection | null {
-  const index = pool.findIndex((section) => section.role === role);
-  if (index === -1) return null;
-
-  return pool.splice(index, 1)[0];
-}
+export { takeForRole } from "@/lib/page-sections";
