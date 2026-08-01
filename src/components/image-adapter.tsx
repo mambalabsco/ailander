@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
@@ -8,6 +8,7 @@ import {
   adaptImagesAction,
   deleteAdaptedImageAction,
   regenerateImageAction,
+  uploadSourcesAction,
 } from "@/app/imagenes/actions";
 
 /**
@@ -59,6 +60,8 @@ export function ImageAdapter({
   const [open, setOpen] = useState<string | null>(null);
   const [extra, setExtra] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [note, setNote] = useState("");
+  const uploadRef = useRef<HTMLInputElement>(null);
 
   const product = products.find((item) => item.id === productId);
 
@@ -121,6 +124,55 @@ export function ImageAdapter({
           </p>
         ) : null}
 
+        {/*
+          Subir las propias.
+          
+          No todo lo que hay que rehacer sale de una tienda analizada: una foto
+          del móvil, un montaje de un proveedor, la captura de un anuncio que
+          funcionó.
+        */}
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Subir tus imágenes
+            </span>
+            <input
+              ref={uploadRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
+            />
+          </label>
+
+          <Button
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                const files = uploadRef.current?.files;
+                if (!files || files.length === 0) {
+                  setNote("Elige alguna imagen antes de subir.");
+                  return;
+                }
+
+                const payload = new FormData();
+                for (const file of files) payload.append("files", file);
+
+                const result = await uploadSourcesAction(payload);
+                setNote(result.message);
+                if (uploadRef.current) uploadRef.current.value = "";
+                router.refresh();
+              })
+            }
+          >
+            {isPending ? "Subiendo…" : "Subir"}
+          </Button>
+
+          {note ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{note}</p>
+          ) : null}
+        </div>
+
         <div className="mt-4">
           <GenerateButton
             variant="primary"
@@ -137,9 +189,10 @@ export function ImageAdapter({
 
       {sources.length > 0 ? (
         <section className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-          <p className="text-sm font-medium">Imágenes de las tiendas analizadas</p>
+          <p className="text-sm font-medium">Imágenes de origen</p>
           <p className="mt-1 mb-3 text-sm text-slate-500 dark:text-slate-400">
-            Marca las que quieras rehacer con tu producto. Se conserva la escena y el encuadre.
+            Las que has subido y las de las tiendas analizadas. Marca las que quieras rehacer con tu
+            producto: se conserva la escena y el encuadre.
           </p>
 
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

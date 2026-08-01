@@ -10,6 +10,7 @@ import { IMAGE_READING_SCHEMA } from "@/lib/generation-schemas";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { runInBackground } from "@/lib/background";
+import { requireContext } from "@/lib/supabase/session";
 import { generateWithCli } from "@/lib/higgsfield-cli";
 import {
   buildEditPrompt,
@@ -95,6 +96,109 @@ async function guard(): Promise<void> {
   }
   if (!(await hasActiveProviderKey())) {
     throw new Error("No hay clave de API configurada. Añádela en Configuración.");
+  }
+}
+
+/* ----------------------------- Subir las tuyas ----------------------------- */
+
+/** Lo que se acepta subir. Una foto de móvil entra de sobra. */
+const ACCEPTED = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Guarda las imágenes que se suben a mano.
+ *
+ * No todo lo que hay que rehacer sale de una tienda analizada: una foto del
+ * móvil, un montaje de un proveedor, la captura de un anuncio que funcionó.
+ *
+ * Van a un bucket **público** por el mismo motivo que la voz de los vídeos: el
+ * generador descarga el archivo por su cuenta y no se le puede pasar un buffer.
+ * Una dirección firmada caducaría en mitad de una tanda larga y las últimas
+ * fallarían sin motivo aparente.
+ */
+export async function uploadSourcesAction(
+  form: FormData,
+): Promise<{ ok: boolean; message: string; urls?: string[] }> {
+  const files = form.getAll("files").filter((item): item is File => item instanceof File);
+  if (files.length === 0) return { ok: false, message: "No llegó ninguna imagen." };
+
+  try {
+    const { supabase, userId } = await requireContext();
+    const urls: string[] = [];
+    const rejected: string[] = [];
+
+    for (const file of files) {
+      const extension = ACCEPTED.get(file.type);
+
+      if (!extension) {
+        rejected.push(`${file.name} (no es jpg, png ni webp)`);
+        continue;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        rejected.push(`${file.name} (pasa de ${MAX_UPLOAD_BYTES / 1024 / 1024} MB)`);
+        continue;
+      }
+
+      /*
+       * El nombre lo pone el servidor, no quien sube.
+       *
+       * Un nombre de archivo puede traer barras y puntos suspensivos, y acaba
+       * siendo una ruta dentro del bucket: dejarlo elegir es dejar escribir
+       * fuera de su carpeta. La extensión sale del tipo comprobado, no del
+       * nombre.
+       */
+      const path = `${userId}/${crypto.randomUUID()}.${extension}`;
+
+      const { error } = await supabase.storage
+        .from("adapt-sources")
+        .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type });
+
+      if (error) {
+        rejected.push(`${file.name} (${error.message})`);
+        continue;
+      }
+
+      urls.push(supabase.storage.from("adapt-sources").getPublicUrl(path).data.publicUrl);
+    }
+
+    revalidatePath("/imagenes");
+
+    return {
+      ok: urls.length > 0,
+      urls,
+      message: [
+        urls.length > 0 ? `${urls.length} imagen(es) subidas.` : "No se subió ninguna.",
+        rejected.length > 0 ? ` Fuera: ${rejected.join("; ")}` : "",
+      ].join(""),
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo subir." };
+  }
+}
+
+/** Las que se han subido, para poder elegirlas. */
+export async function listSourcesAction(): Promise<{ url: string; name: string }[]> {
+  try {
+    const { supabase, userId } = await requireContext();
+
+    const { data } = await supabase.storage
+      .from("adapt-sources")
+      .list(userId, { limit: 100, sortBy: { column: "created_at", order: "desc" } });
+
+    return (data ?? [])
+      .filter((item) => item.name && !item.name.startsWith("."))
+      .map((item) => ({
+        url: supabase.storage.from("adapt-sources").getPublicUrl(`${userId}/${item.name}`).data
+          .publicUrl,
+        name: item.name,
+      }));
+  } catch {
+    return [];
   }
 }
 

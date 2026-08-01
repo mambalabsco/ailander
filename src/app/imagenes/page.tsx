@@ -6,6 +6,7 @@ import { readProductImages } from "@/lib/image-store";
 import { cliStatus } from "@/lib/higgsfield-cli";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ImageAdapter, type SourceImage } from "@/components/image-adapter";
+import { listSourcesAction } from "@/app/imagenes/actions";
 import { JobsPanel } from "@/components/jobs-panel";
 import { SectionCard } from "@/components/section-card";
 
@@ -39,14 +40,30 @@ export default async function ImagenesPage() {
     })),
   );
 
-  const sources: SourceImage[] = blueprints.flatMap((blueprint) =>
-    blueprint.images.map((image) => ({
-      url: image.url,
-      alt: image.alt,
-      width: image.width,
-      storeName: blueprint.storeName,
+  /*
+   * Las subidas van primero.
+   *
+   * Quien acaba de subir una la busca ahí mismo, y dejarla al final de una
+   * rejilla de cien imágenes de tiendas analizadas es esconderla.
+   */
+  const uploaded = ready ? await listSourcesAction() : [];
+
+  const sources: SourceImage[] = [
+    ...uploaded.map((item) => ({
+      url: item.url,
+      alt: "Subida",
+      width: 0,
+      storeName: "Subida por ti",
     })),
-  );
+    ...blueprints.flatMap((blueprint) =>
+      blueprint.images.map((image) => ({
+        url: image.url,
+        alt: image.alt,
+        width: image.width,
+        storeName: blueprint.storeName,
+      })),
+    ),
+  ];
 
   // Las ya adaptadas del primero que tenga imagen principal: es el que viene
   // elegido en el desplegable.
