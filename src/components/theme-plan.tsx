@@ -8,6 +8,7 @@ import {
   buildLookPlanAction,
   buildThemePlanAction,
   clearDemoImagesAction,
+  clearSectionDraftsAction,
   recreatePageAction,
   themesForApplyAction,
   type LookPlan,
@@ -541,6 +542,32 @@ export function ThemePlanPanel({
               }
             >
               {isPending ? "Quitando…" : "Quitar las imágenes de maqueta"}
+            </Button>
+
+            {/*
+              Reutilizar es lo correcto por defecto —no pagar dos veces lo mismo—
+              pero si una sección salió fea, volver a lanzarlo la devolvería
+              idéntica. Esto es lo que dice «escríbelas otra vez».
+            */}
+            <Button
+              variant="ghost"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  if (
+                    !window.confirm(
+                      "Las secciones ya escritas se reutilizan sin volver a pagarlas.\n\n¿Olvidarlas y escribirlas de nuevo? La próxima vez se vuelven a cobrar.",
+                    )
+                  ) {
+                    return;
+                  }
+
+                  const result = await clearSectionDraftsAction(blueprintId, plan.page);
+                  setMessage(result.message);
+                })
+              }
+            >
+              Escribirlas otra vez desde cero
             </Button>
           </div>
         </div>

@@ -21,6 +21,12 @@ import { SECTION_CODE_SCHEMA } from "@/lib/generation-schemas";
 import { buildSectionCodePrompt } from "@/lib/section-code-prompt";
 import { readReferenceSections, takeForRole } from "@/lib/reference-page";
 import {
+  clearSectionDrafts,
+  readSectionDrafts,
+  saveSectionDraft,
+  type SectionDraft,
+} from "@/lib/data/theme-drafts";
+import {
   buildTemplateEntry,
   clearDemoImages,
   orderAfterRecreate,
@@ -374,6 +380,15 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
        * columnas, qué tamaño tiene el titular, cuánto aire hay— que no se
        * deducen de una frase.
        */
+      /*
+       * Lo que ya se escribió antes no se vuelve a pagar.
+       *
+       * Un corte a mitad —un reinicio del servidor— tiraba las secciones ya
+       * hechas y había que pagarlas de nuevo. Ahora se leen las guardadas y solo
+       * se genera lo que falta.
+       */
+      const drafts = await readSectionDrafts(blueprintId, page);
+
       await report("Leyendo la página de referencia");
 
       const referencePage =
@@ -401,6 +416,8 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       // Cuántas se escribieron con su sección de referencia delante, para poder
       // decirlo: la diferencia entre eso y no tenerla se nota en el resultado.
       let matched = 0;
+      // Cuántas venían ya escritas de un intento anterior.
+      let reused = 0;
 
       /*
        * Una llamada por sección, en serie.
@@ -413,16 +430,45 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       for (const [index, wanted] of plan.create.entries()) {
         const type = sectionType(wanted.kind, index);
 
-        // Antes de cada sección, no después: si se queda colgada en la cuarta,
-        // el cartel dice «cuarta» y no «tercera terminada».
-        await report(`Escribiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`);
-
         /*
          * Se consume al usarla: una página puede tener dos secciones del mismo
          * papel y cada una debe emparejarse con la suya. Buscar cada vez desde
          * el principio devolvería siempre la primera — es el mismo fallo que
          * rompió el orden de las plantillas.
          */
+        /*
+         * El número de orden distingue dos secciones del mismo papel dentro de
+         * la misma página, que es lo que hace que la caché acierte con la suya.
+         */
+        const ordinal = plan.create
+          .slice(0, index)
+          .filter((other) => other.kind === wanted.kind).length;
+
+        const saved = drafts.get(`${wanted.kind}:${ordinal}`);
+
+        if (saved) {
+          await report(
+            `${wanted.kind} ya estaba escrita — ${index + 1} de ${plan.create.length}`,
+          );
+
+          created.push(
+            buildTemplateEntry({
+              kind: wanted.kind,
+              type: saved.sectionType,
+              index,
+              settings: saved.settings,
+              blocks: saved.blocks,
+            }),
+          );
+          files.push({ filename: sectionFilename(saved.sectionType), content: saved.liquid });
+          reused += 1;
+          continue;
+        }
+
+        // Antes de escribir, no después: si se queda colgada en la cuarta, el
+        // cartel dice «cuarta» y no «tercera terminada».
+        await report(`Escribiendo ${wanted.kind} — ${index + 1} de ${plan.create.length}`);
+
         const model = takeForRole(pool, wanted.kind);
 
         let problems: string[] = [];
@@ -490,6 +536,22 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
 
           if (model) matched += 1;
 
+          const draft: SectionDraft = {
+            kind: wanted.kind,
+            ordinal,
+            sectionType: type,
+            liquid: generated.data.liquid,
+            settings: withPhotos.settings,
+            blocks: generated.data.blocks.map((block) => ({
+              type: block.type,
+              settings: coerceSettings(block.settings, blockSettingsOf(review.schema!, block.type)),
+            })),
+          };
+
+          // Se guarda **aquí**, en cuanto pasa la revisión. Guardar al terminar
+          // todas es justo lo que hacía que un corte a mitad tirara el trabajo.
+          await saveSectionDraft(blueprintId, page, draft);
+
           built = {
             file: generated.data.liquid,
             entry: buildTemplateEntry({
@@ -551,6 +613,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
           `${created.length} sección(es) creadas en ${templateName}`,
           plan.retire.length > 0 ? `, ${plan.retire.length} de las tuyas retiradas` : "",
           `. ${written} archivo(s) escritos.`,
+          reused > 0 ? ` ${reused} venían ya escritas y no se han vuelto a pagar.` : "",
           matched > 0
             ? ` ${matched} escritas mirando su sección real.`
             : " Sin poder leer la página de referencia: salen solo de su descripción.",
@@ -658,6 +721,35 @@ export async function clearDemoImagesAction(
     };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo quitar." };
+  }
+}
+
+/**
+ * Tira lo escrito de una página para volver a hacerla desde cero.
+ *
+ * Existe porque la reutilización es lo correcto por defecto —no pagar dos veces
+ * lo mismo— pero no siempre: si una sección salió fea, volver a lanzarlo la
+ * devolvería idéntica. Esto es lo que dice «esta vez sí, escríbelas otra vez».
+ */
+export async function clearSectionDraftsAction(
+  blueprintId: unknown,
+  pageKind: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const planId = readText(blueprintId);
+  if (!planId) return { ok: false, message: "Falta el análisis." };
+
+  try {
+    const cleared = await clearSectionDrafts(planId, readPage(pageKind));
+
+    return {
+      ok: true,
+      message:
+        cleared === 0
+          ? "No había nada guardado: la próxima vez se escribe todo de nuevo igualmente."
+          : `${cleared} sección(es) olvidadas. La próxima vez se escriben otra vez, y se vuelven a pagar.`,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo vaciar." };
   }
 }
 

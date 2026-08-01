@@ -74,9 +74,23 @@ export interface BackgroundJob {
  */
 export const JOB_STALE_MS = 30 * 60 * 1000;
 
+/**
+ * Los que tardan de verdad, con su propio plazo.
+ *
+ * Recrear una página son diez u once llamadas al modelo, una por sección y en
+ * serie: pasa de la media hora sin que nada vaya mal. Con el plazo común, la
+ * interfaz decía «probablemente se cortó» sobre un trabajo que seguía vivo, y
+ * quien lo leía volvía a lanzarlo — pagando dos veces por lo mismo.
+ */
+const SLOW_KINDS: Partial<Record<JobKind, number>> = {
+  tema: 90 * 60 * 1000,
+};
+
 export function isStale(job: BackgroundJob, now = Date.now()): boolean {
   if (job.status !== "running") return false;
-  return now - new Date(job.createdAt).getTime() > JOB_STALE_MS;
+
+  const limit = SLOW_KINDS[job.kind] ?? JOB_STALE_MS;
+  return now - new Date(job.createdAt).getTime() > limit;
 }
 
 /**

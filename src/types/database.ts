@@ -747,6 +747,20 @@ type VideoReferenceRow = {
   created_at: string;
 };
 
+type ThemeSectionDraftRow = {
+  id: string;
+  user_id: string;
+  blueprint_id: string;
+  page: string;
+  kind: string;
+  ordinal: number;
+  section_type: string;
+  liquid: string;
+  settings: unknown;
+  blocks: unknown;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -1033,6 +1047,17 @@ export type Database = {
           Exclude<keyof CostGatewayFeeRow, "user_id" | "store_id" | "gateway">
         >,
         [Belongs<"store_id", "stores">]
+      >;
+      theme_section_drafts: Table<
+        ThemeSectionDraftRow,
+        Insertable<
+          ThemeSectionDraftRow,
+          Exclude<
+            keyof ThemeSectionDraftRow,
+            "user_id" | "blueprint_id" | "page" | "kind" | "ordinal" | "section_type" | "liquid"
+          >
+        >,
+        [Belongs<"blueprint_id", "store_blueprints">]
       >;
       video_references: Table<
         VideoReferenceRow,

@@ -139,7 +139,8 @@ export function JobsPanel({
                 {abandoned ? (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
                     Lleva demasiado tiempo sin terminar. Probablemente se cortó al reiniciarse el
-                    servidor: vuelve a lanzarlo.
+                    servidor: vuelve a lanzarlo — lo que ya estuviera escrito se reutiliza y no se vuelve a
+                    pagar.
                   </p>
                 ) : null}
 
