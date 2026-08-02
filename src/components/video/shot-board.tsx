@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import {
   assembleVideoAction,
+  uploadMusicAction,
   generateClipsAction,
   generateKeyframesAction,
   generateVoiceAction,
@@ -38,6 +40,10 @@ export function ShotBoard({
   providers: { voice: boolean; images: boolean; compose: boolean };
 }) {
   const [redo, setRedo] = useState<Set<string>>(new Set());
+  const [musicNote, setMusicNote] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const musicRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const withCuts = video.shots.filter((shot) => shot.cutStart !== null);
   const withKeyframe = video.shots.filter((shot) => shot.keyframeUrl);
@@ -152,10 +158,81 @@ export function ShotBoard({
             label={video.finalUrl ? "Volver a montar" : "Montar el vídeo"}
             disabled={!providers.compose}
             disabledReason={!providers.compose ? "Falta FAL_KEY" : undefined}
-            hint="Céntimos. Se monta fuera del servidor para no bloquear la plataforma."
+            hint="Céntimos. Lleva los subtítulos quemados con tu texto y la música si la has puesto."
           />
         ) : null}
       </div>
+
+      {/*
+        La música se pone antes de montar, junto al botón que la usa.
+
+        Va con su aviso porque el montaje **no tiene control de volumen**: una
+        pista a nivel normal tapa la voz y el anuncio deja de entenderse, y eso
+        no se arregla después.
+      */}
+      {withClip.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Música de fondo {video.musicUrl ? "· puesta" : "· sin música"}
+            </span>
+            <input
+              ref={musicRef}
+              type="file"
+              accept="audio/*"
+              className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
+            />
+            <span className="text-xs text-amber-700 dark:text-amber-400">
+              Súbela ya baja de volumen: no hay control de volumen y a nivel normal tapa la voz.
+            </span>
+          </label>
+
+          <Button
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                const payload = new FormData();
+                payload.set("videoId", video.id);
+                payload.set("productId", productId);
+
+                const file = musicRef.current?.files?.[0];
+                if (file) payload.set("music", file);
+
+                const result = await uploadMusicAction(payload);
+                setMusicNote(result.message);
+                if (musicRef.current) musicRef.current.value = "";
+                router.refresh();
+              })
+            }
+          >
+            {video.musicUrl ? "Cambiar" : "Poner música"}
+          </Button>
+
+          {video.musicUrl ? (
+            <Button
+              variant="ghost"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  const payload = new FormData();
+                  payload.set("videoId", video.id);
+                  payload.set("productId", productId);
+
+                  const result = await uploadMusicAction(payload);
+                  setMusicNote(result.message);
+                  router.refresh();
+                })
+              }
+            >
+              Quitarla
+            </Button>
+          ) : null}
+
+          {musicNote ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{musicNote}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {video.finalUrl ? (
         <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/40">

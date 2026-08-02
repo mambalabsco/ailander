@@ -64,11 +64,14 @@ test("la voz va entera y en un solo trozo", () => {
   assert.equal(audio?.keyframes[0].duration, 6000);
 });
 
-test("una toma sin clip se avisa, no deja hueco negro", () => {
+test("una toma sin clip no deja hueco: la anterior se estira por encima", () => {
   /*
-   * Las tomas se pegan en orden en vez de colocarse en su instante original.
-   * Así, si una se cae, el vídeo se acorta y sigue viéndose; colocando por
-   * tiempo original quedaría un hueco negro en medio.
+   * La que falta no adelanta a las demás.
+   *
+   * Antes las tomas se pegaban una detrás de otra, así que una que faltara
+   * adelantaba todo lo que venía después y el vídeo se descuadraba de la voz.
+   * Ahora la primera se estira hasta que arranca la tercera —que sigue en su
+   * segundo real— y lo que se oye sigue coincidiendo con lo que se ve.
    */
   const result = buildTimeline({
     cuts: [
@@ -82,9 +85,41 @@ test("una toma sin clip se avisa, no deja hueco negro", () => {
 
   assert.deepEqual(result.missing, ["02"]);
   assert.equal(result.tracks[0].keyframes.length, 2);
-  // La tercera arranca donde acabó la primera: no queda hueco.
-  assert.equal(result.tracks[0].keyframes[1].timestamp, 3000);
-  assert.equal(result.seconds, 6);
+
+  assert.equal(result.tracks[0].keyframes[0].duration, 6000, "la primera cubre el hueco");
+  assert.equal(result.tracks[0].keyframes[1].timestamp, 6000, "la tercera sigue en su sitio");
+  assert.equal(result.seconds, 9);
+});
+
+test("cada toma cae en el segundo en que empieza su frase", () => {
+  /*
+   * Este es el fallo que descuadraba el vídeo entero. Los cortes no se tocan
+   * entre sí —hay silencio entre frases— y pegando las tomas se ignoraban esos
+   * huecos: la imagen se adelantaba un poco más en cada corte, así que el
+   * desajuste **crecía** según avanzaba el vídeo.
+   */
+  const result = buildTimeline({
+    cuts: [
+      { n: "01", start: 0.5, end: 3 },
+      { n: "02", start: 3.4, end: 6 },
+      { n: "03", start: 6.5, end: 9 },
+    ],
+    clips: { "01": "https://cdn/1.mp4", "02": "https://cdn/2.mp4", "03": "https://cdn/3.mp4" },
+    voiceUrl: VOZ,
+  });
+
+  const [uno, dos, tres] = result.tracks[0].keyframes;
+
+  // La primera empieza en cero aunque su frase entre en el 0,5: ese arranque
+  // tiene que verse.
+  assert.equal(uno.timestamp, 0);
+  assert.equal(dos.timestamp, 3400);
+  assert.equal(tres.timestamp, 6500);
+
+  // Y cada una llega hasta que arranca la siguiente: sin huecos en negro.
+  assert.equal(uno.duration, 3400);
+  assert.equal(dos.duration, 3100);
+  assert.equal(result.seconds, 9);
 });
 
 test("un corte de duración cero se descarta", () => {

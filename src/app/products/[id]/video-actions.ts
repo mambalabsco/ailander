@@ -29,6 +29,7 @@ import {
   type ShotRole,
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
+import { drawCaptions } from "@/lib/video/caption-image";
 import { animate, compose, keyframe, listVoices, speak } from "@/lib/video/providers";
 import { uploadVideoAsset } from "@/lib/data/video-assets";
 import type { JobOutcome } from "@/lib/background";
@@ -347,8 +348,35 @@ export async function generateKeyframesAction(
 
   const { readProductImages } = await import("@/lib/image-store");
   const images = await readProductImages(productId);
-  const productShot = images.find((image) => image.isPrimary) ?? images[0];
   const product = await findProductAnywhere(productId);
+
+  /*
+   * La foto del envase, y si no la hay aquí, la de tu Shopify.
+   *
+   * Sin ella la toma de producto sale con un frasco liso —a propósito, porque
+   * una etiqueta inventada se lee como real— pero eso es un vídeo a medias. La
+   * tienda ya tiene fotos del producto y son permanentes, así que sirven igual
+   * de referencia.
+   */
+  let productShot: { url: string } | undefined =
+    images.find((image) => image.isPrimary) ?? images[0];
+
+  if (!productShot && product?.storeId) {
+    try {
+      const { findStore } = await import("@/lib/store-registry");
+      const { listShopProducts } = await import("@/lib/shopify-store");
+
+      const store = await findStore(product.storeId);
+
+      if (store) {
+        const found = await listShopProducts(store, { search: product.name, limit: 5 });
+        const shopImage = found.flatMap((item) => item.images)[0];
+        if (shopImage) productShot = { url: shopImage.url };
+      }
+    } catch {
+      // Quedarse sin referencia no puede impedir generar el resto de tomas.
+    }
+  }
 
   return runStep(ctx, {
     productId,
@@ -534,6 +562,57 @@ export async function generateClipsAction(
   });
 }
 
+/* ------------------------------ La música ---------------------------------- */
+
+/**
+ * Sube la música de fondo de un vídeo.
+ *
+ * **Tiene que venir ya baja de volumen.** El montaje no tiene control de
+ * volumen: una pista a nivel normal tapa la voz y el anuncio deja de entenderse,
+ * y eso no hay forma de arreglarlo desde aquí. Se avisa donde se sube, que es
+ * cuando sirve de algo saberlo.
+ */
+export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; message: string }> {
+  const videoId = readText(form.get("videoId"));
+  const productId = readText(form.get("productId"));
+  const file = form.get("music");
+
+  if (!videoId || !productId) return { ok: false, message: "Falta el vídeo." };
+
+  // Quitarla es tan legítimo como ponerla: sin archivo se deja el vídeo sin música.
+  if (!(file instanceof File) || file.size === 0) {
+    await updateVideo(videoId, { musicUrl: "" });
+    revalidatePath(`/products/${productId}`);
+    return { ok: true, message: "Vídeo sin música de fondo." };
+  }
+
+  if (!/^audio\//.test(file.type)) {
+    return { ok: false, message: "Eso no es un archivo de audio." };
+  }
+  if (file.size > 25 * 1024 * 1024) {
+    return { ok: false, message: "La música pesa más de 25 MB." };
+  }
+
+  try {
+    const url = await uploadVideoAsset({
+      videoId,
+      name: "musica.mp3",
+      data: Buffer.from(await file.arrayBuffer()),
+      contentType: file.type,
+    });
+
+    await updateVideo(videoId, { musicUrl: url });
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: true,
+      message: "Música puesta. Comprueba en el montaje que no tapa la voz: no hay control de volumen.",
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo subir." };
+  }
+}
+
 /* ------------------------------ 5 · Montaje -------------------------------- */
 
 /**
@@ -567,8 +646,23 @@ export async function assembleVideoAction(
     work: async (report) => {
       // El montaje es una sola llamada larga, así que no hay pasos que contar:
       // decir que está esperando ya evita pensar que se colgó.
+      await report("Dibujando los subtítulos");
+
+      /*
+       * Se dibujan con **tu** texto, no transcribiendo el audio.
+       *
+       * El guion va fonético para que la voz pronuncie bien —«eme ce te» por
+       * «MCT»— así que un servicio que escuche el vídeo escribiría lo que oye.
+       * Los tiempos por palabra ya los tenemos: se escribe lo correcto en el
+       * segundo correcto sin escuchar nada.
+       */
+      const captions = await drawCaptions(videoId, video.shots).catch(() => []);
+
       await report("Montando el vídeo: esto tarda un rato");
+
       const timeline = buildTimeline({
+        captions,
+        musicUrl: video.musicUrl || undefined,
         cuts: video.shots
           .filter((shot) => shot.cutStart !== null && shot.cutEnd !== null)
           .map((shot) => ({ n: shot.n, start: shot.cutStart!, end: shot.cutEnd! })),

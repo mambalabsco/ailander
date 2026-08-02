@@ -63,6 +63,16 @@ export interface TimelineInput {
   clips: Record<string, string>;
   /** La voz completa, la misma que dio los cortes. */
   voiceUrl: string;
+  /** Los subtítulos ya dibujados, con su tiempo. */
+  captions?: { url: string; start: number; end: number }[];
+  /**
+   * La música de fondo, si la hay.
+   *
+   * El montaje no tiene control de volumen, así que el archivo tiene que venir
+   * ya bajo. Una pista a volumen normal tapa la voz y el anuncio no se entiende
+   * — y eso no se arregla desde aquí.
+   */
+  musicUrl?: string;
 }
 
 export interface TimelineResult {
@@ -78,31 +88,67 @@ const toMs = (seconds: number) => Math.round(seconds * 1000);
 /**
  * Arma la línea de tiempo.
  *
- * Las tomas se colocan **pegadas, en el orden de los cortes**, no en el instante
- * en que empieza su frase dentro del audio original. Parece lo mismo y no lo es:
- * si una toma se cae, colocar por el tiempo original dejaría un hueco negro en
- * medio, mientras que pegándolas el vídeo se acorta y sigue viéndose. La voz
- * queda desplazada en ese caso, y por eso las que faltan se devuelven aparte
- * para poder avisar antes de montar.
+ * ## Cada toma va en su segundo real, no pegada a la anterior
+ *
+ * Antes se colocaban una detrás de otra empezando en cero, con la duración de
+ * su corte. Suena razonable y **descuadra el vídeo entero**: la voz suena
+ * seguida desde el segundo cero, pero los cortes no se tocan entre sí —hay
+ * silencio entre frases, y la primera casi nunca empieza en el cero exacto—.
+ * Cada hueco que se ignoraba adelantaba la imagen un poco más, así que el
+ * desajuste **crecía según avanzaba el vídeo**: al principio se nota poco y al
+ * final la escena va por delante de lo que se oye.
+ *
+ * Ahora cada toma se coloca en el instante en que empieza su frase dentro del
+ * audio, que es la única forma de que imagen y voz coincidan.
+ *
+ * ## Y se estira hasta que empieza la siguiente
+ *
+ * Si cada toma durase solo lo que dura su frase, los silencios entre frases
+ * quedarían en negro. Estirando cada plano hasta el arranque del siguiente no
+ * hay huecos y el corte cae justo cuando empieza a hablarse de lo otro, que es
+ * donde tiene que caer.
+ *
+ * La primera empieza en cero aunque su frase empiece más tarde: ese medio
+ * segundo de arranque tiene que verse.
  */
 export function buildTimeline(input: TimelineInput): TimelineResult {
   const video: Keyframe[] = [];
   const missing: string[] = [];
 
+  const usable = input.cuts.filter((cut) => {
+    const ok = Boolean(input.clips[cut.n]) && cut.end > cut.start;
+    if (!ok) missing.push(cut.n);
+    return ok;
+  });
+
   let cursor = 0;
 
-  for (const cut of input.cuts) {
-    const url = input.clips[cut.n];
-    const duration = Math.max(0, cut.end - cut.start);
+  for (const [index, cut] of usable.entries()) {
+    // La primera arranca en cero; las demás, donde empieza su frase.
+    const start = index === 0 ? 0 : cut.start;
 
-    if (!url || duration <= 0) {
-      missing.push(cut.n);
-      continue;
-    }
+    /*
+     * Hasta el arranque de la siguiente, o hasta el final de la suya.
+     *
+     * Una toma que se cayó no deja hueco: la anterior se estira por encima,
+     * porque el siguiente corte se calcula contra la siguiente **que sí está**.
+     */
+    const end = index + 1 < usable.length ? usable[index + 1].start : cut.end;
+    const duration = Math.max(0, end - start);
 
-    video.push({ timestamp: toMs(cursor), duration: toMs(duration), url });
-    cursor += duration;
+    if (duration <= 0) continue;
+
+    video.push({ timestamp: toMs(start), duration: toMs(duration), url: input.clips[cut.n] });
+    cursor = Math.max(cursor, start + duration);
   }
+
+  const captions: Keyframe[] = (input.captions ?? [])
+    .filter((caption) => caption.end > caption.start)
+    .map((caption) => ({
+      timestamp: toMs(caption.start),
+      duration: toMs(caption.end - caption.start),
+      url: caption.url,
+    }));
 
   return {
     tracks: [
@@ -119,6 +165,26 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
         type: "audio",
         keyframes: [{ timestamp: 0, duration: toMs(cursor), url: input.voiceUrl }],
       },
+
+      /*
+       * La música va **antes** que los subtítulos y después de la voz.
+       *
+       * El orden de las pistas es el orden en que se apilan: los subtítulos
+       * tienen que quedar los últimos o el vídeo los taparía.
+       */
+      ...(input.musicUrl
+        ? [
+            {
+              id: "musica",
+              type: "audio" as const,
+              keyframes: [{ timestamp: 0, duration: toMs(cursor), url: input.musicUrl }],
+            },
+          ]
+        : []),
+
+      ...(captions.length > 0
+        ? [{ id: "subtitulos", type: "image" as const, keyframes: captions }]
+        : []),
     ],
     missing,
     seconds: Number(cursor.toFixed(2)),

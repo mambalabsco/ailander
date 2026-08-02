@@ -37,6 +37,8 @@ export interface Video {
   styleAccent: string;
   voiceId: string;
   voiceUrl: string | null;
+  /** Música de fondo, ya baja de volumen. Vacío si no lleva. */
+  musicUrl: string;
   words: TimedWord[];
   voiceSeconds: number;
   finalUrl: string | null;
@@ -112,6 +114,7 @@ export async function listVideos(productId: string): Promise<Video[]> {
     styleAccent: row.style_accent,
     voiceId: row.voice_id,
     voiceUrl: row.voice_url,
+    musicUrl: row.music_url ?? "",
     words: parseWords(row.words),
     voiceSeconds: num(row.voice_seconds),
     finalUrl: row.final_url,
@@ -250,6 +253,7 @@ export async function updateVideo(
   patch: {
     status?: VideoStatus;
     voiceUrl?: string | null;
+    musicUrl?: string;
     words?: TimedWord[];
     voiceSeconds?: number;
     finalUrl?: string | null;
@@ -264,6 +268,7 @@ export async function updateVideo(
   const changes: TablesUpdate<"videos"> = { updated_at: new Date().toISOString() };
   if (patch.status !== undefined) changes.status = patch.status;
   if (patch.voiceUrl !== undefined) changes.voice_url = patch.voiceUrl;
+  if (patch.musicUrl !== undefined) changes.music_url = patch.musicUrl;
   if (patch.words !== undefined) changes.words = patch.words as unknown as TablesUpdate<"videos">["words"];
   if (patch.voiceSeconds !== undefined) changes.voice_seconds = patch.voiceSeconds.toFixed(2);
   if (patch.finalUrl !== undefined) changes.final_url = patch.finalUrl;

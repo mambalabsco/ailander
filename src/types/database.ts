@@ -699,6 +699,8 @@ type VideoRow = {
   spent_usd: string;
   created_at: string;
   updated_at: string;
+  /** Música de fondo, ya baja de volumen. */
+  music_url: string;
 };
 
 type VideoShotRow = {
