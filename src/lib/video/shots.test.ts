@@ -8,6 +8,9 @@ import {
   deriveCuts,
   estimate,
   CLIP_THRESHOLD,
+  VIDEO_MODELS,
+  billedSeconds,
+  findVideoModel,
   efficientShotCounts,
   keyframePrompt,
   shotCountOption,
@@ -357,4 +360,50 @@ test("el umbral es el mismo que usa el plan de duraciones", () => {
   const plan = planDurations([{ n: "01", start: 0, end: CLIP_THRESHOLD + 0.1, guion: "x" }]);
 
   assert.equal(plan[0].request, 10);
+});
+
+/* ----------------------------- Los animadores ------------------------------ */
+
+const KLING = findVideoModel("kling");
+const GROK = findVideoModel("grok");
+
+test("con clips cerrados se sube al que quepa", () => {
+  assert.equal(billedSeconds(5.4, KLING.billing), 5);
+  assert.equal(billedSeconds(5.6, KLING.billing), 10, "medio segundo de más paga el doble");
+});
+
+test("cobrando por segundo no hay salto: se paga lo que dura", () => {
+  assert.equal(billedSeconds(5.6, GROK.billing), 6);
+  assert.equal(billedSeconds(8.2, GROK.billing), 9);
+});
+
+test("pero hay un mínimo, y una toma corta lo paga entero", () => {
+  assert.equal(billedSeconds(2, GROK.billing), 6);
+});
+
+test("el barato sale unas cuatro veces menos para el mismo anuncio", () => {
+  // 60 s de voz en 8 tomas: el caso que salía caro.
+  const conKling = shotCountOption(60, 8, KLING.billing);
+  const conGrok = shotCountOption(60, 8, GROK.billing);
+
+  const caro = conKling.billed * KLING.usdPerSecond;
+  const barato = conGrok.billed * GROK.usdPerSecond;
+
+  assert.ok(barato < caro / 4, `${barato.toFixed(2)} contra ${caro.toFixed(2)}`);
+});
+
+test("cobrando por segundo, ocho tomas dejan de ser mala idea", () => {
+  // Con clips cerrados, ocho tomas de 7,5 s tiran veinte segundos. Por segundo,
+  // no se tira nada y el número de tomas vuelve a ser una decisión de montaje.
+  assert.equal(shotCountOption(60, 8, KLING.billing).waste, 20);
+  assert.equal(shotCountOption(60, 8, GROK.billing).waste, 4);
+});
+
+test("ninguno trae audio sincronizado, y está escrito", () => {
+  // El manual lo comprobó: no reciben audio, solo imagen y prompt. La boca buena
+  // sale de un pase de lipsync aparte.
+  for (const model of VIDEO_MODELS) {
+    assert.equal(model.nativeAudio, false, `${model.id} dice traer audio`);
+    assert.ok(model.note.length > 30, `${model.id} sin explicar`);
+  }
 });

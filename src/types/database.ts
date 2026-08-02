@@ -701,6 +701,8 @@ type VideoRow = {
   updated_at: string;
   /** Música de fondo, ya baja de volumen. */
   music_url: string;
+  /** Con qué modelo se anima: ver `VIDEO_MODELS`. */
+  video_model: string;
 };
 
 type VideoShotRow = {

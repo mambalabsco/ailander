@@ -19,6 +19,7 @@ import {
 import { buildScriptPrompt, buildStylePrompt } from "@/lib/video/script-prompt";
 import {
   DEFAULT_RATES,
+  findVideoModel,
   NEGATIVE_PROMPT,
   deriveCuts,
   keyframePrompt,
@@ -197,6 +198,7 @@ export async function createVideoFromCopyAction(
       const videoId = await createVideo({
         productId,
         copyId,
+        videoModel: findVideoModel(readText(raw.videoModel)).id,
         title: script.data.title || copy.driverLabel,
         styleRender: style.data.render,
         styleAccent: style.data.accent,
@@ -493,6 +495,14 @@ export async function generateClipsAction(
     return { started: false, message: "Todas las tomas ya tienen su clip." };
   }
 
+  /*
+   * El modelo sale del vídeo, no de quien pulsa.
+   *
+   * Reanimar una toma suelta con otro modelo la dejaría con distinto aspecto que
+   * las de al lado, y eso se ve justo en el corte.
+   */
+  const modelo = findVideoModel(video.videoModel);
+
   const plans = planDurations(
     pending.map((shot) => ({
       n: shot.n,
@@ -500,6 +510,8 @@ export async function generateClipsAction(
       end: shot.cutEnd ?? 0,
       guion: shot.guion,
     })),
+    undefined,
+    modelo.billing,
   );
 
   return runStep(ctx, {
@@ -532,6 +544,7 @@ export async function generateClipsAction(
             imageUrl: shot.keyframeUrl!,
             prompt: motionPrompt(shot),
             seconds: plan.request,
+            model: modelo.slug,
             negativePrompt: NEGATIVE_PROMPT,
           });
 
@@ -547,7 +560,7 @@ export async function generateClipsAction(
 
       await updateVideo(videoId, {
         status: failures.length === pending.length ? "error" : "clips",
-        addSpent: seconds * DEFAULT_RATES.videoPerSecond,
+        addSpent: seconds * modelo.usdPerSecond,
       });
 
       const head = stopped ? "Cancelado. " : "";

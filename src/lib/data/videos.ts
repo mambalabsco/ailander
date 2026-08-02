@@ -39,6 +39,8 @@ export interface Video {
   voiceUrl: string | null;
   /** Música de fondo, ya baja de volumen. Vacío si no lleva. */
   musicUrl: string;
+  /** Con qué modelo se anima. Ver `VIDEO_MODELS`. */
+  videoModel: string;
   words: TimedWord[];
   voiceSeconds: number;
   finalUrl: string | null;
@@ -115,6 +117,7 @@ export async function listVideos(productId: string): Promise<Video[]> {
     voiceId: row.voice_id,
     voiceUrl: row.voice_url,
     musicUrl: row.music_url ?? "",
+    videoModel: row.video_model ?? "kling",
     words: parseWords(row.words),
     voiceSeconds: num(row.voice_seconds),
     finalUrl: row.final_url,
@@ -156,6 +159,7 @@ export async function readVideo(id: string): Promise<Video | null> {
 export async function createVideo(input: {
   productId: string;
   copyId?: string;
+  videoModel?: string;
   title: string;
   styleRender: string;
   styleAccent: string;
@@ -170,6 +174,7 @@ export async function createVideo(input: {
       user_id: userId,
       product_id: input.productId,
       copy_id: input.copyId ?? null,
+      video_model: input.videoModel ?? "kling",
       title: input.title,
       style_render: input.styleRender,
       style_accent: input.styleAccent,

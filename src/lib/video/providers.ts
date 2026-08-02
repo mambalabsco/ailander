@@ -316,12 +316,14 @@ export async function keyframe(options: {
 export async function animate(options: {
   imageUrl: string;
   prompt: string;
-  seconds: 5 | 10;
+  seconds: number;
+  /** El modelo del proveedor. Por defecto, el de mejor imagen. */
+  model?: string;
   negativePrompt?: string;
   timeoutMs?: number;
 }): Promise<string> {
   const urls = await runTask(
-    "kling-3.0/video",
+    options.model || "kling-3.0/video",
     {
       prompt: options.prompt,
       image_urls: [options.imageUrl],

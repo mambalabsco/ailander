@@ -9,10 +9,19 @@ import { GenerateButton } from "@/components/generate-button";
 import { VoicePicker } from "@/components/video/voice-picker";
 import { ShotBoard } from "@/components/video/shot-board";
 import {
-  DEFAULT_RATES,
+  VIDEO_MODELS,
   efficientShotCounts,
+  findVideoModel,
   shotCountOption,
 } from "@/lib/video/shots";
+
+/**
+ * Qué animador se elige y por qué importa.
+ *
+ * Los dos sirven para cosas distintas: uno da mejor imagen y cuesta cuatro veces
+ * más. Con el precio al lado de cada uno, y el de cada reparto de tomas
+ * calculado con el elegido, la decisión se toma viendo el número.
+ */
 import {
   createVideoFromCopyAction,
   runFullVideoAction,
@@ -53,6 +62,7 @@ export function VideosTab({
   const [shots, setShots] = useState(6);
   const [seconds, setSeconds] = useState(60);
   const [referenceId, setReferenceId] = useState("");
+  const [videoModel, setVideoModel] = useState(VIDEO_MODELS[0].id);
   const [isPending, startTransition] = useTransition();
 
   const missing = [
@@ -122,6 +132,23 @@ export function VideosTab({
               </label>
 
               <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Animador
+                </span>
+                <SelectField
+                  value={videoModel}
+                  onChange={(event) => setVideoModel(event.target.value)}
+                  className="min-w-48"
+                >
+                  {VIDEO_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label} · ${model.usdPerSecond.toFixed(3)}/s
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+
+              <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tomas</span>
                 <SelectField
                   value={String(shots)}
@@ -137,8 +164,9 @@ export function VideosTab({
                     3,85. Sin verlo al lado, esa elección se hace a ciegas.
                   */}
                   {[4, 5, 6, 7, 8, 10, 11, 12, 14].map((value) => {
-                    const option = shotCountOption(seconds, value);
-                    const cost = option.billed * DEFAULT_RATES.videoPerSecond;
+                    const model = findVideoModel(videoModel);
+                    const option = shotCountOption(seconds, value, model.billing);
+                    const cost = option.billed * model.usdPerSecond;
 
                     return (
                       <option key={value} value={value}>
@@ -189,16 +217,16 @@ export function VideosTab({
               que no puede pasar es pagar el doble sin enterarse.
             */}
             {(() => {
-              const chosen = shotCountOption(seconds, shots);
+              const model = findVideoModel(videoModel);
+              const chosen = shotCountOption(seconds, shots, model.billing);
               if (chosen.waste <= 2) return null;
 
-              const better = efficientShotCounts(seconds).find(
+              const better = efficientShotCounts(seconds, 14, model.billing).find(
                 (option) => option.billed < chosen.billed,
               );
               if (!better) return null;
 
-              const saving =
-                (chosen.billed - better.billed) * DEFAULT_RATES.videoPerSecond;
+              const saving = (chosen.billed - better.billed) * model.usdPerSecond;
 
               return (
                 <p className="rounded-xl bg-amber-100 p-2 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
@@ -228,6 +256,7 @@ export function VideosTab({
                     shots,
                     seconds,
                     referenceId,
+                    videoModel,
                     stopBeforeClips: true,
                   })
                 }
@@ -247,6 +276,7 @@ export function VideosTab({
                     shots,
                     seconds,
                     referenceId,
+                    videoModel,
                     stopBeforeClips: false,
                   })
                 }

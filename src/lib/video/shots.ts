@@ -207,7 +207,14 @@ export function deriveCuts(
 
 /* ------------------------- La duración que se pide ------------------------- */
 
-export type ClipDuration = 5 | 10;
+/**
+ * Los segundos que se piden por toma.
+ *
+ * Era `5 | 10` porque solo había un modelo y solo vendía esos dos. Con uno que
+ * cobra por segundo puede ser cualquiera, así que el tipo se abre — y el que
+ * decide qué valor sale es `billedSeconds`, no quien llama.
+ */
+export type ClipDuration = number;
 
 export interface DurationPlan {
   n: string;
@@ -235,9 +242,34 @@ export interface DurationPlan {
  * cinco segundos», la diferencia entre aplicar esta regla y no aplicarla son unos
  * 2,50 dólares tirados.
  */
-export function planDurations(cuts: Cut[], deliveredAt5 = 4.85): DurationPlan[] {
+export function planDurations(
+  cuts: Cut[],
+  deliveredAt5 = 4.85,
+  billing: ClipBilling = { kind: "buckets", sizes: [5, 10], threshold: CLIP_THRESHOLD },
+): DurationPlan[] {
   return cuts.map((cut) => {
     const voice = cutDuration(cut);
+
+    /*
+     * Cobrando por segundo no hay nada que planificar: se pide lo que dura.
+     *
+     * Ni congelar el último fotograma ni partir tomas — las dos reglas existen
+     * para aprovechar un clip cerrado que ya está pagado, y aquí no hay clip
+     * cerrado que aprovechar.
+     */
+    if (billing.kind === "perSecond") {
+      return {
+        n: cut.n,
+        voice,
+        request: billedSeconds(voice, billing),
+        freeze: 0,
+        split: voice > 20,
+        reason:
+          voice < billing.minSeconds
+            ? `${voice.toFixed(1)} s: se paga el mínimo de ${billing.minSeconds}.`
+            : `${voice.toFixed(1)} s: se paga lo que dura.`,
+      };
+    }
 
     if (voice > 10) {
       return {
@@ -430,6 +462,80 @@ export const DEFAULT_RATES: Rates = {
   lipsync: 0.014,
 };
 
+/* ----------------------------- Los animadores ------------------------------ */
+
+/**
+ * Cómo cobra cada modelo de animación.
+ *
+ * No es lo mismo y cambia todo lo demás. Kling vende **clips cerrados** de cinco
+ * o de diez segundos: una toma de 5,6 s paga uno de diez, y de ahí sale el salto
+ * de precio que hace que diez tomas cuesten más que once. Otros cobran **por
+ * segundo con un mínimo**, y entonces ese salto no existe: se paga lo que dura.
+ */
+export type ClipBilling =
+  | { kind: "buckets"; sizes: [5, 10]; threshold: number }
+  | { kind: "perSecond"; minSeconds: number };
+
+export interface VideoModel {
+  id: string;
+  label: string;
+  /** El identificador que espera el proveedor. */
+  slug: string;
+  billing: ClipBilling;
+  usdPerSecond: number;
+  /**
+   * Si trae audio sincronizado.
+   *
+   * Ninguno de los que hay lo trae, y conviene tenerlo escrito: el manual del
+   * pipeline lo comprobó —«Grok/Kling i2v NO sincroniza la boca a los fonemas,
+   * no reciben audio, solo imagen y prompt»— y la boca buena sale de un pase de
+   * lipsync aparte.
+   */
+  nativeAudio: boolean;
+  note: string;
+}
+
+export const VIDEO_MODELS: VideoModel[] = [
+  {
+    id: "kling",
+    label: "Kling 3.0 · 720p",
+    slug: "kling-3.0/video",
+    billing: { kind: "buckets", sizes: [5, 10], threshold: 5.5 },
+    usdPerSecond: 0.07,
+    nativeAudio: false,
+    note: "El que da mejor imagen. Vende clips de cinco o de diez, así que una toma que se pase de 5,5 s paga el doble.",
+  },
+  {
+    id: "grok",
+    label: "Grok Imagine · económico",
+    // Se puede cambiar sin desplegar: ver `settings`. El manual lo usaba con el
+    // script `batch_grok_kie.mjs` y no dejó escrito el identificador exacto.
+    slug: "grok-imagine/video",
+    billing: { kind: "perSecond", minSeconds: 6 },
+    usdPerSecond: 0.015,
+    nativeAudio: false,
+    note: "Unas cuatro veces más barato y cobra por segundo, así que no tiene el salto de precio. Menos detalle de imagen.",
+  },
+];
+
+export function findVideoModel(id: string): VideoModel {
+  return VIDEO_MODELS.find((model) => model.id === id) ?? VIDEO_MODELS[0];
+}
+
+/**
+ * Los segundos que se le piden al proveedor por una toma.
+ *
+ * Con clips cerrados se sube al que quepa; por segundo se paga lo que dura, con
+ * su mínimo. Es la única diferencia entre los dos, y la que decide el precio.
+ */
+export function billedSeconds(voice: number, billing: ClipBilling): number {
+  if (billing.kind === "perSecond") {
+    return Math.max(billing.minSeconds, Math.ceil(voice));
+  }
+
+  return voice > billing.threshold ? billing.sizes[1] : billing.sizes[0];
+}
+
 /**
  * El salto de precio que hay que conocer antes de elegir cuántas tomas.
  *
@@ -459,9 +565,13 @@ export interface ShotCountOption {
 }
 
 /** Lo que costaría repartir esos segundos en ese número de tomas. */
-export function shotCountOption(seconds: number, shots: number): ShotCountOption {
+export function shotCountOption(
+  seconds: number,
+  shots: number,
+  billing: ClipBilling = { kind: "buckets", sizes: [5, 10], threshold: CLIP_THRESHOLD },
+): ShotCountOption {
   const perShot = seconds / Math.max(1, shots);
-  const billed = shots * (perShot > CLIP_THRESHOLD ? 10 : 5);
+  const billed = shots * billedSeconds(perShot, billing);
 
   return {
     shots,
@@ -478,12 +588,16 @@ export function shotCountOption(seconds: number, shots: number): ShotCountOption
  * debajo del umbral —clips de cinco, muchos cortes— y con la toma llena de diez.
  * En medio siempre se paga de más.
  */
-export function efficientShotCounts(seconds: number, max = 14): ShotCountOption[] {
+export function efficientShotCounts(
+  seconds: number,
+  max = 14,
+  billing: ClipBilling = { kind: "buckets", sizes: [5, 10], threshold: CLIP_THRESHOLD },
+): ShotCountOption[] {
   const options: ShotCountOption[] = [];
 
   for (let shots = 2; shots <= max; shots += 1) {
-    const option = shotCountOption(seconds, shots);
-    const perClip = option.perShot > CLIP_THRESHOLD ? 10 : 5;
+    const option = shotCountOption(seconds, shots, billing);
+    const perClip = billedSeconds(option.perShot, billing);
 
     // Se queda con las que aprovechan el clip: la voz llena al menos el 90 % de
     // lo que se paga. El resto es el tramo caro.
