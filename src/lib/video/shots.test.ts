@@ -7,7 +7,10 @@ import {
   cutDuration,
   deriveCuts,
   estimate,
+  CLIP_THRESHOLD,
+  efficientShotCounts,
   keyframePrompt,
+  shotCountOption,
   lipsyncTargets,
   motionPrompt,
   planDurations,
@@ -314,4 +317,44 @@ test("las tomas que no son de producto no arrastran nada de eso", () => {
   });
 
   assert.ok(!prompt.includes("reference image"));
+});
+
+/* --------------------------- El salto de precio ---------------------------- */
+
+test("pasarse medio segundo del umbral dobla el clip", () => {
+  // Diez céntimos de voz de más cuestan el doble de vídeo.
+  assert.equal(shotCountOption(11, 2).billed, 10, "5,5 s cada una: clips de cinco");
+  assert.equal(shotCountOption(12, 2).billed, 20, "6 s cada una: clips de diez");
+});
+
+test("diez tomas cuestan más que once, y ese es el fallo que no se ve venir", () => {
+  const diez = shotCountOption(60, 10);
+  const once = shotCountOption(60, 11);
+
+  assert.equal(diez.billed, 100);
+  assert.equal(once.billed, 55);
+  assert.ok(once.billed < diez.billed / 1.8, "once tiene que salir casi la mitad");
+});
+
+test("los repartos buenos son los que llenan el clip", () => {
+  const options = efficientShotCounts(60);
+  const shots = options.map((option) => option.shots);
+
+  // Once (5,5 s) y doce (5 s) aprovechan el clip de cinco; seis (10 s) el de diez.
+  assert.ok(shots.includes(11));
+  assert.ok(shots.includes(6));
+  // Ocho tomas de 7,5 s pagan diez y usan siete y medio: tirar dinero.
+  assert.ok(!shots.includes(8), "ocho no debería recomendarse");
+});
+
+test("el desperdicio se mide contra la voz que hay que cubrir", () => {
+  assert.equal(shotCountOption(60, 6).waste, 0);
+  assert.equal(shotCountOption(60, 8).waste, 20);
+});
+
+test("el umbral es el mismo que usa el plan de duraciones", () => {
+  // Si se separaran, la recomendación diría una cosa y el cobro haría otra.
+  const plan = planDurations([{ n: "01", start: 0, end: CLIP_THRESHOLD + 0.1, guion: "x" }]);
+
+  assert.equal(plan[0].request, 10);
 });

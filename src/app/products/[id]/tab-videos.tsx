@@ -9,6 +9,11 @@ import { GenerateButton } from "@/components/generate-button";
 import { VoicePicker } from "@/components/video/voice-picker";
 import { ShotBoard } from "@/components/video/shot-board";
 import {
+  DEFAULT_RATES,
+  efficientShotCounts,
+  shotCountOption,
+} from "@/lib/video/shots";
+import {
   createVideoFromCopyAction,
   runFullVideoAction,
   deleteVideoAction,
@@ -123,11 +128,25 @@ export function VideosTab({
                   onChange={(event) => setShots(Number(event.target.value))}
                   className="w-20"
                 >
-                  {[4, 5, 6, 7, 8, 10, 12].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
+                  {/*
+                    Cada opción con lo que se paga de verdad.
+
+                    El generador solo vende clips de cinco o de diez segundos, así
+                    que una toma con 5,6 s de voz paga uno de diez: diez tomas de
+                    seis segundos cuestan 7 USD y once de cinco y medio cuestan
+                    3,85. Sin verlo al lado, esa elección se hace a ciegas.
+                  */}
+                  {[4, 5, 6, 7, 8, 10, 11, 12, 14].map((value) => {
+                    const option = shotCountOption(seconds, value);
+                    const cost = option.billed * DEFAULT_RATES.videoPerSecond;
+
+                    return (
+                      <option key={value} value={value}>
+                        {value} · ${cost.toFixed(2)}
+                        {option.waste > 2 ? ` (${option.waste} s de más)` : ""}
+                      </option>
+                    );
+                  })}
                 </SelectField>
               </label>
 
@@ -162,6 +181,34 @@ export function VideosTab({
               gasto, y verlo aquí evita descubrirlo cuando ya se pagó.
             */}
             <Presupuesto shots={shots} seconds={seconds} />
+
+            {/*
+              Si el reparto elegido tira dinero, se dice cuál no lo hace.
+
+              No se cambia solo: puede haber un motivo para querer ocho tomas. Lo
+              que no puede pasar es pagar el doble sin enterarse.
+            */}
+            {(() => {
+              const chosen = shotCountOption(seconds, shots);
+              if (chosen.waste <= 2) return null;
+
+              const better = efficientShotCounts(seconds).find(
+                (option) => option.billed < chosen.billed,
+              );
+              if (!better) return null;
+
+              const saving =
+                (chosen.billed - better.billed) * DEFAULT_RATES.videoPerSecond;
+
+              return (
+                <p className="rounded-xl bg-amber-100 p-2 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                  Con {shots} tomas se pagan {chosen.billed} s para {seconds} s de voz. Con{" "}
+                  <strong>{better.shots}</strong> se pagan {better.billed} s y ahorras{" "}
+                  <strong>${saving.toFixed(2)}</strong> — el generador solo vende clips de cinco o
+                  de diez segundos, y una toma que se pasa de 5,5 s paga uno de diez.
+                </p>
+              );
+            })()}
 
             {/*
               Todo de una, que es como se usa de verdad.

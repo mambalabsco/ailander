@@ -430,6 +430,69 @@ export const DEFAULT_RATES: Rates = {
   lipsync: 0.014,
 };
 
+/**
+ * El salto de precio que hay que conocer antes de elegir cuántas tomas.
+ *
+ * El generador solo vende clips de cinco o de diez segundos. Una toma con 5,4
+ * segundos de voz cabe en uno de cinco; una con 5,6 **paga uno de diez**. Diez
+ * céntimos de voz de más cuestan el doble de clip.
+ *
+ * Eso convierte «más tomas» en «más caro» de una forma que no se ve venir:
+ *
+ * - 6 tomas de 10 s → 60 s pagados, 4,20 USD
+ * - 10 tomas de 6 s → **100 s pagados, 7,00 USD**  ← todas se pasan por medio segundo
+ * - 11 tomas de 5,5 s → 55 s pagados, 3,85 USD
+ *
+ * Once tomas cuestan **la mitad** que diez, y dan un corte más. Por eso esto se
+ * calcula y se enseña en vez de dejarlo a la intuición, que aquí falla siempre.
+ */
+export const CLIP_THRESHOLD = 5.5;
+
+export interface ShotCountOption {
+  shots: number;
+  /** Segundos de voz que le tocan a cada toma. */
+  perShot: number;
+  /** Segundos de vídeo que se pagan. */
+  billed: number;
+  /** Cuánto se desperdicia frente a la voz que hay que cubrir. */
+  waste: number;
+}
+
+/** Lo que costaría repartir esos segundos en ese número de tomas. */
+export function shotCountOption(seconds: number, shots: number): ShotCountOption {
+  const perShot = seconds / Math.max(1, shots);
+  const billed = shots * (perShot > CLIP_THRESHOLD ? 10 : 5);
+
+  return {
+    shots,
+    perShot: Number(perShot.toFixed(2)),
+    billed,
+    waste: Number(Math.max(0, billed - seconds).toFixed(2)),
+  };
+}
+
+/**
+ * Los repartos que no tiran dinero, de menos tomas a más.
+ *
+ * Son los dos sitios donde el precio por segundo de voz toca suelo: justo por
+ * debajo del umbral —clips de cinco, muchos cortes— y con la toma llena de diez.
+ * En medio siempre se paga de más.
+ */
+export function efficientShotCounts(seconds: number, max = 14): ShotCountOption[] {
+  const options: ShotCountOption[] = [];
+
+  for (let shots = 2; shots <= max; shots += 1) {
+    const option = shotCountOption(seconds, shots);
+    const perClip = option.perShot > CLIP_THRESHOLD ? 10 : 5;
+
+    // Se queda con las que aprovechan el clip: la voz llena al menos el 90 % de
+    // lo que se paga. El resto es el tramo caro.
+    if (option.perShot >= perClip * 0.9) options.push(option);
+  }
+
+  return options;
+}
+
 export interface Budget {
   voice: number;
   keyframes: number;
