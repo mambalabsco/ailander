@@ -407,3 +407,22 @@ test("ninguno trae audio sincronizado, y está escrito", () => {
     assert.ok(model.note.length > 30, `${model.id} sin explicar`);
   }
 });
+
+test("el tope del modelo se respeta: pedir de más lo rechaza el proveedor", () => {
+  // Grok acepta de 6 a 30 segundos; pedir 40 devuelve un error, no un vídeo.
+  assert.equal(billedSeconds(40, GROK.billing, GROK.maxSeconds), 30);
+  assert.equal(GROK.maxSeconds, 30);
+  assert.equal(KLING.maxSeconds, 10);
+});
+
+test("cobrando por segundo, una toma se parte solo si pasa del tope del modelo", () => {
+  const plan = planDurations(
+    [{ n: "01", start: 0, end: 35, guion: "x" }],
+    undefined,
+    GROK.billing,
+    GROK.maxSeconds,
+  );
+
+  assert.equal(plan[0].split, true);
+  assert.equal(plan[0].request, 30);
+});

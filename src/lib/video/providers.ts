@@ -322,21 +322,40 @@ export async function animate(options: {
   negativePrompt?: string;
   timeoutMs?: number;
 }): Promise<string> {
-  const urls = await runTask(
-    options.model || "kling-3.0/video",
-    {
-      prompt: options.prompt,
-      image_urls: [options.imageUrl],
-      duration: String(options.seconds),
-      aspect_ratio: "9:16",
-      mode: "std",
-      // La voz va aparte y se pega en el montaje.
-      sound: false,
-      multi_shots: false,
-      ...(options.negativePrompt ? { negative_prompt: options.negativePrompt } : {}),
-    },
-    options.timeoutMs ?? 10 * 60_000,
-  );
+  const model = options.model || "kling-3.0/video";
+
+  /*
+   * Cada modelo tiene sus campos y no se parecen.
+   *
+   * Grok no entiende `mode: "std"` ni `multi_shots`, y su resolución por defecto
+   * es 480p: si no se pide 720p, el vídeo sale a la mitad de tamaño que los
+   * keyframes y se nota en el montaje. Mandar los campos del otro no da error
+   * claro — se ignoran y el resultado sale distinto de lo esperado.
+   */
+  const input = model.startsWith("grok-imagine")
+    ? {
+        prompt: options.prompt,
+        image_urls: [options.imageUrl],
+        // De 6 a 30, paso de uno, y como cadena: así lo pide la API.
+        duration: String(Math.min(30, Math.max(6, Math.round(options.seconds)))),
+        resolution: "720p",
+        aspect_ratio: "9:16",
+        mode: "normal",
+      }
+    : {
+        prompt: options.prompt,
+        image_urls: [options.imageUrl],
+        duration: String(options.seconds),
+        aspect_ratio: "9:16",
+        mode: "std",
+        // La voz va aparte y se pega en el montaje.
+        sound: false,
+        // Obligatorio en Kling: si falta, responde 422.
+        multi_shots: false,
+        ...(options.negativePrompt ? { negative_prompt: options.negativePrompt } : {}),
+      };
+
+  const urls = await runTask(model, input, options.timeoutMs ?? 10 * 60_000);
 
   return urls[0];
 }

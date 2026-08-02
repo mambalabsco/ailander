@@ -165,7 +165,7 @@ export function VideosTab({
                   */}
                   {[4, 5, 6, 7, 8, 10, 11, 12, 14].map((value) => {
                     const model = findVideoModel(videoModel);
-                    const option = shotCountOption(seconds, value, model.billing);
+                    const option = shotCountOption(seconds, value, model.billing, model.maxSeconds);
                     const cost = option.billed * model.usdPerSecond;
 
                     return (

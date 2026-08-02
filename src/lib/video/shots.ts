@@ -246,6 +246,7 @@ export function planDurations(
   cuts: Cut[],
   deliveredAt5 = 4.85,
   billing: ClipBilling = { kind: "buckets", sizes: [5, 10], threshold: CLIP_THRESHOLD },
+  maxSeconds = 30,
 ): DurationPlan[] {
   return cuts.map((cut) => {
     const voice = cutDuration(cut);
@@ -261,13 +262,15 @@ export function planDurations(
       return {
         n: cut.n,
         voice,
-        request: billedSeconds(voice, billing),
+        request: billedSeconds(voice, billing, maxSeconds),
         freeze: 0,
-        split: voice > 20,
+        split: voice > maxSeconds,
         reason:
           voice < billing.minSeconds
             ? `${voice.toFixed(1)} s: se paga el mínimo de ${billing.minSeconds}.`
-            : `${voice.toFixed(1)} s: se paga lo que dura.`,
+            : voice > maxSeconds
+              ? `${voice.toFixed(1)} s: pasa del tope de ${maxSeconds}. Pártela.`
+              : `${voice.toFixed(1)} s: se paga lo que dura.`,
       };
     }
 
@@ -482,6 +485,8 @@ export interface VideoModel {
   /** El identificador que espera el proveedor. */
   slug: string;
   billing: ClipBilling;
+  /** Lo máximo que acepta por clip. Pedir de más lo rechaza. */
+  maxSeconds: number;
   usdPerSecond: number;
   /**
    * Si trae audio sincronizado.
@@ -501,6 +506,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     label: "Kling 3.0 · 720p",
     slug: "kling-3.0/video",
     billing: { kind: "buckets", sizes: [5, 10], threshold: 5.5 },
+    maxSeconds: 10,
     usdPerSecond: 0.07,
     nativeAudio: false,
     note: "El que da mejor imagen. Vende clips de cinco o de diez, así que una toma que se pase de 5,5 s paga el doble.",
@@ -508,10 +514,12 @@ export const VIDEO_MODELS: VideoModel[] = [
   {
     id: "grok",
     label: "Grok Imagine · económico",
-    // Se puede cambiar sin desplegar: ver `settings`. El manual lo usaba con el
-    // script `batch_grok_kie.mjs` y no dejó escrito el identificador exacto.
-    slug: "grok-imagine/video",
+    // El identificador y los límites salen de la API de kie, no de suponerlos:
+    // duración de 6 a 30 segundos con paso de uno, y resolución 480p por
+    // defecto — hay que pedir 720p a mano o el vídeo sale a la mitad.
+    slug: "grok-imagine/image-to-video",
     billing: { kind: "perSecond", minSeconds: 6 },
+    maxSeconds: 30,
     usdPerSecond: 0.015,
     nativeAudio: false,
     note: "Unas cuatro veces más barato y cobra por segundo, así que no tiene el salto de precio. Menos detalle de imagen.",
@@ -528,9 +536,9 @@ export function findVideoModel(id: string): VideoModel {
  * Con clips cerrados se sube al que quepa; por segundo se paga lo que dura, con
  * su mínimo. Es la única diferencia entre los dos, y la que decide el precio.
  */
-export function billedSeconds(voice: number, billing: ClipBilling): number {
+export function billedSeconds(voice: number, billing: ClipBilling, maxSeconds = 30): number {
   if (billing.kind === "perSecond") {
-    return Math.max(billing.minSeconds, Math.ceil(voice));
+    return Math.min(maxSeconds, Math.max(billing.minSeconds, Math.ceil(voice)));
   }
 
   return voice > billing.threshold ? billing.sizes[1] : billing.sizes[0];
@@ -569,9 +577,10 @@ export function shotCountOption(
   seconds: number,
   shots: number,
   billing: ClipBilling = { kind: "buckets", sizes: [5, 10], threshold: CLIP_THRESHOLD },
+  maxSeconds = 30,
 ): ShotCountOption {
   const perShot = seconds / Math.max(1, shots);
-  const billed = shots * billedSeconds(perShot, billing);
+  const billed = shots * billedSeconds(perShot, billing, maxSeconds);
 
   return {
     shots,

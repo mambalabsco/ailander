@@ -512,6 +512,7 @@ export async function generateClipsAction(
     })),
     undefined,
     modelo.billing,
+    modelo.maxSeconds,
   );
 
   return runStep(ctx, {
