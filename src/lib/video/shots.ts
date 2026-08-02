@@ -502,18 +502,8 @@ export interface VideoModel {
 
 export const VIDEO_MODELS: VideoModel[] = [
   {
-    id: "kling",
-    label: "Kling 3.0 · 720p",
-    slug: "kling-3.0/video",
-    billing: { kind: "buckets", sizes: [5, 10], threshold: 5.5 },
-    maxSeconds: 10,
-    usdPerSecond: 0.07,
-    nativeAudio: false,
-    note: "El que da mejor imagen. Vende clips de cinco o de diez, así que una toma que se pase de 5,5 s paga el doble.",
-  },
-  {
     id: "grok",
-    label: "Grok Imagine · económico",
+    label: "Grok Imagine · 720p",
     // El identificador y los límites salen de la API de kie, no de suponerlos:
     // duración de 6 a 30 segundos con paso de uno, y resolución 480p por
     // defecto — hay que pedir 720p a mano o el vídeo sale a la mitad.
@@ -522,10 +512,27 @@ export const VIDEO_MODELS: VideoModel[] = [
     maxSeconds: 30,
     usdPerSecond: 0.015,
     nativeAudio: false,
-    note: "Unas cuatro veces más barato y cobra por segundo, así que no tiene el salto de precio. Menos detalle de imagen.",
+    note: "Cobra por segundo, así que no tiene el salto de precio de los clips cerrados. Un anuncio de sesenta segundos ronda el dólar.",
+  },
+  {
+    id: "kling",
+    label: "Kling 3.0 · 720p",
+    slug: "kling-3.0/video",
+    billing: { kind: "buckets", sizes: [5, 10], threshold: 5.5 },
+    maxSeconds: 10,
+    usdPerSecond: 0.07,
+    nativeAudio: false,
+    note: "Mejor imagen y casi cinco veces más caro. Vende clips de cinco o de diez, así que una toma que se pase de 5,5 s paga el doble.",
   },
 ];
 
+/**
+ * El modelo por identificador, y el barato si no se reconoce.
+ *
+ * El primero de la lista es el que sale elegido y el que se usa cuando falta el
+ * dato. Es el barato a propósito: la diferencia son cuatro dólares por anuncio y
+ * la calidad del caro no compensa hasta que un anuncio ya funciona.
+ */
 export function findVideoModel(id: string): VideoModel {
   return VIDEO_MODELS.find((model) => model.id === id) ?? VIDEO_MODELS[0];
 }

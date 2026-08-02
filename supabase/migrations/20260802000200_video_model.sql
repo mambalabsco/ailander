@@ -10,4 +10,4 @@
 -- ---------------------------------------------------------------------------
 
 alter table public.videos
-  add column if not exists video_model text not null default 'kling';
+  add column if not exists video_model text not null default 'grok';

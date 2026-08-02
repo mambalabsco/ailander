@@ -146,6 +146,9 @@ export function VideosTab({
                     </option>
                   ))}
                 </SelectField>
+                <span className="max-w-56 text-xs text-slate-500 dark:text-slate-400">
+                  {findVideoModel(videoModel).note}
+                </span>
               </label>
 
               <label className="flex flex-col gap-1">
