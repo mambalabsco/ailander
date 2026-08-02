@@ -14,6 +14,7 @@ import {
   efficientShotCounts,
   keyframePrompt,
   shotCountOption,
+  showsProduct,
   lipsyncTargets,
   motionPrompt,
   planDurations,
@@ -425,4 +426,52 @@ test("cobrando por segundo, una toma se parte solo si pasa del tope del modelo",
 
   assert.equal(plan[0].split, true);
   assert.equal(plan[0].request, 30);
+});
+
+/* --------------------- Dónde aparece el envase de verdad ------------------- */
+
+test("el envase sale en más tomas que la de producto", () => {
+  // Un anuncio mete el frasco en media escena, y en todas esas se inventaba uno.
+  assert.equal(showsProduct(shot({ role: "concept", scene: "Amber dropper bottle on a lab bench" })), true);
+  assert.equal(showsProduct(shot({ role: "science", scene: "Thyroid glowing above a serum vial" })), true);
+  assert.equal(showsProduct(shot({ role: "story", scene: "Mujer con el frasco en la mano" })), true);
+});
+
+test("una escena sin envase no arrastra la referencia", () => {
+  // Meter la foto del bote donde no pinta nada lo cuela en la escena.
+  assert.equal(showsProduct(shot({ role: "story", scene: "Mujer sentada al borde de la cama" })), false);
+  assert.equal(showsProduct(shot({ role: "emotion", scene: "Cracked dry soil, wilting lettuce" })), false);
+});
+
+test("el nombre del producto en la escena también cuenta", () => {
+  const s = shot({ role: "concept", scene: "Naturox sobre la encimera" });
+
+  assert.equal(showsProduct(s, "Naturox Metabolic Balance"), true);
+  assert.equal(showsProduct(s, ""), false);
+});
+
+test("la toma de producto siempre, diga lo que diga la escena", () => {
+  assert.equal(showsProduct(shot({ role: "producto", scene: "algo" })), true);
+});
+
+test("en cualquier toma con envase se pide el de la referencia", () => {
+  const prompt = keyframePrompt(
+    shot({ role: "concept", scene: "Amber dropper bottle beside petri dishes" }),
+    ANCLA,
+    { name: "Naturox", hasReference: true },
+  );
+
+  assert.match(prompt, /EXACTLY the one in the attached reference/);
+});
+
+test("y sin foto, ninguna toma dibuja una etiqueta", () => {
+  // Un envase inventado con etiqueta legible es peor que uno liso: no se nota
+  // que está mal hasta comparar con el bote de verdad.
+  const prompt = keyframePrompt(
+    shot({ role: "science", scene: "Glowing organ above a serum vial" }),
+    ANCLA,
+    { name: "X", hasReference: false },
+  );
+
+  assert.match(prompt, /no label, no text/);
 });

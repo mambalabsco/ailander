@@ -24,6 +24,7 @@ import {
   deriveCuts,
   keyframePrompt,
   motionPrompt,
+  showsProduct,
   planDurations,
   reviewShots,
   type Shot,
@@ -410,9 +411,20 @@ export async function generateKeyframesAction(
               { render: video.styleRender, accent: video.styleAccent },
               { name: product?.name ?? "", hasReference: Boolean(productShot) },
             ),
-            // Solo la toma de producto lleva la foto real: en las demás, una
-            // referencia del envase mete el frasco donde no pinta nada.
-            references: shot.role === "producto" && productShot ? [productShot.url] : [],
+            /*
+             * La foto real va a **toda** toma donde salga el envase.
+             *
+             * Antes solo iba a la de papel «producto», y un anuncio mete el
+             * frasco en media escena: sobre la mesa del laboratorio, al lado de
+             * las placas, flotando bajo el órgano. En todas esas se inventaba un
+             * envase con su etiqueta, que queda convincente y no se nota hasta
+             * compararlo con el bote de verdad.
+             *
+             * Donde no sale el envase no se manda: una referencia de más lo
+             * cuela en una escena donde no pinta nada.
+             */
+            references:
+              showsProduct(shot, product?.name) && productShot ? [productShot.url] : [],
           });
 
           await updateShot(shot.id, { keyframeUrl: url, error: null });
@@ -438,9 +450,15 @@ export async function generateKeyframesAction(
        * etiqueta inventada se lee como real y no se detecta hasta comparar con
        * el bote de verdad, con el vídeo ya montado y pagado—.
        */
+      /*
+       * Se cuentan **todas** las tomas donde salía el envase, no solo la de
+       * producto: son las que hay que rehacer cuando aparezca la foto.
+       */
+      const conEnvase = pending.filter((shot) => showsProduct(shot, product?.name));
+
       const sinFoto =
-        !productShot && pending.some((shot) => shot.role === "producto")
-          ? " Ese producto no tiene imagen principal: la toma de producto salió sin etiqueta. Súbela y rehaz esa toma."
+        !productShot && conEnvase.length > 0
+          ? ` Ese producto no tiene imagen principal: las ${conEnvase.length} tomas con envase salieron sin etiqueta. Súbela y rehazlas.`
           : "";
 
       return {

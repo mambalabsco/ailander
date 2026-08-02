@@ -381,6 +381,48 @@ export interface StyleAnchor {
  * es lo único que hace que catorce imágenes generadas por separado parezcan del
  * mismo vídeo. Sin ella cada toma sale con su propia luz y su propia paleta.
  */
+/**
+ * Palabras que delatan que en esa toma sale el envase.
+ *
+ * Van en los dos idiomas porque la escena la escribe el modelo y mezcla: el
+ * guion va en español y las frases de render en inglés.
+ */
+const PRODUCT_WORDS =
+  /\b(bottle|dropper|vial|jar|packaging|label|supplement bottle|serum|frasco|gotero|envase|etiqueta|bote|producto|suplemento)\b/i;
+
+/**
+ * Si en esta toma aparece el envase, mire lo que mire el papel.
+ *
+ * El papel `producto` no basta. Un anuncio mete el frasco en media escena —sobre
+ * la mesa del laboratorio, al lado de las placas, flotando bajo el órgano— y en
+ * todas esas el modelo se **inventaba** un envase con su etiqueta, porque solo
+ * se le mandaba la foto real cuando el papel era `producto`.
+ *
+ * Un envase inventado queda convincente, y ese es el problema: no se nota hasta
+ * compararlo con el bote de verdad, con el vídeo montado y pagado.
+ */
+export function showsProduct(shot: Shot, productName = ""): boolean {
+  if (shot.role === "producto") return true;
+
+  const text = `${shot.scene} ${shot.motion}`;
+  if (PRODUCT_WORDS.test(text)) return true;
+
+  /*
+   * Basta con que aparezca **una palabra** del nombre, no el nombre entero.
+   *
+   * La escena dice «Naturox sobre la encimera» y el producto se llama «Naturox
+   * Metabolic Balance»: buscando la cadena completa no encaja nunca, que es como
+   * se escapaban justo las tomas donde el envase se nombra por la marca.
+   */
+  const lower = text.toLowerCase();
+
+  return productName
+    .toLowerCase()
+    .split(/[^a-záéíóúñ0-9]+/i)
+    .filter((word) => word.length > 3)
+    .some((word) => lower.includes(word));
+}
+
 export function keyframePrompt(
   shot: Shot,
   anchor: StyleAnchor,
@@ -405,7 +447,9 @@ export function keyframePrompt(
    * Y en un suplemento el envase es el producto. Un anuncio que enseña un frasco
    * que no es el que llega es una devolución.
    */
-  if (shot.role === "producto" && product?.hasReference) {
+  const conEnvase = showsProduct(shot, product?.name);
+
+  if (conEnvase && product?.hasReference) {
     parts.push(
       `the product is EXACTLY the one in the attached reference image: same bottle shape, same cap, same label, same colours, same text`,
       `do not redesign the packaging, do not rewrite the label, do not invent any text`,
@@ -418,7 +462,14 @@ export function keyframePrompt(
    * Una etiqueta inventada se lee como real; un frasco liso se ve claramente
    * como pendiente de sustituir, y eso es lo que se quiere que se note.
    */
-  if (shot.role === "producto" && product && !product.hasReference) {
+  /*
+   * Sin foto no se dibuja envase, y menos aún uno con etiqueta.
+   *
+   * Antes se pedía «frasco liso» solo en la toma de producto. En las demás salía
+   * un envase inventado con su etiqueta legible, que es peor: en la de producto
+   * al menos se ve que falta algo.
+   */
+  if (conEnvase && product && !product.hasReference) {
     parts.push("plain unbranded bottle, no label, no text of any kind");
   }
 
