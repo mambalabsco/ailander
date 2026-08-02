@@ -381,6 +381,24 @@ export async function generateKeyframesAction(
     }
   }
 
+  /*
+   * Si hacen falta fotos del envase y no las hay, se para **antes** de gastar.
+   *
+   * Antes se generaba igualmente con un frasco liso y se cobraba. Y es peor de
+   * lo que suena: la imagen queda convincente, se anima, se monta, y el envase
+   * equivocado se descubre viendo el vídeo terminado — con todo pagado.
+   */
+  const necesitanEnvase = pending.filter((shot) => showsProduct(shot, product?.name));
+
+  if (!productShot && necesitanEnvase.length > 0) {
+    return {
+      started: false,
+      message: `${necesitanEnvase.length} de las ${pending.length} tomas enseñan el envase (${necesitanEnvase
+        .map((shot) => shot.n)
+        .join(", ")}) y este producto no tiene imagen principal. Súbela en la pestaña Imágenes y márcala como principal: sin ella el envase saldría inventado.`,
+    };
+  }
+
   return runStep(ctx, {
     productId,
     kind: "imagenes",
@@ -450,22 +468,15 @@ export async function generateKeyframesAction(
        * etiqueta inventada se lee como real y no se detecta hasta comparar con
        * el bote de verdad, con el vídeo ya montado y pagado—.
        */
-      /*
-       * Se cuentan **todas** las tomas donde salía el envase, no solo la de
-       * producto: son las que hay que rehacer cuando aparezca la foto.
-       */
-      const conEnvase = pending.filter((shot) => showsProduct(shot, product?.name));
+      const conEnvase = necesitanEnvase.length;
 
-      const sinFoto =
-        !productShot && conEnvase.length > 0
-          ? ` Ese producto no tiene imagen principal: las ${conEnvase.length} tomas con envase salieron sin etiqueta. Súbela y rehazlas.`
-          : "";
+      const conFoto = conEnvase > 0 ? ` ${conEnvase} llevan tu envase de referencia.` : "";
 
       return {
         summary:
           failures.length > 0
-            ? `${head}${done} imagen(es) listas, ${failures.length} fallaron. ${failures[0]}${sinFoto}`
-            : `${head}${done} imagen(es) listas. Míralas antes de animar.${sinFoto}`,
+            ? `${head}${done} imagen(es) listas, ${failures.length} fallaron. ${failures[0]}${conFoto}`
+            : `${head}${done} imagen(es) listas.${conFoto} Míralas antes de animar.`,
       };
     },
   });

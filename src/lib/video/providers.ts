@@ -282,19 +282,69 @@ async function runTask(
  * personaje entre tomas y lo que hace que el envase sea el real, y sin ellas
  * cada imagen inventa una cara distinta.
  */
+/**
+ * Comprueba que una referencia se puede descargar **desde fuera**.
+ *
+ * Es la comprobación que faltaba y por la que se podía estar generando el envase
+ * equivocado sin enterarse: el generador descarga la imagen por su cuenta desde
+ * sus servidores, y si no puede —una dirección firmada caducada, un bucket
+ * privado, un archivo movido— **no da error**: genera sin ella y devuelve una
+ * imagen preciosa con un frasco inventado.
+ *
+ * Un fallo que devuelve algo bonito es el peor tipo de fallo, porque nadie lo
+ * busca. Se pide solo la cabecera, que cuesta un parpadeo.
+ */
+async function referenceIsReachable(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: "HEAD", cache: "no-store" });
+    if (response.ok) return true;
+
+    // Hay almacenamientos que no aceptan HEAD; se reintenta pidiendo un trozo.
+    const partial = await fetch(url, {
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+    });
+
+    return partial.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function keyframe(options: {
   prompt: string;
   references?: string[];
   timeoutMs?: number;
 }): Promise<string> {
-  const refs = options.references?.filter(Boolean) ?? [];
+  const wanted = options.references?.filter(Boolean) ?? [];
+
+  const checked = await Promise.all(
+    wanted.map(async (url) => ((await referenceIsReachable(url)) ? url : "")),
+  );
+
+  const refs = checked.filter(Boolean);
+
+  /*
+   * Si se pidió referencia y ninguna sirve, se para.
+   *
+   * Generar igualmente sale más caro de lo que parece: la imagen queda
+   * convincente con un envase que no existe, se anima, se monta, y el fallo se
+   * descubre al mirar el vídeo terminado.
+   */
+  if (wanted.length > 0 && refs.length === 0) {
+    throw new Error(
+      "La foto de referencia no se puede descargar desde fuera, así que el envase saldría inventado. Comprueba que el producto tiene imagen principal y vuelve a intentarlo.",
+    );
+  }
 
   const urls = await runTask(
     refs.length > 0 ? "google/nano-banana-edit" : "google/nano-banana",
     {
       prompt: options.prompt,
       output_format: "png",
-      image_size: "9:16",
+      // `aspect_ratio` y no `image_size`: el segundo está marcado como sustituido
+      // en la API, y un parámetro obsoleto acaba ignorándose sin avisar.
+      aspect_ratio: "9:16",
       ...(refs.length > 0 ? { image_urls: refs.slice(0, 10) } : {}),
     },
     options.timeoutMs ?? 4 * 60_000,
