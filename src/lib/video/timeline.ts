@@ -115,17 +115,37 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
   const video: Keyframe[] = [];
   const missing: string[] = [];
 
-  const usable = input.cuts.filter((cut) => {
-    const ok = Boolean(input.clips[cut.n]) && cut.end > cut.start;
-    if (!ok) missing.push(cut.n);
-    return ok;
-  });
+  const usable = input.cuts
+    .filter((cut) => {
+      const ok = Boolean(input.clips[cut.n]) && cut.end > cut.start;
+      if (!ok) missing.push(cut.n);
+      return ok;
+    })
+    /*
+     * Ordenados por su instante, pase lo que pase antes.
+     *
+     * El orden llega bien hoy, pero de él depende todo lo de abajo: un corte
+     * fuera de sitio hace que el siguiente empiece antes que el anterior, la
+     * duración salga negativa y esa toma se caiga — y una toma que se cae no se
+     * ve, solo se nota porque la de al lado dura de más.
+     */
+    .slice()
+    .sort((a, b) => a.start - b.start);
 
   let cursor = 0;
 
+  let previousEnd = 0;
+
   for (const [index, cut] of usable.entries()) {
-    // La primera arranca en cero; las demás, donde empieza su frase.
-    const start = index === 0 ? 0 : cut.start;
+    /*
+     * La primera arranca en cero; las demás, donde empieza su frase — pero nunca
+     * antes de que acabe la anterior.
+     *
+     * Dos cortes que se pisan dejarían dos clips solapados en la misma pista, y
+     * ahí solo se ve uno: el vídeo se queda con una escena colgada mientras la
+     * voz habla de otra cosa.
+     */
+    const start = index === 0 ? 0 : Math.max(cut.start, previousEnd);
 
     /*
      * Hasta el arranque de la siguiente, o hasta el final de la suya.
@@ -139,7 +159,9 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
     if (duration <= 0) continue;
 
     video.push({ timestamp: toMs(start), duration: toMs(duration), url: input.clips[cut.n] });
-    cursor = Math.max(cursor, start + duration);
+
+    previousEnd = start + duration;
+    cursor = Math.max(cursor, previousEnd);
   }
 
   const captions: Keyframe[] = (input.captions ?? [])

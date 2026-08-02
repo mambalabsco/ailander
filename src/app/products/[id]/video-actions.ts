@@ -682,6 +682,28 @@ export async function assembleVideoAction(
   const withClip = video.shots.filter((shot) => shot.clipUrl || shot.lipsyncUrl);
   if (withClip.length === 0) throw new Error("No hay ningún clip que montar.");
 
+  /*
+   * Una toma sin corte no entra en el montaje, y eso se avisa **antes**.
+   *
+   * El corte sale de encontrar la frase de la toma dentro del audio. Cuando no
+   * se encuentra —el texto se corrigió después de grabar la voz, o el generador
+   * pronunció distinto— esa toma se queda sin tiempos y desaparece del montaje.
+   *
+   * Si desaparecen casi todas queda un clip cubriendo el vídeo entero, que es
+   * exactamente lo que parece un montaje roto. Y no había nada que lo dijera:
+   * salía un vídeo, solo que con una escena sola.
+   */
+  const sinCorte = withClip.filter((shot) => shot.cutStart === null || shot.cutEnd === null);
+
+  if (sinCorte.length > 0 && withClip.length - sinCorte.length < 2) {
+    return {
+      started: false,
+      message: `Solo ${withClip.length - sinCorte.length} de ${withClip.length} tomas tienen sus tiempos: el vídeo saldría con una sola escena. Las tomas ${sinCorte
+        .map((shot) => shot.n)
+        .join(", ")} no se encontraron en el audio — vuelve a generar la voz para que los tiempos cuadren con el guion actual.`,
+    };
+  }
+
   return runStep(ctx, {
     productId,
     kind: "imagenes",
@@ -730,8 +752,8 @@ export async function assembleVideoAction(
       return {
         summary:
           timeline.missing.length > 0
-            ? `Montado, ${timeline.seconds} s. Faltaron las tomas ${timeline.missing.join(", ")}: el vídeo salió más corto.`
-            : `Montado, ${timeline.seconds} s.`,
+            ? `Montado, ${timeline.seconds} s con ${timeline.tracks[0].keyframes.length} de ${withClip.length} tomas. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
+            : `Montado, ${timeline.seconds} s con ${timeline.tracks[0].keyframes.length} tomas${captions.length > 0 ? `, ${captions.length} subtítulos` : ""}${video.musicUrl ? " y música" : ""}.`,
       };
     },
   });

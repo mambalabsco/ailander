@@ -144,3 +144,43 @@ test("siempre salen las dos pistas, aunque no haya clips", () => {
     ],
   );
 });
+
+test("dos cortes que se pisan no dejan un clip tapando al otro", () => {
+  /*
+   * Solo se ve uno de los dos, así que el vídeo se queda con una escena colgada
+   * mientras la voz habla de otra cosa. Y no se nota que falta una toma: se nota
+   * que la de al lado dura de más.
+   */
+  const result = buildTimeline({
+    cuts: [
+      { n: "01", start: 0, end: 4 },
+      { n: "02", start: 2, end: 6 },
+    ],
+    clips: { "01": "https://cdn/1.mp4", "02": "https://cdn/2.mp4" },
+    voiceUrl: VOZ,
+  });
+
+  const [uno, dos] = result.tracks[0].keyframes;
+
+  assert.equal(uno.timestamp + uno.duration, dos.timestamp, "no se solapan");
+  assert.equal(result.tracks[0].keyframes.length, 2, "ninguna se cae");
+});
+
+test("los cortes desordenados se colocan igual", () => {
+  // De su orden depende todo lo demás: uno fuera de sitio da duración negativa
+  // y esa toma se cae sin que nada avise.
+  const result = buildTimeline({
+    cuts: [
+      { n: "02", start: 4, end: 8 },
+      { n: "01", start: 0, end: 4 },
+    ],
+    clips: { "01": "https://cdn/1.mp4", "02": "https://cdn/2.mp4" },
+    voiceUrl: VOZ,
+  });
+
+  assert.equal(result.tracks[0].keyframes.length, 2);
+  assert.deepEqual(
+    result.tracks[0].keyframes.map((frame) => frame.url),
+    ["https://cdn/1.mp4", "https://cdn/2.mp4"],
+  );
+});
