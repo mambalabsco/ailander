@@ -679,11 +679,29 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
 
   if (!videoId || !productId) return { ok: false, message: "Falta el vídeo." };
 
-  // Quitarla es tan legítimo como ponerla: sin archivo se deja el vídeo sin música.
-  if (!(file instanceof File) || file.size === 0) {
+  /*
+   * Quitarla se pide **a propósito**, no dejando el archivo vacío.
+   *
+   * Antes bastaba con no elegir ninguno: mandar el formulario sin archivo
+   * borraba la música. Y el botón de cambiarla está justo al lado del selector,
+   * así que pulsarlo sin haber elegido —después de generar una, por ejemplo—
+   * la quitaba en vez de no hacer nada. Se veía como que la música había
+   * desaparecido sola.
+   *
+   * Con una intención explícita, el mismo descuido ahora no borra nada.
+   */
+  if (readText(form.get("remove")) === "si") {
     await updateVideo(videoId, { musicUrl: "" });
     revalidatePath(`/products/${productId}`);
     return { ok: true, message: "Vídeo sin música de fondo." };
+  }
+
+  if (!(file instanceof File) || file.size === 0) {
+    return {
+      ok: false,
+      message:
+        "No elegiste ningún archivo. Si querías la música que acabas de generar, ya está puesta; para quitarla usa «Quitarla».",
+    };
   }
 
   if (!/^audio\//.test(file.type)) {

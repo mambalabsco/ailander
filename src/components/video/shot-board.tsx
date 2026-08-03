@@ -45,6 +45,8 @@ export function ShotBoard({
   const [redo, setRedo] = useState<Set<string>>(new Set());
   const [musicNote, setMusicNote] = useState("");
   const [musicMood, setMusicMood] = useState("");
+  /** Si hay archivo elegido. El `ref` no repinta al cambiar, y el botón depende. */
+  const [musicChosen, setMusicChosen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const musicRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -195,6 +197,7 @@ export function ShotBoard({
               ref={musicRef}
               type="file"
               accept="audio/*"
+              onChange={(event) => setMusicChosen((event.target.files?.length ?? 0) > 0)}
               className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
             />
             <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -232,25 +235,35 @@ export function ShotBoard({
             />
           </label>
 
+          {/*
+            Solo se puede pulsar con un archivo elegido.
+
+            Sin esto pulsarlo en vacío mandaba el mismo formulario que «Quitarla»
+            y borraba la música — justo lo que uno hace después de generar una,
+            creyendo que sirve para aplicarla.
+          */}
           <Button
-            disabled={isPending}
+            disabled={isPending || !musicChosen}
             onClick={() =>
               startTransition(async () => {
+                const file = musicRef.current?.files?.[0];
+                if (!file) return;
+
                 const payload = new FormData();
                 payload.set("videoId", video.id);
                 payload.set("productId", productId);
-
-                const file = musicRef.current?.files?.[0];
-                if (file) payload.set("music", file);
+                payload.set("music", file);
 
                 const result = await uploadMusicAction(payload);
                 setMusicNote(result.message);
+
                 if (musicRef.current) musicRef.current.value = "";
+                setMusicChosen(false);
                 router.refresh();
               })
             }
           >
-            {video.musicUrl ? "Cambiar" : "Poner música"}
+            {video.musicUrl ? "Cambiar por la mía" : "Subir la mía"}
           </Button>
 
           {video.musicUrl ? (
@@ -262,6 +275,8 @@ export function ShotBoard({
                   const payload = new FormData();
                   payload.set("videoId", video.id);
                   payload.set("productId", productId);
+                  // La intención va explícita: no es «mandar sin archivo».
+                  payload.set("remove", "si");
 
                   const result = await uploadMusicAction(payload);
                   setMusicNote(result.message);
