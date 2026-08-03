@@ -133,3 +133,80 @@ export function extractMediaUrls(stdout: string, kind: MediaKind = "imagen"): st
 export function extractImageUrls(stdout: string): string[] {
   return extractMediaUrls(stdout, "imagen");
 }
+
+/* ---------------------------- El listado de modelos ------------------------ */
+
+/** Las claves con las que un modelo puede traer su identificador. */
+const SLUG_KEYS = ["job_type", "slug", "name", "id", "model", "type"];
+
+/**
+ * Encuentra la lista de modelos dentro de la respuesta del CLI.
+ *
+ * ## Por qué se busca en vez de leer una clave
+ *
+ * El CLI ha cambiado la forma de esta respuesta entre versiones —un array
+ * suelto, `{items}`, `{data}`— y basta con que la próxima sea `{models}` para
+ * que el listado llegue vacío. Vacío se lee como «no hay modelos de vídeo», que
+ * es una conclusión falsa sobre un catálogo de cuarenta.
+ *
+ * Así que se recorre la respuesta buscando el primer array cuyos elementos
+ * parezcan modelos: objetos con alguna de las claves que sirven de
+ * identificador. Es menos elegante que leer `payload.items` y sobrevive a que
+ * lo reorganicen, que es lo que importa cuando el contrato no está documentado.
+ */
+export function findModelList(payload: unknown): Record<string, unknown>[] | null {
+  const looksLikeModel = (item: unknown): boolean =>
+    typeof item === "object" &&
+    item !== null &&
+    !Array.isArray(item) &&
+    SLUG_KEYS.some((key) => typeof (item as Record<string, unknown>)[key] === "string");
+
+  const seen = new Set<unknown>();
+
+  const walk = (node: unknown): Record<string, unknown>[] | null => {
+    if (Array.isArray(node)) {
+      if (node.length > 0 && node.every(looksLikeModel)) {
+        return node as Record<string, unknown>[];
+      }
+
+      for (const child of node) {
+        const found = walk(child);
+        if (found) return found;
+      }
+
+      return null;
+    }
+
+    if (typeof node !== "object" || node === null) return null;
+    if (seen.has(node)) return null;
+    seen.add(node);
+
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      const found = walk(value);
+      if (found) return found;
+    }
+
+    return null;
+  };
+
+  return walk(payload);
+}
+
+/**
+ * Cómo describir lo que llegó, cuando no se encontró ninguna lista.
+ *
+ * Sin esto el mensaje es «no devolvió ningún modelo» y ahí se acaba la
+ * investigación: no se sabe si el CLI contestó otra cosa, si la lista está en
+ * una clave nueva o si de verdad está vacía. Con las claves delante, la
+ * siguiente versión se arregla en un minuto.
+ */
+export function describePayload(payload: unknown): string {
+  if (Array.isArray(payload)) return `un array de ${payload.length} elemento(s)`;
+
+  if (typeof payload === "object" && payload !== null) {
+    const keys = Object.keys(payload as Record<string, unknown>);
+    return keys.length > 0 ? `un objeto con ${keys.slice(0, 8).join(", ")}` : "un objeto vacío";
+  }
+
+  return `un ${typeof payload}`;
+}

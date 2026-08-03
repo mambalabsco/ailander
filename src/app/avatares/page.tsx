@@ -35,7 +35,13 @@ export default async function AvataresPage(props: {
       authenticated: false,
       reason: error instanceof Error ? error.message : "No se pudo ejecutar el CLI.",
     })),
-    listCliModels("image").catch(() => []),
+    listCliModels("image").then(
+      (models) => ({ models, error: "" }),
+      (error: unknown) => ({
+        models: [],
+        error: error instanceof Error ? error.message : "no se pudo listar",
+      }),
+    ),
   ]);
 
   const current = products.find((product) => product.id === producto) ?? products[0] ?? null;
@@ -70,10 +76,10 @@ export default async function AvataresPage(props: {
            * Solo los del CLI: Soul, que es el que hace personas que parecen
            * personas, no está en la API de plataforma.
            */
-          cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
+          cliModels={cliModels.models.map((model) => ({ slug: model.slug, name: model.title }))}
           higgsfield={{
             ok: higgs.authenticated === true,
-            reason: "reason" in higgs ? (higgs.reason ?? "") : "",
+            reason: ("reason" in higgs ? (higgs.reason ?? "") : "") || cliModels.error,
           }}
         />
       </SectionCard>

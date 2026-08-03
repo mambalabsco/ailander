@@ -227,16 +227,30 @@ export function StudioBoard({
         CLI caducó en el servidor. Son dos cosas muy distintas y solo una se
         arregla en un minuto.
       */}
-      {higgsfield.ok ? null : (
+      {higgsfield.ok && !higgsfield.reason ? null : (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <p className="font-medium">Los modelos de Higgsfield no están disponibles</p>
+          <p className="font-medium">
+            {higgsfield.ok
+              ? "El CLI de Higgsfield respondió, pero su catálogo no se pudo leer"
+              : "Los modelos de Higgsfield no están disponibles"}
+          </p>
           <p className="mt-1">
             {higgsfield.reason ||
               "El CLI de Higgsfield no responde. Sin él solo están los modelos de kie."}
           </p>
           <p className="mt-1 text-xs">
-            En el servidor: <code>cd /home/plataforma/plataforma-ia && npx higgsfield auth login</code>
-            . La sesión se renueva sola después.
+            {higgsfield.ok ? (
+              <>
+                Comprueba qué devuelve:{" "}
+                <code>cd /home/plataforma/plataforma-ia && npx higgsfield model list --video --json</code>
+              </>
+            ) : (
+              <>
+                En el servidor:{" "}
+                <code>cd /home/plataforma/plataforma-ia && npx higgsfield auth login</code>. La
+                sesión se renueva sola después.
+              </>
+            )}
           </p>
         </div>
       )}

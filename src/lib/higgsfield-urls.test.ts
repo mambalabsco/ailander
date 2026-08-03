@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import {
   declaredMediaParams,
+  describePayload,
+  findModelList,
   declaresImageReferences,
   extractImageUrls,
   extractMediaUrls,
@@ -107,4 +109,62 @@ test("la URL con parámetros de firma sigue valiendo", () => {
 
 test("sin nada que parezca una URL devuelve vacío en vez de fallar", () => {
   assert.deepEqual(extractMediaUrls("Error: session expired", "video"), []);
+});
+
+/* --------------------- Encontrar el listado de modelos --------------------- */
+
+/*
+ * El CLI ha cambiado la forma de esta respuesta entre versiones. Leer una clave
+ * fija hace que la siguiente versión devuelva una lista vacía, y vacío se lee
+ * como «no hay modelos de vídeo» — una conclusión falsa sobre un catálogo de
+ * cuarenta.
+ */
+const modelos = [{ job_type: "soul" }, { job_type: "seedance" }];
+
+test("encuentra la lista venga en la clave que venga", () => {
+  assert.deepEqual(findModelList(modelos), modelos);
+  assert.deepEqual(findModelList({ items: modelos }), modelos);
+  assert.deepEqual(findModelList({ data: modelos }), modelos);
+  // La que todavía no existe:
+  assert.deepEqual(findModelList({ models: modelos }), modelos);
+  assert.deepEqual(findModelList({ data: { result: { models: modelos } } }), modelos);
+});
+
+test("acepta las distintas formas de nombrar un modelo", () => {
+  assert.ok(findModelList({ items: [{ slug: "x" }] }));
+  assert.ok(findModelList({ items: [{ name: "x" }] }));
+  assert.ok(findModelList({ items: [{ id: "x" }] }));
+});
+
+test("no confunde una lista de otra cosa con la de modelos", () => {
+  // Sin ninguna clave que sirva de identificador no es un modelo.
+  assert.equal(findModelList({ warnings: ["algo", "otra cosa"] }), null);
+  assert.equal(findModelList({ counts: [1, 2, 3] }), null);
+});
+
+test("una respuesta sin lista devuelve nada, no una lista vacía", () => {
+  // Son cosas distintas: «cambió el formato» y «no hay modelos de ese tipo».
+  assert.equal(findModelList({ ok: true }), null);
+  assert.equal(findModelList(null), null);
+});
+
+test("una lista vacía no se confunde con no haberla encontrado", () => {
+  // Un array vacío no tiene elementos que parezcan modelos, así que se sigue
+  // buscando; con nada más que mirar, es que no hay lista reconocible.
+  assert.equal(findModelList({ items: [] }), null);
+});
+
+test("un ciclo no cuelga la búsqueda", () => {
+  const nodo: Record<string, unknown> = { items: modelos };
+  nodo.self = nodo;
+
+  assert.deepEqual(findModelList(nodo), modelos);
+});
+
+test("lo que llegó se describe, para poder arreglarlo", () => {
+  // Sin esto el mensaje es «no devolvió ningún modelo» y ahí se acaba la
+  // investigación.
+  assert.match(describePayload({ ok: true, mensaje: "x" }), /ok, mensaje/);
+  assert.match(describePayload([1, 2]), /array de 2/);
+  assert.match(describePayload("texto"), /string/);
 });

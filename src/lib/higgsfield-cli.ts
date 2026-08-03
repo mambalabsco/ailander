@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   declaredMediaParams,
+  describePayload,
+  findModelList,
   extractMediaUrls,
   MEDIA_PARAMS,
   type MediaKind,
@@ -237,15 +239,23 @@ export async function listCliModels(kind: "image" | "video" = "image"): Promise<
     throw new Error(`El CLI no devolvió JSON: ${combined.slice(0, 200)}`);
   }
 
-  // El CLI ha cambiado la forma de esta respuesta entre versiones, así que se
-  // aceptan las dos que se han visto: un array suelto o `{items: [...]}`.
-  const items = Array.isArray(payload)
-    ? payload
-    : ((payload as { items?: unknown[]; data?: unknown[] }).items ??
-      (payload as { data?: unknown[] }).data ??
-      []);
+  const items = findModelList(payload);
 
-  return (items as Record<string, unknown>[])
+  /*
+   * Que no haya lista y que la lista esté vacía son cosas distintas.
+   *
+   * Lo primero es que la respuesta cambió de forma y hay que mirarla; lo
+   * segundo es que de verdad no hay modelos de ese tipo. Decir «no devolvió
+   * ninguno» en los dos casos deja la investigación sin empezar, así que aquí
+   * se dice qué llegó.
+   */
+  if (!items) {
+    throw new Error(
+      `El CLI respondió ${describePayload(payload)} y ahí no hay ninguna lista de modelos. Puede que haya cambiado el formato: ${stdout.slice(0, 200)}`,
+    );
+  }
+
+  return items
     .map((item) => ({
       slug: String(item.job_type ?? item.slug ?? item.name ?? ""),
       title: String(item.title ?? item.display_name ?? item.job_type ?? item.slug ?? ""),

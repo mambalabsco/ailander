@@ -38,10 +38,28 @@ export default async function EstudioPage(props: {
       authenticated: false,
       reason: error instanceof Error ? error.message : "No se pudo ejecutar el CLI.",
     })),
-    listCliModels("image").catch(() => []),
-    // Los de vídeo son otra llamada porque el CLI filtra por tipo. Sin ella no
-    // aparecía ninguno, que es lo que se veía en la pantalla.
-    listCliModels("video").catch(() => []),
+    /*
+     * El motivo no se traga.
+     *
+     * Con un `catch(() => [])` la lista vacía se lee como «no hay modelos», que
+     * es una conclusión falsa sobre un catálogo de cuarenta. Guardando el error
+     * se puede decir qué pasó de verdad.
+     */
+    listCliModels("image").then(
+      (models) => ({ models, error: "" }),
+      (error: unknown) => ({
+        models: [],
+        error: error instanceof Error ? error.message : "no se pudo listar",
+      }),
+    ),
+    // Los de vídeo son otra llamada porque el CLI filtra por tipo.
+    listCliModels("video").then(
+      (models) => ({ models, error: "" }),
+      (error: unknown) => ({
+        models: [],
+        error: error instanceof Error ? error.message : "no se pudo listar",
+      }),
+    ),
   ]);
 
   const current = projects.find((project) => project.id === p) ?? projects[0];
@@ -64,8 +82,8 @@ export default async function EstudioPage(props: {
         current={current ?? null}
         assets={assets}
         products={products.map((product) => ({ id: product.id, name: product.name }))}
-        cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
-        cliVideoModels={cliVideoModels.map((model) => ({
+        cliModels={cliModels.models.map((model) => ({ slug: model.slug, name: model.title }))}
+        cliVideoModels={cliVideoModels.models.map((model) => ({
           slug: model.slug,
           name: model.title,
           /*
@@ -82,7 +100,11 @@ export default async function EstudioPage(props: {
           ok: higgs.authenticated === true,
           // El motivo, no solo que no va: «no hay modelos» y «el CLI no tiene
           // sesión» se ven igual desde la pantalla, y solo uno se arregla.
-          reason: "reason" in higgs ? (higgs.reason ?? "") : "",
+          // El primer motivo que haya: el de la sesión o el del listado.
+          reason:
+            ("reason" in higgs ? (higgs.reason ?? "") : "") ||
+            cliVideoModels.error ||
+            cliModels.error,
         }}
       />
     </div>
