@@ -442,3 +442,68 @@ test("el aviso dice qué hacer, no solo qué está mal", () => {
   // escribe lo mismo.
   assert.match(colorAFuego(conColor("color: #1a1a1a;"))[0], /Declara un ajuste/);
 });
+
+/* ------------------- El CSS que no se estaba revisando --------------------- */
+
+/*
+ * Una sección de Shopify escribe su CSS con `{% style %}` tan a menudo como con
+ * `<style>`, y solo se miraba la segunda. El CSS de la primera pasaba **sin
+ * revisar ninguna regla**: un `img { display: none }` suelto ahí dentro deja la
+ * cabecera sin logotipo con el logotipo bien puesto en los ajustes, y no falla
+ * nada ni hay nada que mirar.
+ */
+const enStyleLiquid = (css: string) =>
+  `<div class="lp">x</div>
+{% style %}${css}{% endstyle %}
+{% schema %}
+{"name":"X","presets":[{"name":"X"}]}
+{% endschema %}`;
+
+test("un selector suelto dentro de {% style %} se caza", () => {
+  const problems = reviewSection(enStyleLiquid("img { display: none; }")).problems;
+
+  assert.equal(problems.some((problem) => problem.includes("`img`")), true);
+});
+
+test("y dentro de {% stylesheet %} también", () => {
+  const source = `<div class="lp">x</div>
+{% stylesheet %}header { display: none; }{% endstylesheet %}
+{% schema %}
+{"name":"X","presets":[{"name":"X"}]}
+{% endschema %}`;
+
+  assert.equal(
+    reviewSection(source).problems.some((problem) => problem.includes("`header`")),
+    true,
+  );
+});
+
+test("el CSS bien encerrado dentro de {% style %} pasa", () => {
+  const source = enStyleLiquid(
+    "#shopify-section-{{ section.id }} .lp { color: {{ section.settings.c }}; }",
+  ).replace('"presets"', '"settings":[{"id":"c","type":"color","label":"C"}],"presets"');
+
+  assert.deepEqual(reviewSection(source).problems, []);
+});
+
+test("un color a fuego dentro de {% style %} también se caza", () => {
+  const problems = reviewSection(
+    enStyleLiquid("#shopify-section-{{ section.id }} .lp { color: #123456; }"),
+  ).problems;
+
+  assert.equal(problems.some((problem) => problem.includes("a fuego")), true);
+});
+
+test("las variantes con guion de Liquid no se escapan", () => {
+  // `{%- style -%}` es tan válido como `{% style %}` y se usa igual.
+  const source = `<div class="lp">x</div>
+{%- style -%}img { display: none; }{%- endstyle -%}
+{% schema %}
+{"name":"X","presets":[{"name":"X"}]}
+{% endschema %}`;
+
+  assert.equal(
+    reviewSection(source).problems.some((problem) => problem.includes("`img`")),
+    true,
+  );
+});

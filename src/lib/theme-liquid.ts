@@ -186,22 +186,47 @@ function undeclared(source: string, schema: SectionSchema): string[] {
  * al tema entero— y el destrozo aparece donde nadie lo está mirando. Se
  * comprueba selector a selector: basta uno suelto para pintar de más.
  */
+/**
+ * Todo el CSS de la sección, venga en la etiqueta que venga.
+ *
+ * Son tres formas y las tres se usan: `<style>` de HTML, y las de Liquid
+ * `{% style %}` y `{% stylesheet %}`. Mirando solo la primera —que es lo que se
+ * hacía— el CSS de las otras dos **no se revisaba en absoluto**: un selector sin
+ * encerrar ahí dentro pinta en toda la tienda, y un `img { display: none }`
+ * suelto deja la cabecera sin logotipo con el logotipo bien puesto en los
+ * ajustes. No falla nada y no hay nada que mirar.
+ *
+ * El Liquid se sustituye **después** de sacar el bloque: un selector encerrado
+ * lleva `{{ section.id }}` dentro, o sea llaves, y contándolas a pelo
+ * `#shopify-section-{{ section.id }} .lp {` se parte en tres y `.lp` parece un
+ * selector suelto. Rechazar el CSS que está bien es la peor forma de fallar.
+ */
+function styleBlocks(source: string): string[] {
+  const blocks: string[] = [];
+
+  const patterns = [
+    /<style[^>]*>([\s\S]*?)<\/style>/gi,
+    /\{%-?\s*style\s*-?%\}([\s\S]*?)\{%-?\s*endstyle\s*-?%\}/gi,
+    /\{%-?\s*stylesheet[^%]*-?%\}([\s\S]*?)\{%-?\s*endstylesheet\s*-?%\}/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      blocks.push(
+        match[1]
+          .replace(/\{\{[\s\S]*?\}\}/g, "LIQUID")
+          .replace(/\{%[\s\S]*?%\}/g, "LIQUID"),
+      );
+    }
+  }
+
+  return blocks;
+}
+
 function unscopedCss(source: string): string[] {
   const problems: string[] = [];
 
-  for (const style of source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
-    /*
-     * Primero se quita el Liquid, y esto no es un detalle.
-     *
-     * Un selector encerrado lleva `{{ section.id }}` dentro, o sea **llaves**.
-     * Contando llaves a pelo, `#shopify-section-{{ section.id }} .lp {` se parte
-     * en tres y `.lp` aparece como un selector suelto: la comprobación
-     * rechazaba justo el CSS que está bien, que es la peor forma de fallar.
-     */
-    const body = style[1]
-      .replace(/\{\{[\s\S]*?\}\}/g, "LIQUID")
-      .replace(/\{%[\s\S]*?%\}/g, "LIQUID");
-
+  for (const body of styleBlocks(source)) {
     for (const rule of body.matchAll(/(^|\}|\{)\s*([^{}@]+)\{/g)) {
       const selector = rule[2].trim();
 
@@ -213,7 +238,7 @@ function unscopedCss(source: string): string[] {
 
       if (!selector.includes("shopify-section")) {
         problems.push(
-          `El selector \`${selector.slice(0, 60)}\` no está encerrado en \`#shopify-section-{{ section.id }}\`: pintaría fuera de la sección.`,
+          `El selector \`${selector.slice(0, 60)}\` no está encerrado en \`#shopify-section-{{ section.id }}\`: pintaría fuera de la sección —y con \`img\` o \`header\` dentro, deja la cabecera sin logotipo.`,
         );
       }
     }
@@ -251,11 +276,7 @@ function hardcodedColors(source: string): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();
 
-  for (const style of source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
-    const body = style[1]
-      .replace(/\{\{[\s\S]*?\}\}/g, "LIQUID")
-      .replace(/\{%[\s\S]*?%\}/g, "LIQUID");
-
+  for (const body of styleBlocks(source)) {
     for (const rule of body.matchAll(
       /(^|[;{])\s*(color|background|background-color|border-color|fill|stroke)\s*:\s*([^;}]+)/gi,
     )) {

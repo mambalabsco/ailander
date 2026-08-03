@@ -914,6 +914,75 @@ export async function clearDemoImagesAction(
 }
 
 /**
+ * Revisa las secciones que ya están escritas en el tema.
+ *
+ * Existe porque las comprobaciones se hacen **antes** de escribir, y una
+ * sección escrita cuando la comprobación no existía sigue ahí con el fallo
+ * dentro. El caso que lo motivó: un `img { display: none }` sin encerrar dentro
+ * de un `{% style %}` —que durante un tiempo no se revisaba— deja la cabecera
+ * sin logotipo aunque el logotipo esté bien puesto en los ajustes.
+ *
+ * No toca nada: solo dice qué archivo tiene qué. Arreglarlo automáticamente
+ * significaría reescribir CSS ajeno a ciegas, y aquí lo caro no es el arreglo
+ * sino saber cuál de veinte archivos es.
+ */
+export async function reviewThemeSectionsAction(
+  storeId: unknown,
+  themeId: unknown,
+): Promise<{ ok: boolean; message: string; findings: { file: string; problems: string[] }[] }> {
+  const theme = readText(themeId);
+  if (!theme) return { ok: false, message: "Falta el tema.", findings: [] };
+
+  try {
+    const store = await findStore(readText(storeId));
+    if (!store) return { ok: false, message: "No se encontró la tienda.", findings: [] };
+
+    /*
+     * Solo las escritas desde aquí, que se llaman `sections/lp-…`.
+     *
+     * Las del tema son de su autor: revisarlas llenaría la lista de avisos que
+     * no se pueden ni se deben arreglar, y el que importa se perdería entre
+     * ellos.
+     */
+    const mine = (await listThemeFiles(store, theme)).filter((file) =>
+      file.filename.startsWith("sections/lp-"),
+    );
+
+    if (mine.length === 0) {
+      return {
+        ok: true,
+        message: "Ese tema no tiene ninguna sección escrita desde aquí.",
+        findings: [],
+      };
+    }
+
+    const findings: { file: string; problems: string[] }[] = [];
+
+    for (const file of mine) {
+      if (!file.body) continue;
+
+      const review = reviewSection(file.body);
+      if (!review.ok) findings.push({ file: file.filename, problems: review.problems });
+    }
+
+    return {
+      ok: true,
+      message:
+        findings.length === 0
+          ? `Las ${mine.length} secciones escritas desde aquí pasan la revisión.`
+          : `${findings.length} de ${mine.length} secciones tienen algo. Las de «selector no encerrado» son las que pueden estar tapando el logotipo.`,
+      findings,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo revisar.",
+      findings: [],
+    };
+  }
+}
+
+/**
  * Tira lo escrito de una página para volver a hacerla desde cero.
  *
  * Existe porque la reutilización es lo correcto por defecto —no pagar dos veces

@@ -8,6 +8,7 @@ import {
   buildLookPlanAction,
   buildThemePlanAction,
   clearDemoImagesAction,
+  reviewThemeSectionsAction,
   clearSectionDraftsAction,
   recreatePageAction,
   themesForApplyAction,
@@ -554,6 +555,37 @@ export function ThemePlanPanel({
               }
             >
               {isPending ? "Quitando…" : "Quitar las imágenes de maqueta"}
+            </Button>
+
+            {/*
+              Revisar lo que ya está escrito.
+
+              Las comprobaciones corren **antes** de escribir, así que una
+              sección escrita cuando una de ellas no existía sigue ahí con el
+              fallo dentro. El caso que lo motivó: un selector sin encerrar
+              dentro de un `{% style %}` —que durante un tiempo no se revisaba—
+              pinta en toda la tienda y puede dejar la cabecera sin logotipo con
+              el logotipo bien puesto en los ajustes.
+            */}
+            <Button
+              variant="secondary"
+              disabled={isPending || !targetTheme}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await reviewThemeSectionsAction(storeId, targetTheme);
+
+                  setMessage(
+                    [
+                      result.message,
+                      ...result.findings.map(
+                        (finding) => `\n· ${finding.file}: ${finding.problems.join(" ")}`,
+                      ),
+                    ].join(""),
+                  );
+                })
+              }
+            >
+              {isPending ? "Revisando…" : "Revisar las secciones escritas"}
             </Button>
 
             {/*
