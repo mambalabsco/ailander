@@ -196,19 +196,15 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
   const total = Math.max(cursor, input.voiceSeconds ?? 0);
 
   /*
-   * Una pista por plano, en vez de una pista con todos.
+   * Los planos ya vienen encadenados en un solo vídeo.
    *
-   * Es lo único que explica el fallo que quedaba: montara lo que montara —
-   * pegados, en su segundo real, con la última estirada— el vídeo salía
-   * repitiendo **el último** clip de principio a fin. Eso es exactamente lo que
-   * pasa si el montador se queda con el último fotograma de cada pista en vez de
-   * encadenarlos.
+   * Antes se le daban los seis al montaje para que los pusiera en su sitio, y
+   * ahí estaba el fallo: con seis clips distintos y bien generados, el montaje
+   * se quedaba con **el último** y lo repetía hasta que se acababa el audio.
    *
-   * No hay forma de comprobarlo sin ejecutarlo, así que se cambia lo mínimo que
-   * lo distingue: la misma línea de tiempo, los mismos tiempos y las mismas
-   * duraciones, cada plano en su propia pista. Si la teoría es buena, esto lo
-   * arregla; si no, el resultado será distinto de una forma que dirá por dónde
-   * seguir.
+   * Encadenarlos aparte quita esa incógnita — pegar una lista de vídeos no tiene
+   * tiempos que interpretar— y aquí llega ya un plano único, que es el caso que
+   * sí se comporta.
    */
   return {
     tracks: [

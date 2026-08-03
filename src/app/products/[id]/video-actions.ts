@@ -39,7 +39,9 @@ import {
   keyframe,
   listVoices,
   makeMusic,
+  mergeVideos,
   speak,
+  trimClip,
 } from "@/lib/video/providers";
 import { uploadVideoAsset } from "@/lib/data/video-assets";
 import type { JobOutcome } from "@/lib/background";
@@ -901,7 +903,44 @@ export async function assembleVideoAction(
         );
       }
 
-      const result = await compose(timeline.tracks);
+      /*
+       * Los planos se recortan y se encadenan **antes** del montaje.
+       *
+       * Es el arreglo del fallo que costó varias vueltas: pasarle los seis
+       * planos al montaje para que los colocara daba un vídeo con el último
+       * repetido de principio a fin, aunque los seis clips fueran distintos y
+       * estuvieran bien. Recortando cada uno por separado —una llamada con un
+       * solo plano dentro, que no tiene nada que encadenar— y pegándolos con el
+       * unificador, no queda ninguna semántica que adivinar.
+       */
+      const frames = timeline.tracks
+        .filter((track) => track.type === "video")
+        .flatMap((track) => track.keyframes);
+
+      await report(`Recortando ${frames.length} plano(s)`);
+
+      const trimmed: string[] = [];
+
+      for (const [index, frame] of frames.entries()) {
+        await report(`Recortando plano ${index + 1} de ${frames.length}`);
+        trimmed.push(await trimClip(frame.url, frame.duration / 1000));
+      }
+
+      await report("Encadenando los planos");
+
+      const picture = await mergeVideos(trimmed);
+
+      await report("Pegando la voz, la música y los subtítulos");
+
+      const result = await compose([
+        // Un solo plano, ya con todo dentro: el caso que sí se comporta.
+        {
+          id: "broll",
+          type: "video",
+          keyframes: [{ timestamp: 0, duration: Math.round(timeline.seconds * 1000), url: picture }],
+        },
+        ...timeline.tracks.filter((track) => track.type !== "video"),
+      ]);
 
       await updateVideo(videoId, {
         status: "montado",

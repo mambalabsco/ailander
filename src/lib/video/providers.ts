@@ -481,6 +481,66 @@ export async function transcribe(audio: Buffer, languageCode?: string): Promise<
   return typeof data.text === "string" ? data.text.trim() : "";
 }
 
+/**
+ * Recorta un clip a los segundos que dura su frase.
+ *
+ * Es una llamada de montaje con **un solo plano dentro**, y ese es justo el
+ * punto: encadenar varios en una misma pista es lo que no funcionaba — el
+ * montador se quedaba con el último y lo repetía hasta que se acababa el audio,
+ * con seis clips distintos y bien generados.
+ *
+ * Con uno solo no hay nada que encadenar ni orden que interpretar, así que el
+ * resultado no depende de una semántica que no se puede comprobar sin ejecutarla.
+ */
+export async function trimClip(url: string, seconds: number): Promise<string> {
+  const { videoUrl } = await compose([
+    {
+      id: "v",
+      type: "video",
+      keyframes: [{ timestamp: 0, duration: Math.max(100, Math.round(seconds * 1000)), url }],
+    },
+  ]);
+
+  return videoUrl;
+}
+
+/**
+ * Pega varios clips en uno, en orden.
+ *
+ * Aquí no hay tiempos que interpretar: es una lista y se unen uno detrás de
+ * otro. Por eso se usa esto para el encadenado y el montaje solo para lo que sí
+ * necesita capas —la voz, la música y los subtítulos encima.
+ */
+export async function mergeVideos(urls: string[]): Promise<string> {
+  if (urls.length === 1) return urls[0];
+
+  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/merge-videos", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key("FAL_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      video_urls: urls,
+      // La proporción sale del primero: todos vienen del mismo generador y del
+      // mismo formato, y sin esto se toma el mínimo de todos, que puede recortar.
+      resolution_aspect_ratio_video_index: 0,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
+    throw new Error(`El encadenado respondió ${response.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const payload = (await response.json()) as { video?: { url?: string } };
+  if (!payload.video?.url) throw new Error("El encadenado no devolvió ningún vídeo.");
+
+  return payload.video.url;
+}
+
 /* --------------------------------- Música ---------------------------------- */
 
 /**
