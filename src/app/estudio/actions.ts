@@ -15,13 +15,16 @@ import {
   listVoices,
   makeMusic,
   mergeVideos,
+  normalizeLoudness,
   speak,
   trimClip,
 } from "@/lib/video/providers";
 import { generateWithCli, modelMediaParams } from "@/lib/higgsfield-cli";
-import { attenuateWav, MUSIC_GAIN } from "@/lib/video/wav-gain";
+import { findMusicGenerator, musicCostLabel } from "@/lib/video/music";
+import { belowVoice, findMusicLevel } from "@/lib/video/loudness";
 import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import { subtitleLanguage } from "@/lib/video/vocabulary";
+import { DEFAULT_PRESET, findVoicePreset } from "@/lib/video/voice-settings";
 import { polishPrompt, POLISH_SCHEMA, type PolishedPrompt } from "@/lib/video/prompt-polish";
 import { generateStructured } from "@/lib/generators";
 import { move, sorted } from "@/lib/studio-order";
@@ -304,6 +307,7 @@ async function makeCliClip(input: {
   prompt: string;
   slug: string;
   references: string[];
+  aspectRatio: string;
 }): Promise<LaunchResult> {
   if (!input.prompt) throw new Error("Escribe qué quieres ver.");
 
@@ -313,7 +317,13 @@ async function makeCliClip(input: {
     kind: "imagenes",
     label: `Clip · ${input.slug}`,
     revalidate: "/estudio",
-    resume: { projectId: input.projectId, prompt: input.prompt, model: `hf:${input.slug}`, references: input.references },
+    resume: {
+      projectId: input.projectId,
+      prompt: input.prompt,
+      model: `hf:${input.slug}`,
+      references: input.references,
+      aspectRatio: input.aspectRatio,
+    },
     work: async (report) => {
       /*
        * Se le pregunta al modelo con qué bandera quiere las imágenes.
@@ -353,7 +363,7 @@ async function makeCliClip(input: {
         // El primero que declare: `image_references` si está, y si no el que haya.
         referenceParam: params.includes("image_references") ? "image_references" : params[0],
         references: bytes,
-        aspectRatio: "9:16",
+        aspectRatio: input.aspectRatio,
       });
 
       await addAsset({
@@ -386,6 +396,7 @@ export async function makeClipAction(input: unknown): Promise<LaunchResult> {
   const modelId = readText(raw.model) || VIDEO_GENERATORS[0].id;
   const seconds = Number(raw.seconds) || 6;
   const sound = raw.sound === true;
+  const aspectRatio = readText(raw.aspectRatio) || "9:16";
 
   const references = [readText(raw.imageUrl), ...(Array.isArray(raw.references) ? raw.references : [])]
     .map((value) => readText(value))
@@ -396,7 +407,7 @@ export async function makeClipAction(input: unknown): Promise<LaunchResult> {
   // Los de Higgsfield van por su CLI y llevan `hf:` delante, igual que en las
   // imágenes. Su catálogo lo da él en marcha, así que no está en la tabla.
   if (modelId.startsWith("hf:")) {
-    return makeCliClip({ projectId, prompt, slug: modelId.slice(3), references });
+    return makeCliClip({ projectId, prompt, slug: modelId.slice(3), references, aspectRatio });
   }
 
   const model = findGenerator(modelId);
@@ -432,6 +443,7 @@ export async function makeClipAction(input: unknown): Promise<LaunchResult> {
         seconds: Math.max(1, Math.round(seconds)),
         model: model.slug,
         sound,
+        aspectRatio,
       });
 
       await addAsset({
@@ -512,6 +524,7 @@ export async function makeVoiceAction(input: unknown): Promise<LaunchResult> {
   const projectId = readText(raw.projectId);
   const text = readText(raw.text);
   const voiceId = readText(raw.voiceId);
+  const tone = readText(raw.tone) || DEFAULT_PRESET;
 
   if (!projectId || !text) throw new Error("Escribe el texto.");
   if (!voiceId) throw new Error("Elige una voz.");
@@ -522,11 +535,11 @@ export async function makeVoiceAction(input: unknown): Promise<LaunchResult> {
     kind: "imagenes",
     label: `Voz · ${text.slice(0, 40)}`,
     revalidate: "/estudio",
-    resume: { projectId, text, voiceId },
+    resume: { projectId, text, voiceId, tone },
     work: async (report) => {
       await report("Generando la voz");
 
-      const voice = await speak({ text, voiceId });
+      const voice = await speak({ text, voiceId, settings: findVoicePreset(tone).settings });
 
       const { supabase, userId } = await requireContext();
       const path = `${userId}/${projectId}/${crypto.randomUUID()}.mp3`;
@@ -550,52 +563,65 @@ export async function makeVoiceAction(input: unknown): Promise<LaunchResult> {
   });
 }
 
-/** Música a medida, ya baja de volumen para que no tape una locución. */
+/** Música a medida, ya al volumen que le toca para que no tape una locución. */
 export async function makeMusicAction(input: unknown): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const projectId = readText(raw.projectId);
   const prompt = readText(raw.prompt);
-  const seconds = Math.max(10, Math.min(180, Number(raw.seconds) || 30));
+  const seconds = Math.max(5, Math.min(600, Number(raw.seconds) || 30));
+  const modelId = readText(raw.model);
+  const levelId = readText(raw.level);
 
   if (!projectId || !prompt) throw new Error("Describe la música que quieres.");
 
   await guard();
 
+  const generator = findMusicGenerator(modelId);
+  const level = findMusicLevel(levelId);
+
   return runInBackground({
     kind: "imagenes",
-    label: `Música · ${prompt.slice(0, 40)}`,
+    label: `Música · ${generator.label}`,
     revalidate: "/estudio",
-    resume: { projectId, prompt, seconds },
+    resume: { projectId, prompt, seconds, model: modelId, level: levelId },
     work: async (report) => {
-      await report(`Componiendo ${seconds} s`);
+      await report(`Componiendo con ${generator.label}`);
 
-      const { url } = await makeMusic({ prompt, seconds });
+      const { url } = await makeMusic({ prompt, seconds, model: generator.id });
 
-      await report("Bajándole el volumen");
+      await report(`Dejándola ${belowVoice(level)} LU por debajo de una voz`);
 
-      const response = await fetch(url, { cache: "no-store" });
-      const quiet = attenuateWav(new Uint8Array(await response.arrayBuffer()));
+      /*
+       * El volumen se ajusta por sonoridad y fuera, no multiplicando muestras.
+       *
+       * Lo segundo solo sabía de WAV, y de los cinco generadores solo uno lo
+       * devuelve: con los demás el archivo salía intacto y a volumen de canción.
+       */
+      const levelled = await normalizeLoudness(url, level.lufs);
+
+      const response = await fetch(levelled, { cache: "no-store" });
+      if (!response.ok) throw new Error("No se pudo descargar la música ya ajustada.");
 
       const { supabase, userId } = await requireContext();
       const path = `${userId}/${projectId}/${crypto.randomUUID()}.wav`;
 
       await supabase.storage
         .from("studio")
-        .upload(path, Buffer.from(quiet), { contentType: "audio/wav" });
+        .upload(path, Buffer.from(await response.arrayBuffer()), { contentType: "audio/wav" });
 
       await addAsset({
         projectId,
         kind: "musica",
         url: supabase.storage.from("studio").getPublicUrl(path).data.publicUrl,
         name: prompt.slice(0, 60),
-        model: "Música",
+        model: generator.label,
         prompt,
         seconds,
       });
 
       return {
-        summary: `Cama de ${seconds} s al ${Math.round(MUSIC_GAIN * 100)} % de volumen, para que no tape la voz.`,
+        summary: `Cama con ${generator.label}, a ${level.label.toLowerCase()}. ${musicCostLabel(generator, seconds)} Escúchala en la tira antes de montar.`,
       };
     },
   });

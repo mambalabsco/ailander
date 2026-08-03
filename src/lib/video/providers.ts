@@ -1,7 +1,14 @@
 import "server-only";
 
 import { buildInput, VIDEO_GENERATORS } from "@/lib/video/catalog";
+import {
+  buildMusicInput,
+  findMusicGenerator,
+  readMusicUrl,
+  type MusicGenerator,
+} from "@/lib/video/music";
 import { charactersToWords, spokenSeconds, type Alignment, type TimedWord } from "@/lib/video/words";
+import { clampSettings, toApi, type VoiceSettings } from "@/lib/video/voice-settings";
 import type { VocabularyEntry } from "@/lib/video/vocabulary";
 import type { Track } from "@/lib/video/timeline";
 
@@ -72,6 +79,8 @@ export async function speak(options: {
   text: string;
   voiceId: string;
   modelId?: string;
+  /** Cómo suena: estabilidad, parecido, estilo, velocidad. */
+  settings?: Partial<VoiceSettings>;
 }): Promise<VoiceResult> {
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(options.voiceId)}/with-timestamps`,
@@ -84,6 +93,9 @@ export async function speak(options: {
       body: JSON.stringify({
         text: options.text,
         model_id: options.modelId ?? "eleven_multilingual_v2",
+        // Sin esto se generaba siempre con los valores por defecto, que suenan
+        // más planos de lo que quiere un anuncio.
+        voice_settings: toApi(clampSettings(options.settings ?? {})),
       }),
       cache: "no-store",
     },
@@ -316,6 +328,8 @@ async function referenceIsReachable(url: string): Promise<boolean> {
 export async function keyframe(options: {
   prompt: string;
   references?: string[];
+  /** La forma de la imagen. Vertical por defecto, que es la de un anuncio. */
+  aspectRatio?: string;
   timeoutMs?: number;
 }): Promise<string> {
   const wanted = options.references?.filter(Boolean) ?? [];
@@ -346,7 +360,7 @@ export async function keyframe(options: {
       output_format: "png",
       // `aspect_ratio` y no `image_size`: el segundo está marcado como sustituido
       // en la API, y un parámetro obsoleto acaba ignorándose sin avisar.
-      aspect_ratio: "9:16",
+      aspect_ratio: options.aspectRatio || "9:16",
       ...(refs.length > 0 ? { image_urls: refs.slice(0, 10) } : {}),
     },
     options.timeoutMs ?? 4 * 60_000,
@@ -376,6 +390,8 @@ export async function animate(options: {
   model?: string;
   /** Que genere sonido él mismo. Solo lo miran los que saben. */
   sound?: boolean;
+  /** La forma. Solo la miran los que la aceptan; el resto la heredan. */
+  aspectRatio?: string;
   negativePrompt?: string;
   timeoutMs?: number;
 }): Promise<string> {
@@ -396,7 +412,7 @@ export async function animate(options: {
     prompt: options.prompt,
     references,
     seconds: options.seconds,
-    aspectRatio: "9:16",
+    aspectRatio: options.aspectRatio || "9:16",
     sound: options.sound,
   });
 
@@ -605,31 +621,77 @@ export async function burnSubtitles(options: {
 export async function makeMusic(options: {
   prompt: string;
   seconds: number;
-}): Promise<{ url: string }> {
-  const response = await fetch("https://fal.run/cassetteai/music-generator", {
+  /** Cuál de ellos. Por defecto, el barato. */
+  model?: string;
+}): Promise<{ url: string; model: MusicGenerator }> {
+  const model = findMusicGenerator(options.model ?? "");
+
+  const response = await fetch(`https://fal.run/${model.slug}`, {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      prompt: options.prompt,
-      // El generador acepta de diez a ciento ochenta segundos.
-      duration: Math.max(10, Math.min(180, Math.round(options.seconds))),
-    }),
+    body: JSON.stringify(buildMusicInput(model, options)),
     cache: "no-store",
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
-    throw new Error(`La música respondió ${response.status}. ${detail.slice(0, 200)}`);
+    throw new Error(`${model.label} respondió ${response.status}. ${detail.slice(0, 200)}`);
   }
 
-  const payload = (await response.json()) as { audio_file?: { url?: string } };
-  if (!payload.audio_file?.url) throw new Error("El generador no devolvió ninguna música.");
+  const url = readMusicUrl(model, await response.json());
+  if (!url) throw new Error(`${model.label} no devolvió ninguna música.`);
 
-  return { url: payload.audio_file.url };
+  return { url, model };
+}
+
+/**
+ * Deja un audio a un volumen perceptual concreto.
+ *
+ * ## Por qué esto y no multiplicar las muestras
+ *
+ * Antes la música se bajaba al 12 % escribiendo dentro del WAV. Funcionaba con
+ * un WAV y solo con uno: los generadores nuevos devuelven MP3, y ahí el mismo
+ * código no toca nada —devuelve el archivo igual— así que la cama entraría a
+ * volumen de canción y taparía la locución.
+ *
+ * Y un porcentaje tampoco es lo que se quiere. Un 12 % de una pista suave y un
+ * 12 % de una pista comprimida suenan a cosas distintas. Lo que hace que una
+ * cama acompañe sin competir es su **sonoridad**, que se mide en LUFS y es
+ * justo lo que ajusta esto.
+ *
+ * Da dos vueltas al archivo —mide y luego corrige— en vez de una. Tarda algo
+ * más y es lo que hace que el resultado caiga donde se pidió.
+ */
+export async function normalizeLoudness(url: string, lufs: number): Promise<string> {
+  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/loudnorm", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key("FAL_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      audio_url: url,
+      integrated_loudness: Math.max(-70, Math.min(-5, lufs)),
+      // Sin esto un pico suelto puede saturar aunque la media esté bien.
+      true_peak: -1.5,
+      linear: false,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`El ajuste de volumen respondió ${response.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const payload = (await response.json()) as { audio?: { url?: string } };
+  if (!payload.audio?.url) throw new Error("El ajuste de volumen no devolvió ningún audio.");
+
+  return payload.audio.url;
 }
 
 /* ------------------------------ Clonar una voz ----------------------------- */

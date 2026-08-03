@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
+import { ASPECTS, aspectsFor, nearestAspect, pixels } from "@/lib/video/aspect";
+import { findMusicGenerator, musicCostLabel, MUSIC_GENERATORS } from "@/lib/video/music";
+import { MUSIC_LEVELS } from "@/lib/video/loudness";
+import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voice-settings";
 import {
   durationLabel,
   estimateCost,
@@ -94,6 +98,7 @@ export function StudioBoard({
 
   const [prompt, setPrompt] = useState("");
   const [imageModel, setImageModel] = useState("");
+  const [imageAspect, setImageAspect] = useState("9:16");
   const [refs, setRefs] = useState<Set<string>>(new Set());
 
   const [clipPrompt, setClipPrompt] = useState("");
@@ -101,6 +106,7 @@ export function StudioBoard({
   const [clipSeconds, setClipSeconds] = useState(6);
   const [clipRefs, setClipRefs] = useState<Set<string>>(new Set());
   const [clipSound, setClipSound] = useState(false);
+  const [wantedClipAspect, setClipAspect] = useState("9:16");
   const [polishing, setPolishing] = useState(false);
 
   const [voiceText, setVoiceText] = useState("");
@@ -109,6 +115,9 @@ export function StudioBoard({
 
   const [musicPrompt, setMusicPrompt] = useState("");
   const [musicSeconds, setMusicSeconds] = useState(30);
+  const [musicModel, setMusicModel] = useState(MUSIC_GENERATORS[0].id);
+  const [musicLevel, setMusicLevel] = useState("normal");
+  const [tone, setTone] = useState(DEFAULT_PRESET);
 
   const [preset, setPreset] = useState("hustle");
 
@@ -146,6 +155,21 @@ export function StudioBoard({
   const clipNote = cliClip
     ? "De Higgsfield, por su CLI. La duración y el precio los pone el modelo; lo que cobre lo verás en tu cuenta."
     : clipGenerator.note;
+
+  /*
+   * La forma solo se puede pedir donde el modelo la acepta.
+   *
+   * Los de imagen a vídeo la heredan del keyframe: mandarles además una
+   * proporción distinta recorta o estira sin decir nada. Y al cambiar de modelo
+   * se cae en la admitida más parecida, para no acabar en la de por defecto sin
+   * enterarse.
+   */
+  const clipHasAspect = cliClip ? true : clipGenerator.hasAspectRatio;
+  const clipAspects = aspectsFor([]);
+  const clipAspect = nearestAspect(
+    wantedClipAspect,
+    clipAspects.map((aspect) => aspect.id),
+  );
 
   const clipReferences = [...clipRefs];
 
@@ -318,7 +342,31 @@ export function StudioBoard({
                       ))
                     : null}
                 </SelectField>
+
+                {/*
+                  La forma, que antes estaba escrita a fuego en «9:16».
+                  Un anuncio es vertical, pero una miniatura es apaisada y una
+                  publicación de feed es cuadrada, y no había forma de pedirlas.
+                */}
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Forma</span>
+                  <SelectField
+                    value={imageAspect}
+                    onChange={(event) => setImageAspect(event.target.value)}
+                    className="min-w-44"
+                  >
+                    {ASPECTS.map((aspect) => (
+                      <option key={aspect.id} value={aspect.id}>
+                        {aspect.label} · {aspect.id} — {aspect.note}
+                      </option>
+                    ))}
+                  </SelectField>
+                </label>
               </div>
+
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Sale a {pixels(imageAspect)}.
+              </p>
 
               {/*
                 Las referencias se eligen de las imágenes del proyecto.
@@ -369,6 +417,7 @@ export function StudioBoard({
                       projectId: current.id,
                       prompt,
                       model: imageModel,
+                      aspectRatio: imageAspect,
                       references: [...refs],
                     })
                   }
@@ -532,6 +581,32 @@ export function StudioBoard({
                   </label>
                 )}
 
+                {/*
+                  Los de vídeo solo entienden las tres universales: lo dice la
+                  documentación de Kling y de Grok. Ofrecer 4:5 aquí sería
+                  prometer una forma que devuelven en otra sin avisar.
+                */}
+                {clipHasAspect ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Forma</span>
+                    <SelectField
+                      value={clipAspect}
+                      onChange={(event) => setClipAspect(event.target.value)}
+                      className="min-w-40"
+                    >
+                      {clipAspects.map((aspect) => (
+                        <option key={aspect.id} value={aspect.id}>
+                          {aspect.label} · {aspect.id}
+                        </option>
+                      ))}
+                    </SelectField>
+                  </label>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    La forma la hereda de la imagen de partida.
+                  </p>
+                )}
+
                 {clipNativeAudio ? (
                   <label className="flex items-center gap-2 text-xs">
                     <input
@@ -555,6 +630,7 @@ export function StudioBoard({
                       seconds: clipSeconds,
                       references: clipReferences,
                       sound: clipSound,
+                      aspectRatio: clipAspect,
                     })
                   }
                   label="Generar vídeo"
@@ -619,7 +695,7 @@ export function StudioBoard({
                 <GenerateButton
                   variant="primary"
                   action={() =>
-                    makeVoiceAction({ projectId: current.id, text: voiceText, voiceId })
+                    makeVoiceAction({ projectId: current.id, text: voiceText, voiceId, tone })
                   }
                   label="Generar voz"
                   disabled={!voiceText.trim() || !voiceId}
@@ -627,6 +703,20 @@ export function StudioBoard({
                   hint="Céntimos. Escribe fonético: «eme ce te» en vez de «MCT», o se pronuncia mal."
                 />
               </div>
+
+              <label className="mt-2 flex flex-col gap-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Tono</span>
+                <SelectField value={tone} onChange={(event) => setTone(event.target.value)}>
+                  {VOICE_PRESETS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </SelectField>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {findVoicePreset(tone).note}
+                </span>
+              </label>
 
               {/* Clonar */}
               <form ref={cloneRef} className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -685,17 +775,63 @@ export function StudioBoard({
                 className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
               />
 
-              <label className="mt-2 flex items-center gap-2 text-sm">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
-                <input
-                  type="number"
-                  min={10}
-                  max={180}
-                  value={musicSeconds}
-                  onChange={(event) => setMusicSeconds(Number(event.target.value))}
-                  className="w-24 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                />
-              </label>
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Generador</span>
+                  <SelectField
+                    value={musicModel}
+                    onChange={(event) => setMusicModel(event.target.value)}
+                    className="min-w-40"
+                  >
+                    {MUSIC_GENERATORS.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Volumen</span>
+                  <SelectField
+                    value={musicLevel}
+                    onChange={(event) => setMusicLevel(event.target.value)}
+                    className="min-w-36"
+                  >
+                    {MUSIC_LEVELS.map((level) => (
+                      <option key={level.id} value={level.id}>
+                        {level.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                </label>
+
+                {/*
+                  Los que no dejan pedir duración no la preguntan: el campo
+                  daría a entender que se respeta, y dan lo que dan.
+                */}
+                {findMusicGenerator(musicModel).durationField ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
+                    <input
+                      type="number"
+                      min={findMusicGenerator(musicModel).minSeconds}
+                      max={findMusicGenerator(musicModel).maxSeconds}
+                      value={musicSeconds}
+                      onChange={(event) => setMusicSeconds(Number(event.target.value))}
+                      className="w-24 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Este no deja pedir duración.
+                  </p>
+                )}
+              </div>
+
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {findMusicGenerator(musicModel).note}
+              </p>
 
               <div className="mt-3">
                 <GenerateButton
@@ -705,11 +841,13 @@ export function StudioBoard({
                       projectId: current.id,
                       prompt: musicPrompt,
                       seconds: musicSeconds,
+                      model: musicModel,
+                      level: musicLevel,
                     })
                   }
                   label="Generar música"
                   disabled={!musicPrompt.trim()}
-                  hint="Sale ya baja de volumen: el montaje mezcla sin control de volumen y a nivel normal taparía la voz."
+                  hint={`${musicCostLabel(findMusicGenerator(musicModel), musicSeconds)} Sale ya al volumen elegido y se puede escuchar en la tira de abajo.`}
                 />
               </div>
 

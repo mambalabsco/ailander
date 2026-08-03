@@ -32,7 +32,9 @@ import {
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
-import { MUSIC_GAIN, attenuateWav, buildMusicPrompt } from "@/lib/video/wav-gain";
+import { buildMusicPrompt, findMusicGenerator, musicCostLabel } from "@/lib/video/music";
+import { belowVoice, findMusicLevel } from "@/lib/video/loudness";
+import { findVoicePreset } from "@/lib/video/voice-settings";
 import {
   animate,
   compose,
@@ -41,6 +43,7 @@ import {
   burnSubtitles,
   makeMusic,
   mergeVideos,
+  normalizeLoudness,
   speak,
   trimClip,
 } from "@/lib/video/providers";
@@ -286,7 +289,17 @@ export async function generateVoiceAction(
       await report("Generando la voz toma a toma");
       const text = video.shots.map((shot) => shot.guion).join(" ");
 
-      const voice = await speak({ text, voiceId: video.voiceId });
+      /*
+       * El tono se elige y ya no se queda en el de fábrica.
+       *
+       * Todo el guion va en una sola generación, así que la estabilidad baja no
+       * hace saltar la voz entre tomas: eso solo pasaría generando toma a toma.
+       */
+      const voice = await speak({
+        text,
+        voiceId: video.voiceId,
+        settings: findVoicePreset(readText(raw.tone)).settings,
+      });
 
       await report("Guardando el audio");
 
@@ -734,9 +747,13 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
 /**
  * Genera la música de fondo a medida del anuncio.
  *
- * Se le baja el volumen **antes de guardarla**, no al mezclar: el montaje mezcla
- * sin control de volumen y una pista a nivel de canción tapa la voz, que es el
- * único fallo que hace inútil un vídeo entero.
+ * Se le deja el volumen puesto **antes de guardarla**, no al mezclar: el montaje
+ * mezcla sin control de volumen y una pista a nivel de canción tapa la voz, que
+ * es el único fallo que hace inútil un vídeo entero.
+ *
+ * El volumen se ajusta por sonoridad, no multiplicando muestras. Lo segundo solo
+ * funcionaba con WAV, y los generadores buenos devuelven MP3: con ellos el
+ * archivo salía intacto y a volumen de canción.
  */
 export async function generateMusicAction(input: unknown): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
@@ -744,6 +761,8 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
   const videoId = readText(raw.videoId);
   const productId = readText(raw.productId);
   const mood = readText(raw.mood);
+  const modelId = readText(raw.model);
+  const levelId = readText(raw.level);
 
   if (!videoId || !productId) throw new Error("Falta el vídeo.");
   await guard();
@@ -757,13 +776,16 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
   // La duración sale de la voz: una cama más corta deja el final en silencio.
   const seconds = Math.max(10, Math.ceil(video.voiceSeconds || 30));
 
+  const generator = findMusicGenerator(modelId);
+  const level = findMusicLevel(levelId);
+
   return runInBackground({
     productId,
     kind: "imagenes",
     label: `Música · ${video.title}`,
-    resume: { videoId, productId, mood },
+    resume: { videoId, productId, mood, model: modelId, level: levelId },
     work: async (report) => {
-      await report(`Componiendo ${seconds} s de cama musical`);
+      await report(`Componiendo ${seconds} s con ${generator.label}`);
 
       const { url } = await makeMusic({
         prompt: buildMusicPrompt({
@@ -772,26 +794,27 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
           mood,
         }),
         seconds,
+        model: generator.id,
       });
 
-      await report("Bajándole el volumen para que no tape la voz");
+      await report(`Dejándola ${belowVoice(level)} LU por debajo de la voz`);
 
-      const response = await fetch(url, { cache: "no-store" });
-      if (!response.ok) throw new Error("No se pudo descargar la música generada.");
+      const levelled = await normalizeLoudness(url, level.lufs);
 
-      const quiet = attenuateWav(new Uint8Array(await response.arrayBuffer()));
+      const response = await fetch(levelled, { cache: "no-store" });
+      if (!response.ok) throw new Error("No se pudo descargar la música ya ajustada.");
 
       const stored = await uploadVideoAsset({
         videoId,
         name: "musica.wav",
-        data: Buffer.from(quiet),
+        data: Buffer.from(await response.arrayBuffer()),
         contentType: "audio/wav",
       });
 
       await updateVideo(videoId, { musicUrl: stored });
 
       return {
-        summary: `Cama de ${seconds} s puesta, al ${Math.round(MUSIC_GAIN * 100)} % de volumen para que no tape la voz.`,
+        summary: `Cama de ${seconds} s con ${generator.label}, a ${level.label.toLowerCase()} (${belowVoice(level)} LU por debajo de la voz). ${musicCostLabel(generator, seconds)} Escúchala antes de montar.`,
       };
     },
   });

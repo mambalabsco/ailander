@@ -4,6 +4,9 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
+import { findMusicGenerator, musicCostLabel, MUSIC_GENERATORS } from "@/lib/video/music";
+import { findMusicLevel, MUSIC_LEVELS } from "@/lib/video/loudness";
+import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voice-settings";
 import { GenerateButton } from "@/components/generate-button";
 import {
   assembleVideoAction,
@@ -47,6 +50,9 @@ export function ShotBoard({
   const [musicMood, setMusicMood] = useState("");
   /** Si hay archivo elegido. El `ref` no repinta al cambiar, y el botón depende. */
   const [musicChosen, setMusicChosen] = useState(false);
+  const [musicModel, setMusicModel] = useState(MUSIC_GENERATORS[0].id);
+  const [musicLevel, setMusicLevel] = useState("normal");
+  const [tone, setTone] = useState(DEFAULT_PRESET);
   const [isPending, startTransition] = useTransition();
   const musicRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -130,12 +136,25 @@ export function ShotBoard({
         {withCuts.length === 0 ? (
           <GenerateButton
             variant="primary"
-            action={() => generateVoiceAction({ videoId: video.id, productId })}
+            action={() => generateVoiceAction({ videoId: video.id, productId, tone })}
             label="Generar la voz"
             disabled={!providers.voice}
             disabledReason={!providers.voice ? "Falta ELEVENLABS_API_KEY" : undefined}
-            hint="Céntimos. De sus tiempos salen los cortes de cada toma."
+            hint={`Céntimos. De sus tiempos salen los cortes de cada toma. ${findVoicePreset(tone).note}`}
           />
+        ) : null}
+
+        {withCuts.length === 0 ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tono</span>
+            <SelectField value={tone} onChange={(event) => setTone(event.target.value)} className="min-w-44">
+              {VOICE_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
         ) : null}
 
         {withCuts.length > 0 && withKeyframe.length < video.shots.length ? (
@@ -188,52 +207,149 @@ export function ShotBoard({
         no se arregla después.
       */}
       {withClip.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Música de fondo {video.musicUrl ? "· puesta" : "· sin música"}
+        <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <p className="text-sm font-medium">
+            Música de fondo{" "}
+            <span className="font-normal text-slate-500 dark:text-slate-400">
+              {video.musicUrl ? "· puesta" : "· sin música"}
             </span>
-            <input
-              ref={musicRef}
-              type="file"
-              accept="audio/*"
-              onChange={(event) => setMusicChosen((event.target.files?.length ?? 0) > 0)}
-              className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
-            />
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Si la subes tú, que venga ya baja: el montaje mezcla sin control de volumen.
-            </span>
-          </label>
+          </p>
 
           {/*
-            Generada a medida y ya calibrada.
+            Los pasos van en el orden en que se hacen, numerados.
 
-            Es lo que evita el único fallo que hace inútil un vídeo entero: una
-            cama a volumen de canción tapa la locución. Generándola aquí se le
-            baja el volumen antes de guardarla.
+            Antes el campo del aire estaba **debajo** del botón que lo usa, así
+            que se leía al revés: se pulsaba generar y luego se veía el campo. Y
+            «Cambiar», que es para subir un archivo propio, quedaba junto a todo
+            lo demás como si fuera el botón de aplicar.
           */}
-          <GenerateButton
-            variant="secondary"
-            action={() =>
-              generateMusicAction({ videoId: video.id, productId, mood: musicMood })
-            }
-            label={video.musicUrl ? "Generar otra" : "Generar música"}
-            disabled={!providers.compose}
-            disabledReason={!providers.compose ? "Falta FAL_KEY" : undefined}
-            hint="Instrumental, del largo de la voz y al 12 % de volumen para que no la tape. Céntimos."
-          />
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              1 · Qué quieres que suene
+            </p>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Qué aire quieres (opcional)
-            </span>
-            <input
-              value={musicMood}
-              onChange={(event) => setMusicMood(event.target.value)}
-              placeholder="tenso al principio, esperanzador al final"
-              className="w-64 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-            />
-          </label>
+            <div className="mt-2 flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Aire (opcional)</span>
+                <input
+                  value={musicMood}
+                  onChange={(event) => setMusicMood(event.target.value)}
+                  placeholder="tenso al principio, esperanzador al final"
+                  className="w-64 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Generador</span>
+                <SelectField
+                  value={musicModel}
+                  onChange={(event) => setMusicModel(event.target.value)}
+                  className="min-w-44"
+                >
+                  {MUSIC_GENERATORS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Volumen</span>
+                <SelectField
+                  value={musicLevel}
+                  onChange={(event) => setMusicLevel(event.target.value)}
+                  className="min-w-40"
+                >
+                  {MUSIC_LEVELS.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.label}
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+            </div>
+
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              {findMusicGenerator(musicModel).note} {findMusicLevel(musicLevel).note}
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              2 · Generarla — se aplica sola al terminar
+            </p>
+
+            <div className="mt-2">
+              <GenerateButton
+                variant="secondary"
+                action={() =>
+                  generateMusicAction({
+                    videoId: video.id,
+                    productId,
+                    mood: musicMood,
+                    model: musicModel,
+                    level: musicLevel,
+                  })
+                }
+                label={video.musicUrl ? "Generar otra" : "Generar música"}
+                disabled={!providers.compose}
+                disabledReason={!providers.compose ? "Falta FAL_KEY" : undefined}
+                hint={`Instrumental y del largo de la voz. ${musicCostLabel(
+                  findMusicGenerator(musicModel),
+                  Math.max(10, Math.ceil(video.voiceSeconds || 30)),
+                )}`}
+              />
+            </div>
+          </div>
+
+          {/*
+            Escucharla antes de montar.
+
+            Un montaje cuesta y tarda; la música se juzga en diez segundos de
+            escucha. Sin esto la única forma de saber si servía era montar el
+            vídeo entero y verlo.
+          */}
+          {video.musicUrl ? (
+            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                3 · Escúchala antes de montar
+              </p>
+
+              <audio
+                // Sin `key` el navegador se queda con la anterior al cambiar la
+                // dirección: sonaría la vieja y parecería que no se generó.
+                key={video.musicUrl}
+                controls
+                preload="none"
+                src={video.musicUrl}
+                className="mt-2 w-full max-w-md"
+              />
+
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Ya viene al volumen elegido. Si no encaja, cambia el aire o el generador y genera
+                otra: se reemplaza sola.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-end gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                O usa una tuya
+              </span>
+              <input
+                ref={musicRef}
+                type="file"
+                accept="audio/*"
+                onChange={(event) => setMusicChosen((event.target.files?.length ?? 0) > 0)}
+                className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Que venga ya baja: la tuya se sube tal cual y el montaje mezcla sin control de
+                volumen.
+              </span>
+            </label>
 
           {/*
             Solo se puede pulsar con un archivo elegido.
@@ -287,6 +403,7 @@ export function ShotBoard({
               Quitarla
             </Button>
           ) : null}
+          </div>
 
           {musicNote ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">{musicNote}</p>
