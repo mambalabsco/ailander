@@ -859,6 +859,35 @@ type MetaAppRow = {
 };
 
 /**
+ * Un avatar: una cara suelta, sin producto.
+ *
+ * Se reutiliza en todos los productos y en todas las tandas — generar una cara
+ * por foto sería pagarla veinte veces.
+ */
+type AvatarRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  description: string;
+  /** `subido`, o el modelo con el que se generó. */
+  source: string;
+  created_at: string;
+};
+
+/** Una toma: ese avatar con un producto en un contexto. */
+type AvatarShotRow = {
+  id: string;
+  user_id: string;
+  avatar_id: string;
+  product_id: string;
+  url: string;
+  context: string;
+  prompt: string;
+  created_at: string;
+};
+
+/**
  * Una sesión de Facebook.
  *
  * El token es de la persona, no de una tienda: con él se ven las cuentas de
@@ -1223,6 +1252,12 @@ export type Database = {
         VideoRow,
         Insertable<VideoRow, Exclude<keyof VideoRow, "user_id" | "product_id" | "title">>,
         [Belongs<"product_id", "products">]
+      >;
+      avatars: Table<AvatarRow, Insertable<AvatarRow, Exclude<keyof AvatarRow, "user_id" | "url">>>;
+      avatar_shots: Table<
+        AvatarShotRow,
+        Insertable<AvatarShotRow, Exclude<keyof AvatarShotRow, "user_id" | "avatar_id" | "url">>,
+        [Belongs<"avatar_id", "avatars">]
       >;
       meta_logins: Table<
         MetaLoginRow,
