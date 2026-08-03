@@ -828,6 +828,25 @@ type StudioAssetRow = {
   created_at: string;
 };
 
+/**
+ * Las músicas guardadas de un vídeo.
+ *
+ * Se acumulan en vez de pisarse: cada una cuesta, y con el generador bueno
+ * cuesta de verdad.
+ */
+type VideoMusicRow = {
+  id: string;
+  user_id: string;
+  video_id: string;
+  url: string;
+  model: string;
+  prompt: string;
+  /** `numeric`: llega como texto desde PostgREST. Negativo siempre. */
+  lufs: string;
+  seconds: string;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -1153,6 +1172,11 @@ export type Database = {
         VideoRow,
         Insertable<VideoRow, Exclude<keyof VideoRow, "user_id" | "product_id" | "title">>,
         [Belongs<"product_id", "products">]
+      >;
+      video_music: Table<
+        VideoMusicRow,
+        Insertable<VideoMusicRow, Exclude<keyof VideoMusicRow, "user_id" | "video_id" | "url">>,
+        [Belongs<"video_id", "videos">]
       >;
       video_shots: Table<
         VideoShotRow,

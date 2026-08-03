@@ -34,6 +34,7 @@ import { buildTimeline } from "@/lib/video/timeline";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { buildMusicPrompt, findMusicGenerator, musicCostLabel } from "@/lib/video/music";
 import { belowVoice, findMusicLevel } from "@/lib/video/loudness";
+import { addMusic, deleteAllMusic, deleteMusic, listMusic } from "@/lib/data/video-music";
 import { findVoicePreset } from "@/lib/video/voice-settings";
 import {
   animate,
@@ -779,13 +780,23 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
   const generator = findMusicGenerator(modelId);
   const level = findMusicLevel(levelId);
 
+  /*
+   * Qué intento es, contando las que ya hay del mismo generador.
+   *
+   * Sin esto, generar dos veces devolvía **la misma pieza**: cuatro de los cinco
+   * generadores no aceptan semilla, y con la entrada idéntica la respuesta es
+   * idéntica. Ver `variationHint`.
+   */
+  const previous = await listMusic(videoId);
+  const take = previous.filter((track) => track.model === generator.label).length + 1;
+
   return runInBackground({
     productId,
     kind: "imagenes",
     label: `Música · ${video.title}`,
     resume: { videoId, productId, mood, model: modelId, level: levelId },
     work: async (report) => {
-      await report(`Componiendo ${seconds} s con ${generator.label}`);
+      await report(`Componiendo ${seconds} s con ${generator.label} (toma ${take})`);
 
       const { url } = await makeMusic({
         prompt: buildMusicPrompt({
@@ -795,6 +806,7 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
         }),
         seconds,
         model: generator.id,
+        take,
       });
 
       await report(`Dejándola ${belowVoice(level)} LU por debajo de la voz`);
@@ -811,13 +823,119 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
         contentType: "audio/wav",
       });
 
+      /*
+       * Se guarda en la lista **y** se deja elegida.
+       *
+       * Elegida porque es lo que uno espera al generar una; y en la lista
+       * porque antes generar otra pisaba la anterior sin remedio, y cada una
+       * cuesta. Ahora se puede volver a cualquiera sin pagarla otra vez.
+       */
+      await addMusic({
+        videoId,
+        url: stored,
+        model: generator.label,
+        prompt: mood || "por defecto",
+        lufs: level.lufs,
+        seconds,
+      });
+
       await updateVideo(videoId, { musicUrl: stored });
 
       return {
-        summary: `Cama de ${seconds} s con ${generator.label}, a ${level.label.toLowerCase()} (${belowVoice(level)} LU por debajo de la voz). ${musicCostLabel(generator, seconds)} Escúchala antes de montar.`,
+        summary: `Cama de ${seconds} s con ${generator.label}, toma ${take}, a ${level.label.toLowerCase()} (${belowVoice(level)} LU por debajo de la voz). ${musicCostLabel(generator, seconds)} Queda guardada: escúchala y elige cuál va antes de montar.`,
       };
     },
   });
+}
+
+/** Deja elegida una de las músicas guardadas. */
+export async function chooseMusicAction(
+  videoId: unknown,
+  productId: unknown,
+  url: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(videoId);
+  const product = readText(productId);
+  const chosen = readText(url);
+
+  if (!id || !product || !chosen) return { ok: false, message: "Falta la música." };
+
+  try {
+    await guard();
+
+    /*
+     * Se comprueba que esa música es de este vídeo.
+     *
+     * La dirección llega del navegador y podría ser cualquiera. Sin esto,
+     * `music_url` acabaría apuntando a un archivo de fuera y el montaje se lo
+     * tragaría sin rechistar.
+     */
+    const tracks = await listMusic(id);
+    if (!tracks.some((track) => track.url === chosen)) {
+      return { ok: false, message: "Esa música ya no está en la lista." };
+    }
+
+    await updateVideo(id, { musicUrl: chosen });
+    revalidatePath(`/products/${product}`);
+
+    return { ok: true, message: "Elegida. Vuelve a montar para que entre en el vídeo." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo elegir." };
+  }
+}
+
+/**
+ * Borra una música guardada, o todas.
+ *
+ * Si se borra la que estaba puesta, el vídeo se queda sin música en vez de
+ * apuntar a un archivo que ya no existe: eso daría un montaje que falla al
+ * descargarla, con el fallo apareciendo cinco minutos después.
+ */
+export async function deleteMusicAction(
+  videoId: unknown,
+  productId: unknown,
+  musicId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(videoId);
+  const product = readText(productId);
+  const one = readText(musicId);
+
+  if (!id || !product) return { ok: false, message: "Falta el vídeo." };
+
+  try {
+    await guard();
+
+    const before = await listMusic(id);
+    const video = await readVideo(id);
+
+    let removed: string[];
+
+    if (one) {
+      const track = before.find((item) => item.id === one);
+      if (!track) return { ok: false, message: "Esa música ya no está." };
+
+      await deleteMusic(one);
+      removed = [track.url];
+    } else {
+      await deleteAllMusic(id);
+      removed = before.map((track) => track.url);
+    }
+
+    if (video?.musicUrl && removed.includes(video.musicUrl)) {
+      await updateVideo(id, { musicUrl: "" });
+    }
+
+    revalidatePath(`/products/${product}`);
+
+    return {
+      ok: true,
+      message: one
+        ? "Borrada."
+        : `Borradas ${removed.length} músicas. El vídeo se queda sin cama de fondo.`,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo borrar." };
+  }
 }
 
 /* ------------------------------ 5 · Montaje -------------------------------- */

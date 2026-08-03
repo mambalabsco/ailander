@@ -3,6 +3,7 @@ import "server-only";
 import { requireContext } from "@/lib/supabase/session";
 import type { Shot, ShotRole } from "@/lib/video/shots";
 import type { TimedWord } from "@/lib/video/words";
+import type { MusicTrack } from "@/lib/data/video-music";
 import type { TablesUpdate } from "@/types/database";
 
 /**
@@ -51,6 +52,8 @@ export interface Video {
   thumbnailUrl: string | null;
   spentUsd: number;
   shots: VideoShot[];
+  /** Las músicas generadas, todas. `musicUrl` dice cuál está elegida. */
+  music: MusicTrack[];
   createdAt: string;
 }
 
@@ -101,14 +104,13 @@ export async function listVideos(productId: string): Promise<Video[]> {
   const videos = data ?? [];
   if (videos.length === 0) return [];
 
-  const { data: shots } = await supabase
-    .from("video_shots")
-    .select("*")
-    .in(
-      "video_id",
-      videos.map((video) => video.id),
-    )
-    .order("position", { ascending: true });
+  const ids = videos.map((video) => video.id);
+
+  // Las dos en paralelo: son independientes y la pantalla necesita las dos.
+  const [{ data: shots }, { data: music }] = await Promise.all([
+    supabase.from("video_shots").select("*").in("video_id", ids).order("position", { ascending: true }),
+    supabase.from("video_music").select("*").in("video_id", ids).order("created_at", { ascending: false }),
+  ]);
 
   return videos.map((row) => ({
     id: row.id,
@@ -130,6 +132,17 @@ export async function listVideos(productId: string): Promise<Video[]> {
     thumbnailUrl: row.thumbnail_url,
     spentUsd: num(row.spent_usd),
     createdAt: row.created_at,
+    music: (music ?? [])
+      .filter((track) => track.video_id === row.id)
+      .map((track) => ({
+        id: track.id,
+        url: track.url,
+        model: track.model,
+        prompt: track.prompt,
+        lufs: num(track.lufs),
+        seconds: num(track.seconds),
+        createdAt: track.created_at,
+      })),
     shots: (shots ?? [])
       .filter((shot) => shot.video_id === row.id)
       .map((shot) => ({

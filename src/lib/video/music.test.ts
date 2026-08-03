@@ -5,6 +5,7 @@ import {
   buildMusicInput,
   buildMusicPrompt,
   findMusicGenerator,
+  guaranteesVariation,
   musicCost,
   musicCostLabel,
   MUSIC_GENERATORS,
@@ -142,4 +143,48 @@ test("el producto y el público entran en el encargo", () => {
 
 test("sin aire pedido hay uno por defecto en vez de dejarlo suelto", () => {
   assert.match(buildMusicPrompt({ productName: "x", audience: "y" }), /Mood: .+\./);
+});
+
+/* -------------------- Que la segunda vez no suene igual -------------------- */
+
+/*
+ * El fallo que motivó esto: generar dos veces con Lyria devolvía exactamente la
+ * misma pieza. Solo uno de los cinco acepta semilla, así que en el resto lo
+ * único que se puede cambiar es el encargo.
+ */
+test("el primer intento va con el encargo limpio", () => {
+  const input = buildMusicInput(byId("lyria"), { prompt: "cálida", seconds: 30, take: 1 });
+
+  assert.equal(input.prompt, "cálida");
+});
+
+test("a partir del segundo se le pide otra toma", () => {
+  const dos = buildMusicInput(byId("lyria"), { prompt: "cálida", seconds: 30, take: 2 });
+  const tres = buildMusicInput(byId("lyria"), { prompt: "cálida", seconds: 30, take: 3 });
+
+  assert.notEqual(dos.prompt, "cálida");
+  assert.notEqual(dos.prompt, tres.prompt);
+
+  // Y el encargo original sigue dentro: se añade, no se sustituye.
+  assert.match(String(dos.prompt), /^cálida /);
+});
+
+test("donde hay semilla, cada intento lleva la suya", () => {
+  const uno = buildMusicInput(byId("stable-audio"), { prompt: "x", seconds: 30, take: 1 });
+  const dos = buildMusicInput(byId("stable-audio"), { prompt: "x", seconds: 30, take: 2 });
+
+  assert.notEqual(uno.seed, dos.seed);
+  assert.equal(guaranteesVariation(byId("stable-audio")), true);
+});
+
+test("a los que no la aceptan no se les manda semilla", () => {
+  assert.equal(buildMusicInput(byId("lyria"), { prompt: "x", seconds: 30, take: 2 }).seed, undefined);
+  assert.equal(guaranteesVariation(byId("lyria")), false);
+});
+
+test("un intento absurdo no rompe el encargo", () => {
+  const input = buildMusicInput(byId("lyria"), { prompt: "x", seconds: 30, take: 99 });
+
+  assert.equal(typeof input.prompt, "string");
+  assert.ok(String(input.prompt).length > 1);
 });

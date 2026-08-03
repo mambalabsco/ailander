@@ -42,6 +42,13 @@ export interface MusicGenerator {
   instrumentalField: string | null;
   /** En qué campo de la respuesta viene el audio. */
   outputField: string;
+  /**
+   * Si acepta semilla, y con qué nombre.
+   *
+   * Es lo único que garantiza que dos generaciones seguidas no salgan iguales.
+   * Solo lo tiene uno de los cinco.
+   */
+  seedField: string | null;
   /** Dólares por minuto de salida. Cero cuando fal no lo publica. */
   usdPerMinute: number;
   /** Si se cobra el minuto entero aunque salgan treinta segundos. */
@@ -61,6 +68,7 @@ export const MUSIC_GENERATORS: MusicGenerator[] = [
     instrumentalField: null,
     // El único que no lo llama `audio`.
     outputField: "audio_file",
+    seedField: null,
     usdPerMinute: 0.02,
     billsWholeMinutes: false,
     note: "Regalado y suficiente para una cama de fondo. Es el que fallaba cuando el anuncio pedía algo con más carácter.",
@@ -76,6 +84,7 @@ export const MUSIC_GENERATORS: MusicGenerator[] = [
     maxSeconds: 600,
     instrumentalField: "force_instrumental",
     outputField: "audio",
+    seedField: null,
     usdPerMinute: 0.8,
     // Redondea hacia arriba: treinta segundos pagan un minuto.
     billsWholeMinutes: true,
@@ -91,6 +100,7 @@ export const MUSIC_GENERATORS: MusicGenerator[] = [
     maxSeconds: 0,
     instrumentalField: "is_instrumental",
     outputField: "audio",
+    seedField: null,
     usdPerMinute: 0,
     billsWholeMinutes: false,
     note: "Suena a canción de verdad. No deja pedir duración: da lo que da y el montaje lo recorta.",
@@ -105,6 +115,7 @@ export const MUSIC_GENERATORS: MusicGenerator[] = [
     maxSeconds: 190,
     instrumentalField: null,
     outputField: "audio",
+    seedField: "seed",
     usdPerMinute: 0,
     billsWholeMinutes: false,
     note: "Bueno con texturas y ambientes; menos con melodías. Acepta duración al segundo.",
@@ -119,6 +130,7 @@ export const MUSIC_GENERATORS: MusicGenerator[] = [
     maxSeconds: 0,
     instrumentalField: null,
     outputField: "audio",
+    seedField: null,
     usdPerMinute: 0,
     billsWholeMinutes: false,
     note: "El de Google. Muy musical, pero tampoco deja pedir duración.",
@@ -138,9 +150,23 @@ export function findMusicGenerator(id: string): MusicGenerator {
  */
 export function buildMusicInput(
   model: MusicGenerator,
-  options: { prompt: string; seconds: number },
+  options: {
+    prompt: string;
+    seconds: number;
+    /**
+     * Qué número de intento es, empezando en uno.
+     *
+     * Es lo que evita que dos generaciones seguidas salgan idénticas. Ver
+     * `variationHint` para por qué hace falta.
+     */
+    take?: number;
+  },
 ): Record<string, unknown> {
-  const input: Record<string, unknown> = { prompt: options.prompt };
+  const take = Math.max(1, Math.round(options.take ?? 1));
+
+  const input: Record<string, unknown> = {
+    prompt: take > 1 ? `${options.prompt} ${variationHint(take)}` : options.prompt,
+  };
 
   if (model.durationField) {
     const seconds = Math.min(model.maxSeconds, Math.max(model.minSeconds, Math.round(options.seconds)));
@@ -150,7 +176,48 @@ export function buildMusicInput(
 
   if (model.instrumentalField) input[model.instrumentalField] = true;
 
+  // Donde hay semilla es lo que manda: garantiza una pieza distinta.
+  if (model.seedField) input[model.seedField] = take * 7919;
+
   return input;
+}
+
+/**
+ * Lo que se le añade al encargo para que la segunda vez suene distinta.
+ *
+ * ## Por qué hace falta
+ *
+ * Generar dos veces con el mismo encargo devolvía **exactamente la misma
+ * pieza**. Solo uno de los cinco generadores acepta semilla, así que en los
+ * otros cuatro no hay ninguna forma de pedir «lo mismo pero otra vez»: con la
+ * entrada idéntica, la respuesta es idéntica —sea porque el modelo es
+ * determinista o porque el proveedor reutiliza la respuesta anterior—.
+ *
+ * Lo único que queda es que el encargo no sea idéntico. Y en vez de meter un
+ * número al azar, que ensucia el prompt sin decir nada, se le pide lo que le
+ * pedirías a un músico: otra toma. Es una instrucción que el modelo entiende y
+ * que no cambia el encargo, solo la interpretación.
+ *
+ * ## Lo que esto no garantiza
+ *
+ * Que salga muy distinta. Un modelo sin semilla puede devolver una variación
+ * pequeña. Con semilla —Stable Audio— sí está garantizado, y por eso ahí se usa
+ * la semilla y esto es solo un añadido.
+ */
+export function variationHint(take: number): string {
+  const words = [
+    "Alternate take: same brief, different melodic interpretation.",
+    "Third take: keep the mood, change the chord movement.",
+    "Fourth take: same mood, different instrumentation.",
+    "Fifth take: same brief, a new arrangement.",
+  ];
+
+  return words[Math.min(words.length - 1, Math.max(0, take - 2))];
+}
+
+/** Si ese generador puede garantizar que la siguiente salga distinta. */
+export function guaranteesVariation(model: MusicGenerator): boolean {
+  return model.seedField !== null;
 }
 
 /**

@@ -623,6 +623,8 @@ export async function makeMusic(options: {
   seconds: number;
   /** Cuál de ellos. Por defecto, el barato. */
   model?: string;
+  /** Qué intento es. Sin esto, el segundo devuelve la misma pieza que el primero. */
+  take?: number;
 }): Promise<{ url: string; model: MusicGenerator }> {
   const model = findMusicGenerator(options.model ?? "");
 

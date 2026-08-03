@@ -10,6 +10,8 @@ import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voic
 import { GenerateButton } from "@/components/generate-button";
 import {
   assembleVideoAction,
+  chooseMusicAction,
+  deleteMusicAction,
   generateMusicAction,
   setSubtitlePresetAction,
   uploadMusicAction,
@@ -56,6 +58,8 @@ export function ShotBoard({
   const [isPending, startTransition] = useTransition();
   const musicRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  const tracks = video.music;
 
   const withCuts = video.shots.filter((shot) => shot.cutStart !== null);
   const withKeyframe = video.shots.filter((shot) => shot.keyframeUrl);
@@ -304,31 +308,100 @@ export function ShotBoard({
           </div>
 
           {/*
-            Escucharla antes de montar.
+            Todas las que se han generado, para escucharlas y elegir.
 
-            Un montaje cuesta y tarda; la música se juzga en diez segundos de
-            escucha. Sin esto la única forma de saber si servía era montar el
-            vídeo entero y verlo.
+            Antes solo quedaba la última: generar otra pisaba la anterior y no
+            había forma de volver a ella. Con el generador bueno cobrando el
+            minuto empezado, eso convertía cada prueba en dinero tirado.
           */}
-          {video.musicUrl ? (
+          {tracks.length > 0 ? (
             <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                3 · Escúchala antes de montar
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  3 · Escúchalas y elige cuál va — {tracks.length} guardada
+                  {tracks.length === 1 ? "" : "s"}
+                </p>
 
-              <audio
-                // Sin `key` el navegador se queda con la anterior al cambiar la
-                // dirección: sonaría la vieja y parecería que no se generó.
-                key={video.musicUrl}
-                controls
-                preload="none"
-                src={video.musicUrl}
-                className="mt-2 w-full max-w-md"
-              />
+                <Button
+                  variant="ghost"
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!window.confirm(`¿Borrar las ${tracks.length} músicas de este vídeo?`)) return;
 
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Ya viene al volumen elegido. Si no encaja, cambia el aire o el generador y genera
-                otra: se reemplaza sola.
+                    startTransition(async () => {
+                      const result = await deleteMusicAction(video.id, productId, "");
+                      setMusicNote(result.message);
+                      router.refresh();
+                    });
+                  }}
+                >
+                  Borrar todas
+                </Button>
+              </div>
+
+              <ul className="mt-2 space-y-2">
+                {tracks.map((track) => {
+                  const chosen = track.url === video.musicUrl;
+
+                  return (
+                    <li
+                      key={track.id}
+                      className={`flex flex-wrap items-center gap-3 rounded-xl border p-2 ${
+                        chosen
+                          ? "border-emerald-400 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
+                          : "border-slate-200 dark:border-slate-800"
+                      }`}
+                    >
+                      <audio key={track.url} controls preload="none" src={track.url} className="h-9 max-w-xs" />
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs text-slate-600 dark:text-slate-300">
+                          {track.model} · {track.prompt}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {Math.round(track.seconds)} s · {track.lufs} LUFS
+                          {chosen ? " · va en el vídeo" : ""}
+                        </p>
+                      </div>
+
+                      {chosen ? null : (
+                        <Button
+                          disabled={isPending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              const result = await chooseMusicAction(video.id, productId, track.url);
+                              setMusicNote(result.message);
+                              router.refresh();
+                            })
+                          }
+                        >
+                          Usar esta
+                        </Button>
+                      )}
+
+                      <button
+                        type="button"
+                        aria-label="Borrar esta música"
+                        disabled={isPending}
+                        onClick={() =>
+                          startTransition(async () => {
+                            const result = await deleteMusicAction(video.id, productId, track.id);
+                            setMusicNote(result.message);
+                            router.refresh();
+                          })
+                        }
+                        className="rounded-full px-2 py-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Ya vienen al volumen elegido. Elegir una no monta nada: hay que volver a montar
+                para que entre.
               </p>
             </div>
           ) : null}
