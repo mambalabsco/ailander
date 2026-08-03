@@ -46,11 +46,28 @@ export const CAPABILITIES = [
   "personas",
   /** Cambiar la configuración de la plataforma. */
   "ajustes",
+  /**
+   * Entrar al estudio: modelos de imagen y vídeo, voces, música.
+   *
+   * Va aparte de «gastar» aunque el estudio gaste. No es lo mismo generar un
+   * copy que tener delante el catálogo entero de modelos y las voces clonadas:
+   * quien escribe textos no necesita eso, y una pantalla con todo dentro invita
+   * a probar cosas que cuestan.
+   */
+  "estudio",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
 
-export const ROLES = ["dueño", "admin", "editor", "redactor", "analista", "invitado"] as const;
+export const ROLES = [
+  "dueño",
+  "admin",
+  "editor",
+  "diseñador",
+  "redactor",
+  "analista",
+  "invitado",
+] as const;
 
 export type Role = (typeof ROLES)[number];
 
@@ -71,9 +88,20 @@ export type Role = (typeof ROLES)[number];
  *   plataforma sin enseñar el margen.
  */
 const GRANTS: Record<Role, Capability[]> = {
-  dueño: ["gastar", "publicar", "secretos", "dinero", "personas", "ajustes"],
-  admin: ["gastar", "publicar", "secretos", "dinero", "personas", "ajustes"],
-  editor: ["gastar", "publicar"],
+  dueño: ["gastar", "publicar", "secretos", "dinero", "personas", "ajustes", "estudio"],
+  admin: ["gastar", "publicar", "secretos", "dinero", "personas", "ajustes", "estudio"],
+  editor: ["gastar", "publicar", "estudio"],
+  /*
+   * El diseñador gasta y entra al estudio, y **no publica**.
+   *
+   * Es la separación que tiene sentido en su trabajo: se generan imágenes,
+   * clips, voces y música todo el día —y equivocarse ahí cuesta céntimos y se
+   * rehace— pero que una pieza salga a la tienda es otra decisión y la toma otro.
+   *
+   * Tampoco ve márgenes ni claves: no le hacen falta para diseñar, y con las
+   * claves se puede gastar fuera de aquí, donde el tope del mes no llega.
+   */
+  diseñador: ["gastar", "estudio"],
   redactor: ["gastar"],
   analista: ["dinero"],
   invitado: [],
@@ -104,6 +132,7 @@ const RANK: Record<Role, number> = {
   dueño: 5,
   admin: 4,
   editor: 3,
+  diseñador: 2,
   redactor: 2,
   analista: 2,
   invitado: 1,
@@ -230,6 +259,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   dueño: "Dueño",
   admin: "Administrador",
   editor: "Editor",
+  diseñador: "Diseñador",
   redactor: "Redactor",
   analista: "Analista",
   invitado: "Invitado",
@@ -240,6 +270,8 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   dueño: "Todo, y es el único que no se puede desactivar ni degradar.",
   admin: "Todo salvo transferir la propiedad. Gestiona personas y ajustes.",
   editor: "Genera y publica en la tienda. No ve claves ni márgenes.",
+  diseñador:
+    "El estudio entero: modelos, voces, música y montaje. No publica en la tienda ni ve márgenes.",
   redactor: "Genera, pero no publica: lo que salga a la tienda lo decide otro.",
   analista: "Ve datos, costes y beneficio. No gasta ni publica.",
   invitado: "Solo mira. Ni gasta, ni publica, ni ve el margen.",
@@ -252,4 +284,5 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   dinero: "Costes y beneficio",
   personas: "Gestionar personas",
   ajustes: "Configuración",
+  estudio: "Estudio de imagen y vídeo",
 };

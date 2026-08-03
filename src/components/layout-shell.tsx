@@ -23,6 +23,7 @@ const navigation: { href: string; label: string; icon: string; needs?: Capabilit
   { href: "/datos", label: "Datos y beneficio", icon: "◈", needs: "dinero" },
   { href: "/competitors", label: "Competidores", icon: "◎" },
   { href: "/ads", label: "Biblioteca de anuncios", icon: "⬢" },
+  { href: "/estudio", label: "Estudio", icon: "◈", needs: "estudio" },
   { href: "/imagenes", label: "Adaptador de imágenes", icon: "▦", needs: "gastar" },
   { href: "/analyzer", label: "Analizador", icon: "◍" },
   { href: "/copy", label: "Generador de copy", icon: "✦" },

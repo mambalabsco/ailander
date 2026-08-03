@@ -129,3 +129,28 @@ test("al llegar al límite se frena, y el aviso dice cuánto", () => {
 test("por debajo del límite se sigue trabajando", () => {
   assert.equal(spendCheck({ role: "redactor", limitUsd: 20, spentUsd: 19.99 }).ok, true);
 });
+
+test("el diseñador entra al estudio y no publica", () => {
+  /*
+   * Es la separación que tiene sentido en su trabajo: se generan imágenes,
+   * clips y voces todo el día —equivocarse cuesta céntimos y se rehace— pero
+   * que una pieza salga a la tienda es otra decisión y la toma otro.
+   */
+  assert.equal(can("diseñador", "estudio"), true);
+  assert.equal(can("diseñador", "gastar"), true);
+  assert.equal(can("diseñador", "publicar"), false);
+  assert.equal(can("diseñador", "secretos"), false);
+  assert.equal(can("diseñador", "dinero"), false);
+});
+
+test("quien escribe copys no entra al estudio", () => {
+  // Una pantalla con el catálogo entero de modelos delante invita a probar
+  // cosas que cuestan, y para escribir textos no hace falta.
+  assert.equal(can("redactor", "estudio"), false);
+  assert.equal(can("redactor", "gastar"), true);
+});
+
+test("un admin no puede ascender a nadie por encima de sí mismo", () => {
+  assert.equal(canAssign(admin, editor, "admin").ok, true);
+  assert.equal(canAssign({ id: "d", role: "diseñador" }, editor, "editor").ok, false);
+});

@@ -802,6 +802,32 @@ type AuditLogRow = {
   created_at: string;
 };
 
+type StudioProjectRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  product_id: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type StudioAssetRow = {
+  id: string;
+  user_id: string;
+  project_id: string;
+  kind: string;
+  url: string;
+  name: string;
+  model: string;
+  prompt: string;
+  /** `numeric`: llega como texto desde PostgREST. */
+  seconds: number;
+  position: number;
+  included: boolean;
+  created_at: string;
+};
+
 /* ------------------------------ El mapa completo -------------------------------- */
 
 /**
@@ -1091,6 +1117,15 @@ export type Database = {
       >;
 
       audit_log: Table<AuditLogRow, Insertable<AuditLogRow, Exclude<keyof AuditLogRow, "user_id" | "action">>>;
+      studio_projects: Table<
+        StudioProjectRow,
+        Insertable<StudioProjectRow, Exclude<keyof StudioProjectRow, "user_id">>
+      >;
+      studio_assets: Table<
+        StudioAssetRow,
+        Insertable<StudioAssetRow, Exclude<keyof StudioAssetRow, "user_id" | "project_id" | "kind" | "url">>,
+        [Belongs<"project_id", "studio_projects">]
+      >;
       adapted_images: Table<
         AdaptedImageRow,
         Insertable<AdaptedImageRow, Exclude<keyof AdaptedImageRow, "user_id" | "product_id" | "source_url">>

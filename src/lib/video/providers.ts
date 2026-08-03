@@ -566,7 +566,10 @@ export async function burnSubtitles(options: {
     body: JSON.stringify({
       video_url: options.videoUrl,
       preset: options.preset,
-      srt_content: options.srt,
+      // Vacío no se manda: el campo presente y en blanco no salta la
+      // transcripción, la rompe. Sin él, transcribe — que es lo que se quiere
+      // cuando el texto no lo ponemos nosotros.
+      ...(options.srt.trim() ? { srt_content: options.srt } : {}),
       ...(options.language ? { language: options.language } : {}),
     }),
     cache: "no-store",
@@ -622,4 +625,65 @@ export async function makeMusic(options: {
   if (!payload.audio_file?.url) throw new Error("El generador no devolvió ninguna música.");
 
   return { url: payload.audio_file.url };
+}
+
+/* ------------------------------ Clonar una voz ----------------------------- */
+
+/**
+ * Crea una voz a partir de muestras de audio.
+ *
+ * Un minuto de audio limpio da mejor resultado que diez de audio con ruido: el
+ * clonado copia lo que oye, incluido el eco de la habitación y el zumbido del
+ * aire acondicionado. Se avisa donde se sube, que es cuando sirve.
+ */
+export async function cloneVoice(options: {
+  name: string;
+  description?: string;
+  samples: { filename: string; bytes: Uint8Array; contentType: string }[];
+}): Promise<{ voiceId: string }> {
+  const form = new FormData();
+  form.append("name", options.name);
+  if (options.description) form.append("description", options.description);
+
+  for (const sample of options.samples) {
+    form.append(
+      "files",
+      new Blob([new Uint8Array(sample.bytes)], { type: sample.contentType }),
+      sample.filename,
+    );
+  }
+
+  const response = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+    method: "POST",
+    headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
+    body: form,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+
+    if (response.status === 401) {
+      throw new Error("ElevenLabs rechazó la clave. Comprueba ELEVENLABS_API_KEY.");
+    }
+
+    /*
+     * El clonado no está en todos los planes.
+     *
+     * El mensaje crudo dice «can_not_use_instant_voice_cloning», que no le dice
+     * nada a nadie: quien lo lee se pone a revisar el archivo de audio.
+     */
+    if (/cloning|subscription|plan/i.test(detail)) {
+      throw new Error(
+        "Tu plan de ElevenLabs no incluye clonar voces. Hace falta uno de pago; con el gratuito solo se pueden usar las del catálogo.",
+      );
+    }
+
+    throw new Error(`ElevenLabs respondió ${response.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const payload = (await response.json()) as { voice_id?: string };
+  if (!payload.voice_id) throw new Error("No devolvió ninguna voz.");
+
+  return { voiceId: payload.voice_id };
 }
