@@ -62,9 +62,10 @@ export function SwipeFile({ productId, copies }: { productId: string; copies: Sw
         <div>
           <p className="font-medium">Copys de referencia</p>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Pega aquí textos y páginas que ya se probaron, tuyos o de otras marcas. Los {usable}{" "}
-            clasificados entran en cada generación como referencia de patrón, y cualquiera sirve de
-            modelo para adaptar un copy o calcar una landing.
+            Pega aquí textos y páginas que ya se probaron, tuyos o de otras marcas. Los que
+            guardes desde aquí quedan atados a este producto; los {usable} clasificados entran en
+            cada generación como referencia de patrón. Para traerte uno de otro producto, usa
+            «Adaptar un copy a este producto».
           </p>
         </div>
         <Button variant="secondary" onClick={() => setOpen((value) => !value)}>
@@ -158,6 +159,15 @@ export function SwipeFile({ productId, copies }: { productId: string; copies: Sw
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {copy.source ? `${copy.source} · ` : ""}
                     {copy.format ?? ""} · {copy.body.length.toLocaleString("es-ES")} caracteres
+                    {/*
+                      De dónde sale que aparezca aquí.
+
+                      Los que no son de ningún producto se ven en todas las
+                      fichas —son los que se pegan de otras marcas antes de
+                      tener a qué atarlos— y sin decirlo parecen un copy de otro
+                      producto colado por error.
+                    */}
+                    {copy.productId ? "" : " · de otras marcas, se ve en todos los productos"}
                   </p>
                 </div>
                 <span

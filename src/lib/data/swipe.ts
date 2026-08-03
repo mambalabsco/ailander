@@ -37,20 +37,57 @@ function toSwipe(row: {
   };
 }
 
+/**
+ * Los copys guardados de un producto.
+ *
+ * ## Qué entra y por qué
+ *
+ * Los de **ese producto** y los guardados **sin producto**, que son los de otras
+ * marcas pegados como referencia general. Los de otros productos no: un
+ * advertorial de Ozempic en la ficha de un producto de tiroides confunde más de
+ * lo que aporta, y sobre todo **entra en cada generación como patrón** — el
+ * copy nuevo acaba imitando el de un producto que no es este.
+ *
+ * Aquí decía lo contrario: que no filtrar era deliberado, porque un copy que
+ * funcionó en otro producto del mismo nicho sigue sirviendo. Eso es cierto y
+ * sigue estando disponible: `listAllSwipeCopies` los trae todos, y la pantalla
+ * los ofrece aparte y marcados. Lo que no puede es mezclarlos sin decirlo.
+ */
 export async function listSwipeCopies(productId?: string): Promise<SwipeCopy[]> {
   const { supabase } = await requireContext();
 
-  /*
-   * Sin filtrar por producto por defecto, y es deliberado.
-   *
-   * Un copy que funcionó en otro producto del mismo nicho sigue siendo la mejor
-   * referencia disponible. Limitarlos a su producto los escondería justo cuando
-   * más sirven: al empezar uno nuevo, que es cuando no hay nada propio.
-   */
   let query = supabase.from("swipe_copies").select("*").order("created_at", { ascending: false });
-  if (productId) query = query.eq("product_id", productId);
+
+  /*
+   * `or` y no `eq`: los de este producto **y** los que no son de ninguno.
+   *
+   * Los segundos son los que se pegan de otras marcas antes de tener producto
+   * al que atarlos, y esconderlos dejaría fuera justo los que más se usan al
+   * empezar.
+   */
+  if (productId) query = query.or(`product_id.eq.${productId},product_id.is.null`);
 
   const { data, error } = await query;
+  if (error) throw new Error(`No se pudieron leer los copys guardados: ${error.message}`);
+
+  return (data ?? []).map(toSwipe);
+}
+
+/**
+ * Todos, sean de quien sean.
+ *
+ * Para la pantalla que ofrece traerse uno de otro producto a propósito. No se
+ * usa en la generación: ahí entra solo lo de este producto, o el copy nuevo
+ * imitaría el patrón de otro.
+ */
+export async function listAllSwipeCopies(): Promise<SwipeCopy[]> {
+  const { supabase } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("swipe_copies")
+    .select("*")
+    .order("created_at", { ascending: false });
+
   if (error) throw new Error(`No se pudieron leer los copys guardados: ${error.message}`);
 
   return (data ?? []).map(toSwipe);

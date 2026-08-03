@@ -237,7 +237,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
     const [loadedLandings, loadedSwipe, loadedVideos, blueprints, loadedReferences] =
       await Promise.all([
       listLandings(product.id).catch(() => []),
-      listSwipeCopies().catch(() => []),
+      listSwipeCopies(id).catch(() => []),
       listVideos(product.id).catch(() => []),
       listBlueprints().catch(() => []),
       listVideoReferences().catch(() => []),

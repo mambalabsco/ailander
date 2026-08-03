@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   deleteSwipeCopy,
+  listAllSwipeCopies,
   listSwipeCopies,
   saveSwipeCopy,
   setSwipeStatus,
@@ -16,10 +17,20 @@ function readText(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
 }
 
-export async function listSwipeCopiesAction(): Promise<SwipeCopy[]> {
+/**
+ * Los copys guardados.
+ *
+ * Con producto devuelve los suyos y los que no son de ninguno; sin producto,
+ * todos. Lo segundo es lo que necesita la pantalla de «adaptar un copy a este
+ * producto», donde traerse uno de otro es justo la intención.
+ */
+export async function listSwipeCopiesAction(productId?: unknown): Promise<SwipeCopy[]> {
   if (!isSupabaseConfigured()) return [];
+
+  const id = readText(productId);
+
   try {
-    return await listSwipeCopies();
+    return id ? await listSwipeCopies(id) : await listAllSwipeCopies();
   } catch {
     return [];
   }

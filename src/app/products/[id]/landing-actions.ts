@@ -94,8 +94,10 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
 
     reference = found;
   } else if (referenceId) {
-    const { listSwipeCopies } = await import("@/lib/data/swipe");
-    const found = (await listSwipeCopies()).find((item) => item.id === referenceId);
+    // Entre todos: calcar una landing de otra marca es el caso normal aquí, y
+    // llega elegida por su id.
+    const { listAllSwipeCopies } = await import("@/lib/data/swipe");
+    const found = (await listAllSwipeCopies()).find((item) => item.id === referenceId);
     if (!found) throw new Error("Esa referencia ya no existe.");
 
     reference = {

@@ -121,10 +121,16 @@ async function context(productId: unknown) {
   const [offers, notes, swipeCopies] = await Promise.all([
     readOffers(id).catch(() => emptyOffers()),
     listNotes(id).catch(() => []),
-    // Los que ya se probaron, de este producto y de otros: el patrón de un copy
-    // que convirtió sirve igual aunque fuera de otra marca.
+    /*
+     * Los ya probados **de este producto** y los sin producto.
+     *
+     * Antes entraban también los de otros productos, con el argumento de que el
+     * patrón de un copy que convirtió sirve igual. El patrón sí; el contenido
+     * no: un advertorial de Ozempic entrando como referencia en un producto de
+     * tiroides arrastra su tema, y el copy nuevo sale hablando de lo que no es.
+     */
     import("@/lib/data/swipe")
-      .then((module) => module.listSwipeCopies())
+      .then((module) => module.listSwipeCopies(id))
       .catch(() => []),
   ]);
 
@@ -1016,8 +1022,10 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
 
   const swipeId = readText(raw.swipeId);
   if (!sourceText && swipeId) {
-    const { listSwipeCopies } = await import("@/lib/data/swipe");
-    const found = (await listSwipeCopies()).find((item) => item.id === swipeId);
+    // Aquí se busca entre **todos** a propósito: adaptar un copy de otro
+    // producto es justo lo que hace esta acción, y llega elegido por su id.
+    const { listAllSwipeCopies } = await import("@/lib/data/swipe");
+    const found = (await listAllSwipeCopies()).find((item) => item.id === swipeId);
     if (!found) throw new Error("Ese copy de referencia ya no existe.");
 
     sourceText = found.body;
