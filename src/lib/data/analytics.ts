@@ -1,6 +1,7 @@
 import "server-only";
 
 import { requireContext } from "@/lib/supabase/session";
+import { coverage, type Coverage } from "@/lib/spend-coverage";
 import type {
   CostSettings,
   CustomCost,
@@ -1082,4 +1083,107 @@ export async function variantsSold(
       return { ...entry, cogs: rule ? num(rule.amount) : null };
     })
     .sort((a, b) => b.units - a.units);
+}
+
+/* ------------------------- El reparto entre tiendas ------------------------ */
+
+export interface AccountCoverage {
+  externalId: string;
+  accountName: string;
+  provider: AdProvider;
+  result: Coverage;
+}
+
+/**
+ * Cómo se reparte entre tiendas el gasto de cada cuenta publicitaria.
+ *
+ * ## Por qué hace falta mirar esto
+ *
+ * Los filtros por nombre de campaña reparten bien el gasto de una cuenta que
+ * sirve a varias tiendas, pero **nadie comprueba que el reparto cubra todo y no
+ * se pise**. Y los dos fallos son invisibles en los informes:
+ *
+ * - Una campaña nueva que no encaja en el filtro de ninguna tienda desaparece
+ *   de todos ellos, y el beneficio sale más alto que el real.
+ * - Una campaña que encaja en dos se resta del beneficio de las dos, y la suma
+ *   de las tiendas no cuadra con la factura de Meta.
+ *
+ * Se mira **por cuenta y no por tienda** a propósito: el problema solo se ve
+ * teniendo delante todas las tiendas que usan esa cuenta a la vez.
+ */
+export async function spendCoverage(
+  from: string,
+  to: string,
+): Promise<AccountCoverage[]> {
+  const { supabase } = await requireContext();
+
+  const { data: accounts } = await supabase
+    .from("ad_accounts")
+    .select("id,store_id,provider,external_id,name,include_filters,exclude_filters,active");
+
+  const { data: stores } = await supabase.from("stores").select("id,name");
+
+  const storeNames = new Map((stores ?? []).map((store) => [store.id, store.name]));
+  const rows = (accounts ?? []).filter((account) => account.active);
+
+  if (rows.length === 0) return [];
+
+  const { data: spend } = await supabase
+    .from("ad_spend")
+    .select("account_id,campaign_name,spend")
+    .in(
+      "account_id",
+      rows.map((account) => account.id),
+    )
+    .gte("day", from)
+    .lte("day", to);
+
+  /*
+   * Las cuentas se agrupan por su identificador en el proveedor, no por fila.
+   *
+   * La misma cuenta de Meta usada por dos tiendas son **dos filas** con sus
+   * propios filtros y su propia copia del gasto. Agrupando por fila, cada una se
+   * vería sola y no habría nada que comparar — que es justo lo que hacía que
+   * esto no se detectara.
+   */
+  const groups = new Map<string, typeof rows>();
+  for (const account of rows) {
+    const key = `${account.provider}:${account.external_id}`;
+    groups.set(key, [...(groups.get(key) ?? []), account]);
+  }
+
+  const out: AccountCoverage[] = [];
+
+  for (const [key, group] of groups) {
+    // El gasto por campaña se toma de **una** de las filas: todas guardan lo
+    // mismo, y sumarlas contaría cada campaña tantas veces como tiendas.
+    const source = group[0];
+
+    const campaigns = new Map<string, number>();
+    for (const row of spend ?? []) {
+      if (row.account_id !== source.id) continue;
+      campaigns.set(row.campaign_name, (campaigns.get(row.campaign_name) ?? 0) + num(row.spend));
+    }
+
+    if (campaigns.size === 0) continue;
+
+    out.push({
+      externalId: source.external_id,
+      accountName: source.name,
+      provider: source.provider as AdProvider,
+      result: coverage({
+        campaigns: [...campaigns].map(([name, spendValue]) => ({ name, spend: spendValue })),
+        stores: group.map((account) => ({
+          storeId: account.store_id,
+          storeName: storeNames.get(account.store_id) ?? account.store_id,
+          include: account.include_filters ?? [],
+          exclude: account.exclude_filters ?? [],
+        })),
+      }),
+    });
+
+    void key;
+  }
+
+  return out.sort((a, b) => b.result.unassigned + b.result.doubled - (a.result.unassigned + a.result.doubled));
 }

@@ -13,9 +13,11 @@ import {
   lastSyncedOrderDate,
   listAdAccounts,
   readAdCredentials,
+  spendCoverage,
 } from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
 import { listMetaApps } from "@/lib/data/meta-apps";
+import { SpendSplit } from "@/components/datos/spend-split";
 import * as googleOauth from "@/lib/google-oauth";
 
 /**
@@ -52,11 +54,13 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
 
   if (!store) return <DatosHeader context={context} synced={false} />;
 
-  const [accounts, status, lastOrder, facebookCreds] = await Promise.all([
+  const [accounts, status, lastOrder, facebookCreds, split] = await Promise.all([
     listAdAccounts(store.id),
     credentialsStatus(store.id),
     lastSyncedOrderDate(store.id),
     readAdCredentials(store.id, "facebook"),
+    // Del rango que esté mirando: el reparto se juzga sobre gasto de verdad.
+    spendCoverage(context.range.from, context.range.to).catch(() => []),
   ]);
 
   /*
@@ -150,6 +154,13 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
           configured={googleOauth.isConfigured()}
           developerTokenInEnv={Boolean(googleApp?.developerToken)}
         />
+      </SectionCard>
+
+      <SectionCard
+        title="A qué tienda va cada gasto"
+        description="Una cuenta publicitaria suele llevar campañas de varias tiendas. Aquí se ve si el reparto por filtros cubre todo y no se pisa: lo que no encaja en ninguna desaparece de los informes, y lo que encaja en dos se resta dos veces."
+      >
+        <SpendSplit accounts={split} />
       </SectionCard>
 
       <SectionCard
