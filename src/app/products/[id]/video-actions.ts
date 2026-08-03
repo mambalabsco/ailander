@@ -861,6 +861,25 @@ export async function assembleVideoAction(
         voiceUrl: video.voiceUrl!,
       });
 
+      /*
+       * Cuántos planos **distintos** entran, no cuántas pistas.
+       *
+       * Es el número que delata el fallo que costó varias vueltas: el montaje
+       * salía repitiendo un solo clip, y desde fuera parecía un vídeo normal.
+       * Con esto en el resumen, ese caso se ve sin abrir el vídeo.
+       */
+      const planos = new Set(
+        timeline.tracks
+          .filter((track) => track.type === "video")
+          .flatMap((track) => track.keyframes.map((frame) => frame.url)),
+      ).size;
+
+      if (planos === 1 && withClip.length > 1) {
+        throw new Error(
+          `Solo un plano distinto para ${withClip.length} tomas: el montaje habría salido repitiendo el mismo. Revisa que cada toma tenga su clip.`,
+        );
+      }
+
       const result = await compose(timeline.tracks);
 
       await updateVideo(videoId, {
@@ -872,8 +891,8 @@ export async function assembleVideoAction(
       return {
         summary:
           timeline.missing.length > 0
-            ? `Montado, ${timeline.seconds} s con ${timeline.tracks[0].keyframes.length} de ${withClip.length} tomas. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
-            : `Montado, ${timeline.seconds} s con ${timeline.tracks[0].keyframes.length} tomas${captions.length > 0 ? `, ${captions.length} subtítulos` : ""}${video.musicUrl ? " y música" : ""}.`,
+            ? `Montado, ${timeline.seconds} s con ${planos} de ${withClip.length} tomas. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
+            : `Montado, ${timeline.seconds} s con ${planos} plano(s) distintos${captions.length > 0 ? `, ${captions.length} subtítulos` : ""}${video.musicUrl ? " y música" : ""}.`,
       };
     },
   });

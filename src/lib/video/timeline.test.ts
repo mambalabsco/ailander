@@ -1,7 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildTimeline } from "./timeline.ts";
+import { buildTimeline, type TimelineResult } from "./timeline.ts";
+
+/**
+ * Los planos, vengan en una pista o en varias.
+ *
+ * Cada plano va en su propia pista: es lo que hace que el montador los encadene
+ * en vez de quedarse solo con el último. Las pruebas miran la línea de tiempo
+ * resultante, no cómo está repartida.
+ */
+function videoFrames(result: TimelineResult) {
+  return result.tracks
+    .filter((track) => track.type === "video")
+    .flatMap((track) => track.keyframes);
+}
 
 const VOZ = "https://cdn/voz.mp3";
 
@@ -20,10 +33,8 @@ test("cada toma dura lo que su frase, no lo que el clip", () => {
     voiceUrl: VOZ,
   });
 
-  const video = result.tracks.find((track) => track.id === "broll");
-
   assert.deepEqual(
-    video?.keyframes.map((frame) => [frame.timestamp, frame.duration]),
+    videoFrames(result).map((frame) => [frame.timestamp, frame.duration]),
     [
       [0, 4200],
       [4200, 3300],
@@ -39,7 +50,7 @@ test("los tiempos van en milisegundos", () => {
     voiceUrl: VOZ,
   });
 
-  assert.equal(result.tracks[0].keyframes[0].duration, 1234);
+  assert.equal(videoFrames(result)[0].duration, 1234);
 });
 
 test("la voz va entera y en un solo trozo", () => {
@@ -84,10 +95,10 @@ test("una toma sin clip no deja hueco: la anterior se estira por encima", () => 
   });
 
   assert.deepEqual(result.missing, ["02"]);
-  assert.equal(result.tracks[0].keyframes.length, 2);
+  assert.equal(videoFrames(result).length, 2);
 
-  assert.equal(result.tracks[0].keyframes[0].duration, 6000, "la primera cubre el hueco");
-  assert.equal(result.tracks[0].keyframes[1].timestamp, 6000, "la tercera sigue en su sitio");
+  assert.equal(videoFrames(result)[0].duration, 6000, "la primera cubre el hueco");
+  assert.equal(videoFrames(result)[1].timestamp, 6000, "la tercera sigue en su sitio");
   assert.equal(result.seconds, 9);
 });
 
@@ -108,7 +119,7 @@ test("cada toma cae en el segundo en que empieza su frase", () => {
     voiceUrl: VOZ,
   });
 
-  const [uno, dos, tres] = result.tracks[0].keyframes;
+  const [uno, dos, tres] = videoFrames(result);
 
   // La primera empieza en cero aunque su frase entre en el 0,5: ese arranque
   // tiene que verse.
@@ -133,16 +144,37 @@ test("un corte de duración cero se descarta", () => {
   assert.equal(result.seconds, 0);
 });
 
-test("siempre salen las dos pistas, aunque no haya clips", () => {
+test("sin clips queda la voz sola, no una pista de vídeo vacía", () => {
+  // Una pista de vídeo sin nada dentro es un montaje que el montador puede
+  // rechazar; y aquí no hay nada que enseñar de todas formas.
   const result = buildTimeline({ cuts: [], clips: {}, voiceUrl: VOZ });
 
   assert.deepEqual(
     result.tracks.map((track) => [track.id, track.type]),
-    [
-      ["broll", "video"],
-      ["voz", "audio"],
-    ],
+    [["voz", "audio"]],
   );
+});
+
+test("cada plano va en su propia pista", () => {
+  /*
+   * Es lo único que explica el fallo que quedaba: montara lo que montara, el
+   * vídeo salía repitiendo el último clip de principio a fin. Eso pasa si el
+   * montador se queda con el último fotograma de cada pista en vez de
+   * encadenarlos, así que se le da uno por pista.
+   */
+  const result = buildTimeline({
+    cuts: [
+      { n: "01", start: 0, end: 3 },
+      { n: "02", start: 3, end: 6 },
+    ],
+    clips: { "01": "https://cdn/1.mp4", "02": "https://cdn/2.mp4" },
+    voiceUrl: VOZ,
+  });
+
+  const pistas = result.tracks.filter((track) => track.type === "video");
+
+  assert.equal(pistas.length, 2);
+  assert.ok(pistas.every((track) => track.keyframes.length === 1));
 });
 
 test("dos cortes que se pisan no dejan un clip tapando al otro", () => {
@@ -160,10 +192,10 @@ test("dos cortes que se pisan no dejan un clip tapando al otro", () => {
     voiceUrl: VOZ,
   });
 
-  const [uno, dos] = result.tracks[0].keyframes;
+  const [uno, dos] = videoFrames(result);
 
   assert.equal(uno.timestamp + uno.duration, dos.timestamp, "no se solapan");
-  assert.equal(result.tracks[0].keyframes.length, 2, "ninguna se cae");
+  assert.equal(videoFrames(result).length, 2, "ninguna se cae");
 });
 
 test("los cortes desordenados se colocan igual", () => {
@@ -178,9 +210,9 @@ test("los cortes desordenados se colocan igual", () => {
     voiceUrl: VOZ,
   });
 
-  assert.equal(result.tracks[0].keyframes.length, 2);
+  assert.equal(videoFrames(result).length, 2);
   assert.deepEqual(
-    result.tracks[0].keyframes.map((frame) => frame.url),
+    videoFrames(result).map((frame) => frame.url),
     ["https://cdn/1.mp4", "https://cdn/2.mp4"],
   );
 });
@@ -198,7 +230,7 @@ test("la última toma se estira hasta que se calla la voz: nunca queda negro", (
     voiceSeconds: 30,
   });
 
-  const [uno] = result.tracks[0].keyframes;
+  const [uno] = videoFrames(result);
 
   assert.equal(uno.duration, 30000, "cubre toda la voz");
   assert.equal(result.seconds, 30);
@@ -231,7 +263,7 @@ test("dos tomas no pueden acabar apuntando al mismo clip", () => {
     voiceUrl: VOZ,
   });
 
-  const urls = result.tracks[0].keyframes.map((frame) => frame.url);
+  const urls = videoFrames(result).map((frame) => frame.url);
 
   assert.deepEqual(urls, ["https://cdn/1.mp4", "https://cdn/2.mp4", "https://cdn/3.mp4"]);
   assert.equal(new Set(urls).size, 3, "ningún clip se repite");
