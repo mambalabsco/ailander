@@ -31,12 +31,7 @@ import {
   type ShotRole,
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
-import {
-  buildSrt,
-  captionPieces,
-  piecesFromWords,
-  wordsWithin,
-} from "@/lib/video/captions";
+import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { MUSIC_GAIN, attenuateWav, buildMusicPrompt } from "@/lib/video/wav-gain";
 import {
   animate,
@@ -950,71 +945,52 @@ export async function assembleVideoAction(
       ]);
 
       /*
-       * Los subtítulos se queman al final, sobre el vídeo ya montado.
+       * Los subtítulos se queman al final, sobre el vídeo ya montado y con todo
+       * dentro — voz, música, los cortes ya hechos.
        *
-       * Se le da el SRT hecho con **nuestro** texto y nuestros tiempos: el
-       * servicio sabe transcribir él solo, pero el guion va fonético para que la
-       * voz pronuncie bien y escribiría «eme ce te» donde va «MCT».
+       * Y los transcribe el servicio, escuchando ese archivo. No se le manda
+       * ningún texto con tiempos: los tiempos que se pueden calcular aquí son los
+       * del archivo de voz suelto, y entre ese archivo y el vídeo terminado hay
+       * clips recortados, un último plano estirado hasta el final del audio y una
+       * mezcla. Cada paso mueve las cosas unas décimas y unas décimas se leen
+       * como que el subtítulo no va con la voz.
        *
-       * Antes se dibujaban aquí como imágenes y se apilaban en el montaje. Salía
-       * un subtítulo correcto y quieto; este anima palabra a palabra, que es lo
-       * que hace que se lean sin querer.
+       * Lo único que se le pasa es cómo se escriben las palabras que va a oír
+       * pronunciadas de otra forma. Ahí sí hacemos falta: el guion va fonético
+       * para que la voz diga «eme ce te», y en pantalla tiene que poner «MCT».
        */
       let finalUrl = result.videoUrl;
       let subtitulos = "";
 
       if (video.subtitlePreset) {
-        await report("Quemando los subtítulos");
+        await report("Transcribiendo y quemando los subtítulos");
 
-        /*
-         * Los tiempos salen de las palabras del audio, no de repartir el tramo.
-         *
-         * El generador de voz devuelve cuándo empieza y acaba **cada palabra**.
-         * Repartir el tramo de la toma entre sus palabras encaja el principio y
-         * el final, pero se desvía por dentro — y eso es exactamente lo que se
-         * lee como «no está sincronizado».
-         *
-         * Solo se estima cuando lo escrito no coincide con lo hablado: una toma
-         * con `sub` —«MCT» escrito, «eme ce te» hablado— tiene distinto número de
-         * palabras y no hay forma de emparejarlas. Ahí se reparte pesando por
-         * letras, que para un trozo corto llega.
-         */
-        const srt = buildSrt(
-          video.shots.flatMap((shot) => {
-            if (shot.cutStart === null || shot.cutEnd === null) return [];
+        const product = await findProductAnywhere(video.productId);
 
-            const written = shot.sub?.trim();
+        try {
+          finalUrl = await burnSubtitles({
+            videoUrl: result.videoUrl,
+            preset: video.subtitlePreset,
+            language: subtitleLanguage(product?.country),
+            vocabulary: buildVocabulary({
+              shots: video.shots,
+              /*
+               * La marca y los ingredientes son justo lo que un transcriptor
+               * escribe mal: no están en su diccionario. «Ashwagandha» sale como
+               * tres palabras distintas si no se le dice cómo se escribe.
+               */
+              terms: [product?.brand ?? "", product?.name ?? "", ...(product?.ingredients ?? [])],
+            }),
+          });
 
-            if (!written) {
-              const spoken = wordsWithin(video.words ?? [], shot.cutStart, shot.cutEnd);
-              if (spoken.length > 0) return piecesFromWords(spoken);
-            }
-
-            return captionPieces({
-              written: written || shot.guion,
-              start: shot.cutStart,
-              end: shot.cutEnd,
-            });
-          }),
-        );
-
-        if (srt.trim()) {
-          try {
-            finalUrl = await burnSubtitles({
-              videoUrl: result.videoUrl,
-              srt,
-              preset: video.subtitlePreset,
-            });
-
-            subtitulos = `, subtítulos «${video.subtitlePreset}»`;
-          } catch (error) {
-            /*
-             * Un fallo aquí no tira el vídeo: ya está montado y se ve entero.
-             * Pero se dice — un `catch` mudo fue lo que convirtió la vez pasada
-             * un problema de una línea en media hora de buscar.
-             */
-            subtitulos = `. Sin subtítulos: ${error instanceof Error ? error.message : "falló"}`;
-          }
+          subtitulos = `, subtítulos «${video.subtitlePreset}»`;
+        } catch (error) {
+          /*
+           * Un fallo aquí no tira el vídeo: ya está montado y se ve entero.
+           * Pero se dice — un `catch` mudo fue lo que convirtió la vez pasada
+           * un problema de una línea en media hora de buscar.
+           */
+          subtitulos = `. Sin subtítulos: ${error instanceof Error ? error.message : "falló"}`;
         }
       }
 

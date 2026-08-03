@@ -21,6 +21,7 @@ import {
 import { generateWithCli } from "@/lib/higgsfield-cli";
 import { attenuateWav, MUSIC_GAIN } from "@/lib/video/wav-gain";
 import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
+import { subtitleLanguage } from "@/lib/video/vocabulary";
 import { polishPrompt, POLISH_SCHEMA, type PolishedPrompt } from "@/lib/video/prompt-polish";
 import { generateStructured } from "@/lib/generators";
 import { move, sorted } from "@/lib/studio-order";
@@ -639,12 +640,16 @@ export async function assembleProjectAction(input: unknown): Promise<LaunchResul
       let extra = "";
 
       if (preset) {
-        await report("Quemando los subtítulos");
+        await report("Transcribiendo y quemando los subtítulos");
 
         try {
-          // Sin SRT propio se transcribe el audio, que aquí sí vale: el texto lo
-          // escribe quien monta y no va en fonético como el de los guiones.
-          finalUrl = await burnSubtitles({ videoUrl: result.videoUrl, srt: "", preset });
+          // Los transcribe del vídeo ya montado: es la única forma de que los
+          // tiempos cuadren con lo que de verdad se oye.
+          finalUrl = await burnSubtitles({
+            videoUrl: result.videoUrl,
+            preset,
+            language: subtitleLanguage(),
+          });
           extra = `, subtítulos «${preset}»`;
         } catch (error) {
           extra = `. Sin subtítulos: ${error instanceof Error ? error.message : "falló"}`;

@@ -2,6 +2,7 @@ import "server-only";
 
 import { buildInput, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import { charactersToWords, spokenSeconds, type Alignment, type TimedWord } from "@/lib/video/words";
+import type { VocabularyEntry } from "@/lib/video/vocabulary";
 import type { Track } from "@/lib/video/timeline";
 
 /**
@@ -540,18 +541,29 @@ export async function mergeVideos(urls: string[]): Promise<string> {
 /**
  * Quema los subtítulos en el vídeo, con estilo de anuncio vertical.
  *
- * Se le pasa el SRT hecho **a propósito**. Sabe transcribir el audio él solo,
- * pero aquí eso es un error: el guion va escrito fonético para que la voz
- * pronuncie bien, así que escribiría «eme ce te» donde tiene que poner «MCT» —
- * el fallo que más delata un vídeo generado. Con el SRT delante se salta la
- * transcripción y solo pone la animación, que es lo que sabe hacer mejor que
- * nosotros.
+ * **Transcribe él el vídeo ya montado, y por eso no se le manda ningún SRT.**
+ *
+ * Antes se le pasaba el texto con tiempos calculados aquí, a partir de cuándo
+ * dijo cada palabra el generador de voz. Salía descuadrado, y tenía que salir:
+ * esos tiempos describen el archivo de voz suelto, no el vídeo terminado. Entre
+ * uno y otro hay clips que se recortan, un último plano que se estira hasta el
+ * final del audio y una mezcla con música — cada paso mueve las cosas unas
+ * décimas, y unas décimas se leen como que el subtítulo no va con la voz.
+ *
+ * Escuchando el archivo final no hay nada que estimar. La ortografía, que es lo
+ * único que se perdía al transcribir, se arregla con `vocabulary`: se le dice
+ * cómo se escribe lo que va a oír pronunciado de otra forma.
+ *
+ * Por eso este parámetro no existe aquí aunque la API lo acepte. Volver a
+ * mandarlo devolvería el descuadre entero.
  */
 export async function burnSubtitles(options: {
   videoUrl: string;
-  srt: string;
   preset: string;
+  /** El idioma del audio, para que no lo adivine. */
   language?: string;
+  /** Cómo se escribe lo que se pronuncia raro. */
+  vocabulary?: VocabularyEntry[];
 }): Promise<string> {
   const response = await fetch("https://fal.run/veed/subtitles", {
     method: "POST",
@@ -562,11 +574,8 @@ export async function burnSubtitles(options: {
     body: JSON.stringify({
       video_url: options.videoUrl,
       preset: options.preset,
-      // Vacío no se manda: el campo presente y en blanco no salta la
-      // transcripción, la rompe. Sin él, transcribe — que es lo que se quiere
-      // cuando el texto no lo ponemos nosotros.
-      ...(options.srt.trim() ? { srt_content: options.srt } : {}),
       ...(options.language ? { language: options.language } : {}),
+      ...(options.vocabulary?.length ? { vocabulary: options.vocabulary } : {}),
     }),
     cache: "no-store",
   });
