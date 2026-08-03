@@ -33,7 +33,11 @@ export default async function EstudioPage(props: {
     listProjects().catch(() => []),
     listOwnProducts(),
     listJobsByKind("imagenes", 6).catch(() => []),
-    cliStatus().catch(() => ({ authenticated: false })),
+    cliStatus().catch((error) => ({
+      installed: false,
+      authenticated: false,
+      reason: error instanceof Error ? error.message : "No se pudo ejecutar el CLI.",
+    })),
     listCliModels("image").catch(() => []),
     // Los de vídeo son otra llamada porque el CLI filtra por tipo. Sin ella no
     // aparecía ninguno, que es lo que se veía en la pantalla.
@@ -74,7 +78,12 @@ export default async function EstudioPage(props: {
            */
           takesReferences: model.mediaParams === null || model.mediaParams.length > 0,
         }))}
-        hasHiggsfield={higgs.authenticated === true}
+        higgsfield={{
+          ok: higgs.authenticated === true,
+          // El motivo, no solo que no va: «no hay modelos» y «el CLI no tiene
+          // sesión» se ven igual desde la pantalla, y solo uno se arregla.
+          reason: "reason" in higgs ? (higgs.reason ?? "") : "",
+        }}
       />
     </div>
   );

@@ -79,7 +79,7 @@ export function StudioBoard({
   products,
   cliModels,
   cliVideoModels,
-  hasHiggsfield,
+  higgsfield,
 }: {
   projects: StudioProjectView[];
   current: StudioProjectView | null;
@@ -87,7 +87,8 @@ export function StudioBoard({
   products: { id: string; name: string }[];
   cliModels: { slug: string; name: string }[];
   cliVideoModels: { slug: string; name: string; takesReferences: boolean }[];
-  hasHiggsfield: boolean;
+  /** Si el CLI de Higgsfield responde, y por qué no si no. */
+  higgsfield: { ok: boolean; reason: string };
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -218,6 +219,28 @@ export function StudioBoard({
         </p>
       ) : null}
 
+      {/*
+        Sin CLI no hay catálogo de Higgsfield, y hay que decirlo aquí arriba.
+
+        Sin este aviso los desplegables salen con un solo modelo y eso se lee
+        como «no hay más», cuando lo que pasa casi siempre es que la sesión del
+        CLI caducó en el servidor. Son dos cosas muy distintas y solo una se
+        arregla en un minuto.
+      */}
+      {higgsfield.ok ? null : (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">Los modelos de Higgsfield no están disponibles</p>
+          <p className="mt-1">
+            {higgsfield.reason ||
+              "El CLI de Higgsfield no responde. Sin él solo están los modelos de kie."}
+          </p>
+          <p className="mt-1 text-xs">
+            En el servidor: <code>cd /home/plataforma/plataforma-ia && npx higgsfield auth login</code>
+            . La sesión se renueva sola después.
+          </p>
+        </div>
+      )}
+
       {/* ------------------------------ Proyectos ------------------------- */}
 
       <section className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
@@ -334,13 +357,16 @@ export function StudioBoard({
                   className="min-w-48"
                 >
                   <option value="">Nano Banana (rápido y barato)</option>
-                  {hasHiggsfield
-                    ? cliModels.map((model) => (
+
+                  {cliModels.length > 0 ? (
+                    <optgroup label={`Higgsfield · ${cliModels.length} modelos`}>
+                      {cliModels.map((model) => (
                         <option key={model.slug} value={`hf:${model.slug}`}>
                           {model.name}
                         </option>
-                      ))
-                    : null}
+                      ))}
+                    </optgroup>
+                  ) : null}
                 </SelectField>
 
                 {/*
@@ -447,7 +473,7 @@ export function StudioBoard({
                 </optgroup>
 
                 {cliVideoModels.length > 0 ? (
-                  <optgroup label="Higgsfield">
+                  <optgroup label={`Higgsfield · ${cliVideoModels.length} modelos`}>
                     {cliVideoModels.map((model) => (
                       <option key={model.slug} value={`hf:${model.slug}`}>
                         {model.name}
@@ -464,11 +490,9 @@ export function StudioBoard({
                 un desplegable a medias: casi siempre es la sesión caducada del
                 CLI, y desde la pantalla eso es indistinguible de «no existen».
               */}
-              {cliVideoModels.length === 0 ? (
+              {cliVideoModels.length === 0 && higgsfield.ok ? (
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                  {hasHiggsfield
-                    ? "Higgsfield no devolvió ningún modelo de vídeo."
-                    : "Los de Higgsfield no salen porque el CLI no tiene sesión. Ejecuta «higgsfield auth login» en el servidor."}
+                  Higgsfield respondió pero no devolvió ningún modelo de vídeo.
                 </p>
               ) : null}
 
