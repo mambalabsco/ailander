@@ -272,6 +272,8 @@ export interface AdAccount {
   currency: string;
   /** De qué Business Manager es. Vacío en las de antes de guardarlo. */
   businessName: string;
+  /** Con qué sesión se lee. Vacío: la de la tienda o la de por defecto. */
+  metaLoginId: string;
   active: boolean;
   includeFilters: string[];
   excludeFilters: string[];
@@ -297,6 +299,7 @@ export async function listAdAccounts(storeId: string): Promise<AdAccount[]> {
     name: row.name,
     currency: row.currency,
     businessName: row.business_name ?? "",
+    metaLoginId: row.meta_login_id ?? "",
     active: row.active,
     includeFilters: row.include_filters ?? [],
     excludeFilters: row.exclude_filters ?? [],
@@ -312,6 +315,7 @@ export async function saveAdAccount(input: {
   currency: string;
   businessId?: string;
   businessName?: string;
+  metaLoginId?: string;
   active?: boolean;
   includeFilters?: string[];
   excludeFilters?: string[];
@@ -330,6 +334,7 @@ export async function saveAdAccount(input: {
         currency: input.currency,
         ...(input.businessId === undefined ? {} : { business_id: input.businessId }),
         ...(input.businessName === undefined ? {} : { business_name: input.businessName }),
+        ...(input.metaLoginId === undefined ? {} : { meta_login_id: input.metaLoginId || null }),
         ...(input.active === undefined ? {} : { active: input.active }),
         ...(input.includeFilters === undefined ? {} : { include_filters: input.includeFilters }),
         ...(input.excludeFilters === undefined ? {} : { exclude_filters: input.excludeFilters }),

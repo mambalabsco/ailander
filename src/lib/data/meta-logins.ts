@@ -214,6 +214,59 @@ export async function resolveMetaLogin(storeId: string): Promise<ResolvedLogin |
   return null;
 }
 
+/**
+ * Todas las sesiones con su token, para recorrerlas.
+ *
+ * Hace falta al traer cuentas: una tienda puede tener campañas en cuentas que
+ * solo ve un perfil y en otras que solo ve otro, así que se pregunta a todos y
+ * cada cuenta se queda apuntando al que la vio.
+ */
+export async function listLoginsWithToken(): Promise<
+  { id: string; name: string; token: string; expiresAt: Date | null }[]
+> {
+  const { supabase } = await requireContext();
+
+  const { data } = await supabase
+    .from("meta_logins")
+    .select("id,name,access_token,token_expires_at")
+    .order("is_default", { ascending: false });
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name || "Sin nombre",
+    token: row.access_token,
+    expiresAt: row.token_expires_at ? new Date(row.token_expires_at) : null,
+  }));
+}
+
+/** El token con el que se lee una cuenta concreta. */
+export async function tokenForAccount(
+  storeId: string,
+  loginId: string,
+): Promise<ResolvedLogin | null> {
+  if (!loginId) return resolveMetaLogin(storeId);
+
+  const { supabase } = await requireContext();
+
+  const { data } = await supabase
+    .from("meta_logins")
+    .select("id,name,access_token,token_expires_at,meta_app_id")
+    .eq("id", loginId)
+    .maybeSingle();
+
+  // La sesión de la cuenta se borró: se cae a la de la tienda en vez de dejar
+  // esa cuenta sin leer para siempre.
+  if (!data?.access_token) return resolveMetaLogin(storeId);
+
+  return {
+    token: data.access_token,
+    expiresAt: data.token_expires_at ? new Date(data.token_expires_at) : null,
+    loginId: data.id,
+    metaAppId: data.meta_app_id,
+    name: data.name || "Sin nombre",
+  };
+}
+
 /** El token de una sesión concreta, para renovarla. */
 export async function readLoginToken(id: string): Promise<string | null> {
   const { supabase } = await requireContext();

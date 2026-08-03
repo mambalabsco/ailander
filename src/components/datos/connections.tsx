@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button, SelectField, TextField } from "@/components/ui";
 import {
   importAccountsAction,
@@ -41,6 +42,8 @@ export interface AccountRow {
   currency: string;
   /** De qué Business Manager es. Vacío en las de antes de guardarlo. */
   businessName: string;
+  /** Con qué perfil de Facebook se lee. Vacío: el de la tienda. */
+  loginName: string;
   active: boolean;
   includeFilters: string[];
   excludeFilters: string[];
@@ -165,23 +168,27 @@ export function MetaConnect({
       )}
 
       {/*
-        Un enlace y no un botón con `fetch`: el flujo termina en una redirección
-        a Facebook, y eso el navegador lo tiene que hacer navegando de verdad.
-      */}
-      <a
-        href={`/api/meta/instalar?tienda=${storeId}`}
-        className="inline-flex items-center gap-2 rounded-full bg-[#1877F2] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#166fe0]"
-      >
-        {/* La «f» de Facebook dibujada, no su logotipo: es la marca de otro. */}
-        <span aria-hidden className="text-base font-bold">
-          f
-        </span>
-        {state.connected ? "Volver a iniciar sesión" : "Iniciar sesión con Facebook"}
-      </a>
+        Aquí ya no se inicia sesión.
 
+        El permiso de Facebook es **del perfil**, no de la tienda: con él se ven
+        las cuentas de todos sus Business Manager. Un botón de login en cada
+        tienda pedía el mismo inicio de sesión cinco veces —y otras cinco cada
+        sesenta días— para acabar guardando el mismo token cinco veces.
+
+        Se inicia en Configuración, una vez, y desde aquí solo se traen las
+        cuentas que esa tienda paga.
+      */}
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Solo se pide permiso de <strong>lectura</strong> de anuncios (<code>ads_read</code>). La
-        plataforma no puede crear, pausar ni modificar nada en tus campañas.
+        Los perfiles de Facebook se conectan en{" "}
+        <Link
+          href="/settings"
+          className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+        >
+          Configuración → Sesiones de Facebook
+        </Link>
+        , una sola vez para todas las tiendas. Aquí solo se traen sus cuentas y se activan las de
+        esta. Solo se pide permiso de <strong>lectura</strong> (<code>ads_read</code>): la
+        plataforma no puede crear, pausar ni modificar nada.
       </p>
 
       <MetaStorePanel
@@ -233,9 +240,16 @@ function MetaStorePanel({
   return (
     <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
       <div className="flex flex-wrap items-center gap-3">
+        {/*
+          El perfil de respaldo de la tienda.
+
+          Cada cuenta ya recuerda con cuál se lee, así que esto solo decide qué
+          usar para las que no lo tengan —las de antes de esta versión— y para
+          traer cuentas cuando algún perfil no responde.
+        */}
         {logins.length > 1 ? (
           <label className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500 dark:text-slate-400">Sesión</span>
+            <span className="text-slate-500 dark:text-slate-400">Perfil de respaldo</span>
             <SelectField
               value={chosenLogin}
               disabled={busy}
@@ -286,8 +300,9 @@ function MetaStorePanel({
       {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        La sesión y la app se configuran una vez en <strong>Configuración</strong>. Aquí solo se
-        elige, y casi nunca hace falta.
+        «Traer las cuentas» pregunta a <strong>todos</strong> tus perfiles y cada cuenta se queda
+        apuntando al que la vio, así que una misma tienda puede leer cuentas de varios perfiles a
+        la vez. Los perfiles y las apps se configuran en <strong>Configuración</strong>.
       </p>
     </div>
   );
@@ -497,9 +512,16 @@ export function AccountList({ accounts }: { accounts: AccountRow[] }) {
                   Con dos BM, dos cuentas pueden llamarse igual y activar la que
                   no es resta el gasto de otra tienda del beneficio de esta.
                 */}
-                {account.businessName ? (
+                {account.businessName || account.loginName ? (
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Business Manager: {account.businessName}
+                    {account.businessName ? `Business Manager: ${account.businessName}` : ""}
+                    {account.businessName && account.loginName ? " · " : ""}
+                    {/*
+                      Con qué perfil se lee. Con dos socios o una agencia, dos
+                      cuentas de la misma tienda pueden venir de perfiles
+                      distintos, y saber cuál falta cuando una caduca.
+                    */}
+                    {account.loginName ? `Perfil: ${account.loginName}` : ""}
                   </p>
                 ) : null}
 

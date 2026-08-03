@@ -591,6 +591,8 @@ type AdAccountRow = {
   /** De qué Business Manager es. Vacío en las dadas de alta antes de guardarlo. */
   business_id: string;
   business_name: string;
+  /** Con qué sesión se lee. Null: la de la tienda o la de por defecto. */
+  meta_login_id: string | null;
   active: boolean;
   include_filters: string[];
   exclude_filters: string[];

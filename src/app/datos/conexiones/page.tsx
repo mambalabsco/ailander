@@ -173,7 +173,13 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
         title="Cuentas publicitarias"
         description="Nacen desactivadas. Activa solo las que pagan las campañas de esta tienda: activarlas todas restaría del beneficio de aquí el gasto de campañas de otro sitio."
       >
-        <AccountList accounts={accounts} />
+        <AccountList
+          accounts={accounts.map((account) => ({
+            ...account,
+            loginName:
+              metaLogins.find((login) => login.id === account.metaLoginId)?.name ?? "",
+          }))}
+        />
       </SectionCard>
     </div>
   );

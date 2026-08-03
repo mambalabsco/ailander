@@ -35,10 +35,12 @@ import {
 } from "@/lib/data/meta-apps";
 import {
   deleteMetaLogin,
+  listLoginsWithToken,
   refreshLoginToken,
   resolveMetaLogin,
   setDefaultMetaLogin,
   setStoreMetaLogin,
+  tokenForAccount,
 } from "@/lib/data/meta-logins";
 import { clearFinishedJobs } from "@/lib/data/jobs";
 import type { LaunchResult } from "@/types/jobs";
@@ -215,9 +217,22 @@ export async function syncStoreAction(
       for (const account of accounts) {
         try {
           if (account.provider === "facebook") {
-            if (!facebook) continue;
-            if (metaOauth.isExpired(facebook.expiresAt)) continue;
-            const rows = await meta.readDailySpend(facebook.token, account.externalId, {
+            /*
+             * Cada cuenta con **su** perfil.
+             *
+             * Una tienda puede tener cuentas de dos perfiles distintos, y con un
+             * único token las del otro devuelven un 403 —o peor, cero filas sin
+             * error— y su gasto cuenta cero.
+             */
+            const session = await tokenForAccount(storeId, account.metaLoginId);
+
+            if (!session) continue;
+            if (metaOauth.isExpired(session.expiresAt)) {
+              notes.push(`${account.name}: la sesión de «${session.name}» caducó`);
+              continue;
+            }
+
+            const rows = await meta.readDailySpend(session.token, account.externalId, {
               from,
               to,
             });
@@ -321,9 +336,16 @@ export async function syncSpendAction(
       for (const account of accounts) {
         try {
           if (account.provider === "facebook") {
-            if (!facebook || metaOauth.isExpired(facebook.expiresAt)) continue;
+            // Cada cuenta con su perfil: ver `tokenForAccount`.
+            const session = await tokenForAccount(storeId, account.metaLoginId);
 
-            const rows = await meta.readDailySpend(facebook.token, account.externalId, {
+            if (!session) continue;
+            if (metaOauth.isExpired(session.expiresAt)) {
+              notes.push(`${account.name}: la sesión de «${session.name}» caducó`);
+              continue;
+            }
+
+            const rows = await meta.readDailySpend(session.token, account.externalId, {
               from,
               to,
             });
@@ -512,35 +534,76 @@ export async function importAccountsAction(
   try {
     await requireCapability("secretos");
 
-    const login = await resolveMetaLogin(storeId);
-    if (!login) return { ok: false, message: "Esta tienda no tiene ninguna sesión de Facebook." };
+    /*
+     * Se pregunta a **todos** los perfiles, no solo al de la tienda.
+     *
+     * Una tienda puede tener campañas en cuentas que solo ve un perfil y en
+     * otras que solo ve otro —dos socios, o una agencia—. Con un solo perfil,
+     * las del otro no aparecerían y su gasto contaría cero sin decir nada.
+     *
+     * Cada cuenta se queda apuntando al perfil que la vio, que es lo que
+     * después permite leer su gasto con el token correcto.
+     */
+    const logins = await listLoginsWithToken();
 
-    if (metaOauth.isExpired(login.expiresAt)) {
-      return { ok: false, message: `La sesión de «${login.name}» caducó. Vuelve a iniciarla en Configuración.` };
+    if (logins.length === 0) {
+      return {
+        ok: false,
+        message: "No hay ninguna sesión de Facebook. Inicia una en Configuración › Sesiones de Facebook.",
+      };
     }
 
-    const accounts = await meta.listAccounts(login.token);
+    const notes: string[] = [];
+    const seen = new Set<string>();
+    let added = 0;
 
-    for (const account of accounts) {
-      await saveAdAccount({
-        storeId,
-        provider: "facebook",
-        externalId: account.externalId,
-        name: account.name,
-        currency: account.currency,
-        businessId: account.businessId,
-        businessName: account.businessName,
-        // Desactivadas: activarlas todas restaría de esta tienda el gasto de
-        // campañas de otro sitio.
-        active: false,
-      });
+    for (const login of logins) {
+      if (metaOauth.isExpired(login.expiresAt)) {
+        notes.push(`«${login.name}» caducó`);
+        continue;
+      }
+
+      let accounts;
+      try {
+        accounts = await meta.listAccounts(login.token);
+      } catch (error) {
+        // Un perfil que falla no impide traer las de los demás.
+        notes.push(`«${login.name}»: ${error instanceof Error ? error.message : "no respondió"}`);
+        continue;
+      }
+
+      for (const account of accounts) {
+        // La misma cuenta vista por dos perfiles se queda con el primero: los
+        // dos la leen igual y cambiarla en cada pasada sería ruido.
+        if (seen.has(account.externalId)) continue;
+        seen.add(account.externalId);
+
+        await saveAdAccount({
+          storeId,
+          provider: "facebook",
+          externalId: account.externalId,
+          name: account.name,
+          currency: account.currency,
+          businessId: account.businessId,
+          businessName: account.businessName,
+          metaLoginId: login.id,
+          // Desactivadas: activarlas todas restaría de esta tienda el gasto de
+          // campañas de otro sitio.
+          active: false,
+        });
+
+        added += 1;
+      }
     }
 
     revalidatePath("/datos/conexiones");
 
     return {
-      ok: true,
-      message: `${accounts.length} cuenta(s) traídas de «${login.name}». Activa las de esta tienda.`,
+      ok: added > 0 || notes.length === 0,
+      message: [
+        `${added} cuenta(s) de ${logins.length} perfil(es). Activa las de esta tienda.`,
+        notes.length > 0 ? ` Sin traer de: ${notes.join("; ")}.` : "",
+      ].join(""),
     };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudieron traer." };

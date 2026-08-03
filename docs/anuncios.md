@@ -118,6 +118,18 @@ vale para todas las tiendas: el permiso es del **perfil**, no de la tienda, y co
 Después, en cada tienda: **Datos y beneficio → Conexiones → Traer las cuentas**, y
 activa las que pagan las campañas de esa tienda.
 
+«Traer las cuentas» pregunta a **todos** los perfiles conectados y cada cuenta se
+queda apuntando al que la vio. De ahí salen las dos direcciones que hacen falta:
+
+- **Un perfil, varias tiendas.** Se inicia sesión una vez y sus cuentas se
+  reparten entre las tiendas que las paguen.
+- **Una tienda, varios perfiles.** Si sus campañas viven en cuentas que solo ve
+  un socio y en otras que solo ve una agencia, se conectan los dos perfiles y
+  cada cuenta se lee con el suyo.
+
+En la lista de cuentas se ve de qué Business Manager y de qué perfil viene cada
+una, que es lo que hace falta saber cuando una caduca.
+
 El permiso dura unos sesenta días. La caducidad se ve en Configuración y se
 renueva sola al sincronizar cuando Meta lo permite; cuando queden pocos días,
 vuelve a iniciar sesión desde ahí — una vez, no una por tienda.
