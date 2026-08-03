@@ -51,6 +51,17 @@ export function ShotBoard({
   const withKeyframe = video.shots.filter((shot) => shot.keyframeUrl);
   const withClip = video.shots.filter((shot) => shot.clipUrl);
 
+  /*
+   * Si dos tomas comparten el mismo clip, el montaje va a repetir ese plano.
+   *
+   * Se dice **antes** de montar y aquí arriba, porque desde el vídeo terminado
+   * ese fallo parece un montaje roto y no lo es: los archivos ya venían
+   * repetidos, y montar otra vez daría exactamente lo mismo.
+   */
+  const clipsRepetidos = withClip
+    .map((shot) => shot.clipUrl)
+    .filter((url, index, all) => all.indexOf(url) !== index).length;
+
   const problems = reviewShots(video.shots);
 
   const plans = planDurations(
@@ -266,6 +277,14 @@ export function ShotBoard({
         </div>
       ) : null}
 
+      {clipsRepetidos > 0 ? (
+        <p className="mb-3 rounded-2xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+          {clipsRepetidos} toma(s) tienen el <strong>mismo clip</strong> que otra, así que el
+          montaje va a repetir ese plano. No es el montaje: los archivos ya vienen repetidos.
+          Vuelve a animar esas tomas.
+        </p>
+      ) : null}
+
       {video.finalUrl ? (
         <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/40">
           {/*
@@ -359,6 +378,28 @@ export function ShotBoard({
 
               {shot.error ? (
                 <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{shot.error}</p>
+              ) : null}
+
+              {/*
+                El clip de cada toma, aquí y reproducible.
+
+                Sin esto no había forma de saber si el montaje repetía un plano
+                porque el montador los perdía o porque las seis tomas ya
+                apuntaban al mismo archivo. Son dos fallos distintos con la misma
+                pinta, y se distinguen mirando: si los clips de aquí son
+                distintos, el problema está en el montaje; si ya son iguales,
+                está antes.
+              */}
+              {shot.clipUrl ? (
+                <video
+                  key={shot.clipUrl}
+                  src={shot.clipUrl}
+                  controls
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="mt-2 w-full rounded-xl bg-slate-100 dark:bg-slate-800"
+                />
               ) : null}
 
               <div className="mt-2 flex flex-wrap items-center gap-2">

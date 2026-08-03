@@ -614,11 +614,32 @@ export async function generateClipsAction(
 
       const head = stopped ? "Cancelado. " : "";
 
+      /*
+       * Cuántos clips **distintos** salieron.
+       *
+       * Es el número que hacía falta y no estaba: un vídeo que repite un plano
+       * de principio a fin puede venir de dos sitios muy distintos —el montador
+       * pierde los planos, o las tomas ya apuntaban al mismo archivo— y desde el
+       * vídeo terminado tienen la misma pinta. Contándolo aquí se sabe en el
+       * acto cuál de los dos es.
+       */
+      const actual = await readVideo(videoId);
+      const distintos = new Set(
+        (actual?.shots ?? []).map((shot) => shot.clipUrl).filter(Boolean),
+      ).size;
+
+      const conClip = (actual?.shots ?? []).filter((shot) => shot.clipUrl).length;
+
+      const repetidos =
+        conClip > distintos
+          ? ` OJO: ${conClip} tomas comparten ${distintos} clip(s) distintos, así que el montaje repetiría planos. Vuelve a animar las repetidas.`
+          : "";
+
       return {
         summary:
           failures.length > 0
-            ? `${head}${done} clip(s) listos, ${failures.length} fallaron. ${failures[0]}`
-            : `${head}${done} clip(s) listos, ${seconds} s generados.`,
+            ? `${head}${done} clip(s) listos, ${failures.length} fallaron. ${failures[0]}${repetidos}`
+            : `${head}${done} clip(s) listos (${distintos} distintos), ${seconds} s generados.${repetidos}`,
       };
     },
   });
