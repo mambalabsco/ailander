@@ -569,11 +569,19 @@ export const VIDEO_MODELS: VideoModel[] = [
     id: "kling",
     label: "Kling 3.0 · 720p",
     slug: "kling-3.0/video",
-    billing: { kind: "buckets", sizes: [5, 10], threshold: 5.5 },
-    maxSeconds: 10,
+    /*
+     * Por segundo y de tres a quince, comprobado en su documentación.
+     *
+     * Aquí decía que solo vendía clips de cinco o de diez, y era de las
+     * versiones anteriores: la 3.0 acepta cualquier duración entre tres y
+     * quince. Con el dato viejo, una toma de 5,6 s pagaba diez segundos para
+     * nada. En 9:16 el modo estándar ya entrega 720×1280.
+     */
+    billing: { kind: "perSecond", minSeconds: 3 },
+    maxSeconds: 15,
     usdPerSecond: 0.07,
     nativeAudio: false,
-    note: "Mejor imagen y casi cinco veces más caro. Vende clips de cinco o de diez, así que una toma que se pase de 5,5 s paga el doble.",
+    note: "Mejor imagen y casi cinco veces más caro. Acepta de 3 a 15 segundos y se paga lo que dura.",
   },
 ];
 
@@ -603,11 +611,16 @@ export function billedSeconds(voice: number, billing: ClipBilling, maxSeconds = 
 }
 
 /**
- * El salto de precio que hay que conocer antes de elegir cuántas tomas.
+ * El salto de precio de los generadores que venden clips cerrados.
  *
- * El generador solo vende clips de cinco o de diez segundos. Una toma con 5,4
- * segundos de voz cabe en uno de cinco; una con 5,6 **paga uno de diez**. Diez
- * céntimos de voz de más cuestan el doble de clip.
+ * **Ninguno de los dos actuales cobra así**: Grok siempre fue por segundo y
+ * Kling 3.0 también —lo de cinco o diez era de sus versiones anteriores—. Se
+ * mantiene porque la forma de cobro es un dato del modelo, no del pipeline, y
+ * el día que vuelva a haber uno cerrado el cálculo ya está.
+ *
+ * Cuando aplica, el salto es este. Una toma con 5,4 segundos de voz cabe en un
+ * clip de cinco; una con 5,6 **paga uno de diez**. Diez céntimos de voz de más
+ * cuestan el doble de clip.
  *
  * Eso convierte «más tomas» en «más caro» de una forma que no se ve venir:
  *

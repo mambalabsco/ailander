@@ -972,15 +972,7 @@ export async function assembleVideoAction(
             videoUrl: result.videoUrl,
             preset: video.subtitlePreset,
             language: subtitleLanguage(product?.country),
-            vocabulary: buildVocabulary({
-              shots: video.shots,
-              /*
-               * La marca y los ingredientes son justo lo que un transcriptor
-               * escribe mal: no están en su diccionario. «Ashwagandha» sale como
-               * tres palabras distintas si no se le dice cómo se escribe.
-               */
-              terms: [product?.brand ?? "", product?.name ?? "", ...(product?.ingredients ?? [])],
-            }),
+            vocabulary: buildVocabulary({ shots: video.shots }),
           });
 
           subtitulos = `, subtítulos «${video.subtitlePreset}»`;
@@ -1000,10 +992,18 @@ export async function assembleVideoAction(
         thumbnailUrl: result.thumbnailUrl,
       });
 
+      /*
+       * Lo de los subtítulos va en las dos ramas.
+       *
+       * Antes solo salía en una, así que un vídeo al que le faltaban tomas
+       * **también** se quedaba sin decir que los subtítulos habían fallado. Dos
+       * problemas y solo uno visible es peor que ninguno visible: se arregla el
+       * que se ve y el otro sigue ahí sin explicación.
+       */
       return {
         summary:
           timeline.missing.length > 0
-            ? `Montado, ${timeline.seconds} s con ${planos} de ${withClip.length} tomas. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
+            ? `Montado, ${timeline.seconds} s con ${planos} de ${withClip.length} tomas${subtitulos}. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
             : `Montado, ${timeline.seconds} s con ${planos} plano(s) distintos${subtitulos}${video.musicUrl ? " y música" : ""}.`,
       };
     },

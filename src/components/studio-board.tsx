@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
-import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
+import {
+  durationLabel,
+  estimateCost,
+  findGenerator,
+  nearestDuration,
+  VIDEO_GENERATORS,
+} from "@/lib/video/catalog";
 import {
   assembleProjectAction,
   cloneVoiceAction,
@@ -133,8 +139,8 @@ export function StudioBoard({
 
   const clipTakesRefs = cliClip ? cliClip.takesReferences : clipGenerator.refField !== null;
   const clipManyRefs = cliClip ? true : clipGenerator.refIsArray;
-  const clipHasDuration = cliClip ? false : clipGenerator.hasDuration;
-  const clipNativeAudio = cliClip ? false : clipGenerator.nativeAudio;
+  const clipHasDuration = !cliClip;
+  const clipNativeAudio = !cliClip && clipGenerator.audioField !== null;
   const clipCost = cliClip ? null : estimateCost(clipGenerator, clipSeconds);
 
   const clipNote = cliClip
@@ -485,9 +491,36 @@ export function StudioBoard({
               ) : null}
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
-                {clipHasDuration ? (
+                {/*
+                  Con lista cerrada se elige de una lista, no se teclea.
+                  Wan solo vende 5, 10 o 15 segundos y Hailuo 6 o 10: un campo
+                  libre deja escribir un 7 que el modelo rechaza, y el error
+                  llega después de haber lanzado el trabajo.
+                */}
+                {!clipHasDuration ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Este modelo decide él la duración.
+                  </p>
+                ) : clipGenerator.durations.length > 0 ? (
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
+                    <SelectField
+                      value={String(nearestDuration(clipGenerator, clipSeconds))}
+                      onChange={(event) => setClipSeconds(Number(event.target.value))}
+                      className="w-24"
+                    >
+                      {clipGenerator.durations.map((option) => (
+                        <option key={option} value={option}>
+                          {option} s
+                        </option>
+                      ))}
+                    </SelectField>
+                  </label>
+                ) : (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Segundos · {durationLabel(clipGenerator)}
+                    </span>
                     <input
                       type="number"
                       min={clipGenerator.minSeconds}
@@ -497,10 +530,6 @@ export function StudioBoard({
                       className="w-20 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                     />
                   </label>
-                ) : (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Este modelo decide él la duración.
-                  </p>
                 )}
 
                 {clipNativeAudio ? (

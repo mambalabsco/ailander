@@ -20,7 +20,14 @@
  * ponemos nosotros.
  */
 
-/** Una corrección: cómo se escribe y cómo suena. */
+/**
+ * Una corrección: cómo se escribe y cómo suena.
+ *
+ * `replaces` **no puede ir vacío**: el servicio lo exige con al menos un
+ * elemento y devuelve 422 si falta. Sin él la entrada tampoco serviría de nada
+ * —la corrección se busca por lo que suena— así que una entrada sin
+ * sustituciones se descarta en vez de mandarse.
+ */
 export interface VocabularyEntry {
   word: string;
   replaces: string[];
@@ -28,6 +35,10 @@ export interface VocabularyEntry {
 
 /** El servicio no acepta más de cien. */
 export const MAX_ENTRIES = 100;
+
+/** Ni más de veinte sustituciones por entrada, ni de cien letras cada una. */
+const MAX_REPLACES = 20;
+const MAX_LENGTH = 100;
 
 /**
  * Recorta a una sola línea de texto plano.
@@ -49,21 +60,19 @@ function tidy(value: string): string {
  */
 export function buildVocabulary(options: {
   shots: { guion: string; sub?: string }[];
-  /** Nombre del producto, de la marca, y lo que se escriba raro. */
-  terms?: string[];
 }): VocabularyEntry[] {
   const entries = new Map<string, Set<string>>();
 
   const add = (word: string, sounds: string) => {
-    const written = tidy(word);
-    if (!written) return;
+    const written = tidy(word).slice(0, MAX_LENGTH);
+    const spoken = tidy(sounds).slice(0, MAX_LENGTH);
+
+    if (!written || !spoken) return;
+    // Lo que suena igual que como se escribe no corrige nada.
+    if (spoken.toLowerCase() === written.toLowerCase()) return;
 
     const set = entries.get(written) ?? new Set<string>();
-
-    const spoken = tidy(sounds);
-    // Lo que suena igual que como se escribe no corrige nada.
-    if (spoken && spoken.toLowerCase() !== written.toLowerCase()) set.add(spoken);
-
+    set.add(spoken);
     entries.set(written, set);
   };
 
@@ -109,12 +118,19 @@ export function buildVocabulary(options: {
     else add(written, tidy(shot.guion));
   }
 
-  // La marca va aunque nadie la escriba distinto: es lo que más se equivoca un
-  // transcriptor, porque no está en su diccionario.
-  for (const term of options.terms ?? []) add(term, "");
-
+  /*
+   * Nada de nombres de marca «a secas».
+   *
+   * Tentaba añadir la marca y los ingredientes por si el transcriptor los
+   * escribe mal, pero una entrada así no tiene con qué corregir: la corrección
+   * se busca por **cómo suena**, y sin eso el servicio la rechaza entera con un
+   * 422 —`replaces` es obligatorio y con un elemento como mínimo— dejando el
+   * vídeo sin ningún subtítulo. Que es exactamente lo que pasó.
+   *
+   * Cuando el guion escribe una marca fonética, ya sale de su `sub`.
+   */
   return [...entries]
-    .map(([word, sounds]) => ({ word, replaces: [...sounds] }))
+    .map(([word, sounds]) => ({ word, replaces: [...sounds].slice(0, MAX_REPLACES) }))
     .slice(0, MAX_ENTRIES);
 }
 

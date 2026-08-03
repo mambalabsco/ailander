@@ -21,6 +21,7 @@ import {
   reviewShots,
   type Shot,
   type TimedWord,
+  type ClipBilling,
 } from "./shots.ts";
 
 function shot(values: Partial<Shot> = {}): Shot {
@@ -368,9 +369,25 @@ test("el umbral es el mismo que usa el plan de duraciones", () => {
 const KLING = findVideoModel("kling");
 const GROK = findVideoModel("grok");
 
+/*
+ * Los clips cerrados siguen estando previstos, pero **ya no los usa nadie**.
+ *
+ * Kling los tenía porque las versiones anteriores solo vendían cinco o diez
+ * segundos; la 3.0 acepta de tres a quince y se paga lo que dura. La forma de
+ * cobro se prueba con una tarifa escrita aquí para que siga cubierta el día que
+ * aparezca un modelo que sí cobre así.
+ */
+const CERRADO: ClipBilling = { kind: "buckets", sizes: [5, 10], threshold: 5.5 };
+
 test("con clips cerrados se sube al que quepa", () => {
-  assert.equal(billedSeconds(5.4, KLING.billing), 5);
-  assert.equal(billedSeconds(5.6, KLING.billing), 10, "medio segundo de más paga el doble");
+  assert.equal(billedSeconds(5.4, CERRADO), 5);
+  assert.equal(billedSeconds(5.6, CERRADO), 10, "medio segundo de más paga el doble");
+});
+
+test("ninguno de los modelos actuales cobra por clips cerrados", () => {
+  for (const model of VIDEO_MODELS) {
+    assert.equal(model.billing.kind, "perSecond", `${model.id} dice vender clips cerrados`);
+  }
 });
 
 test("cobrando por segundo no hay salto: se paga lo que dura", () => {
@@ -396,7 +413,7 @@ test("el barato sale unas cuatro veces menos para el mismo anuncio", () => {
 test("cobrando por segundo, ocho tomas dejan de ser mala idea", () => {
   // Con clips cerrados, ocho tomas de 7,5 s tiran veinte segundos. Por segundo,
   // no se tira nada y el número de tomas vuelve a ser una decisión de montaje.
-  assert.equal(shotCountOption(60, 8, KLING.billing).waste, 20);
+  assert.equal(shotCountOption(60, 8, CERRADO).waste, 20);
   assert.equal(shotCountOption(60, 8, GROK.billing).waste, 4);
 });
 
@@ -413,7 +430,11 @@ test("el tope del modelo se respeta: pedir de más lo rechaza el proveedor", () 
   // Grok acepta de 6 a 30 segundos; pedir 40 devuelve un error, no un vídeo.
   assert.equal(billedSeconds(40, GROK.billing, GROK.maxSeconds), 30);
   assert.equal(GROK.maxSeconds, 30);
-  assert.equal(KLING.maxSeconds, 10);
+
+  // Kling 3.0 llega a quince, no a diez: lo de diez era de las versiones
+  // anteriores y hacía pagar un clip entero por medio segundo de más.
+  assert.equal(KLING.maxSeconds, 15);
+  assert.equal(billedSeconds(20, KLING.billing, KLING.maxSeconds), 15);
 });
 
 test("cobrando por segundo, una toma se parte solo si pasa del tope del modelo", () => {

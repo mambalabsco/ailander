@@ -48,20 +48,30 @@ test("la misma palabra en varias tomas se junta en una entrada", () => {
   assert.equal(entries[0].word, "MCT");
 });
 
-test("la marca entra aunque nadie la escriba distinto", () => {
-  // Es lo que más falla: no está en el diccionario del transcriptor.
-  const entries = buildVocabulary({ shots: [], terms: ["Naturox"] });
-
-  assert.deepEqual(entries, [{ word: "Naturox", replaces: [] }]);
-});
-
-test("no se cuela una corrección que no corrige nada", () => {
+/*
+ * Ninguna entrada puede salir sin sustituciones.
+ *
+ * El servicio exige `replaces` con al menos un elemento y devuelve 422 si
+ * falta — y ese 422 deja el vídeo entero **sin ningún subtítulo**, no solo sin
+ * esa corrección. Es el fallo que hubo que arreglar.
+ */
+test("nunca sale una entrada sin sustituciones", () => {
   const entries = buildVocabulary({
-    shots: [{ guion: "colágeno", sub: "Colágeno" }],
+    shots: [
+      { guion: "toma eme ce te", sub: "toma MCT" },
+      { guion: "colágeno", sub: "Colágeno" },
+      { guion: "sin sub ninguno" },
+    ],
   });
 
-  // Se escribe como suena: la entrada no lleva sustitución.
-  assert.deepEqual(entries[0].replaces, []);
+  for (const entry of entries) {
+    assert.ok(entry.replaces.length >= 1, `«${entry.word}» saldría sin sustituciones`);
+  }
+});
+
+test("lo que se escribe como suena no genera entrada", () => {
+  // Cambiar solo la mayúscula no es una corrección que el servicio pueda usar.
+  assert.deepEqual(buildVocabulary({ shots: [{ guion: "colágeno", sub: "Colágeno" }] }), []);
 });
 
 test("se respeta el tope del servicio", () => {
@@ -80,6 +90,15 @@ test("los espacios de más no crean entradas distintas", () => {
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].word, "MCT");
+});
+
+test("se respetan los topes de cada entrada", () => {
+  const largo = "a".repeat(300);
+
+  const entries = buildVocabulary({ shots: [{ guion: largo, sub: `${"b".repeat(300)}` }] });
+
+  assert.ok(entries[0].word.length <= 100);
+  assert.ok(entries[0].replaces.every((item) => item.length <= 100));
 });
 
 test("el idioma sale del mercado, y sin mercado sigue siendo español", () => {

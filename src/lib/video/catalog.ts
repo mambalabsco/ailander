@@ -5,18 +5,18 @@
  *
  * ## Por qué esto es una tabla y no un `if`
  *
- * Cada familia nombra sus cosas distinto. La imagen de referencia es
- * `image_urls` en unos, `image_url` en otros y `reference_image_urls` en otros;
- * el identificador del modelo no coincide con la dirección de su documentación
- * —`pixverse/reference-to-video` se pide como `pixverse-v6/reference-to-video`—
- * y hay quien acepta duración y quien no.
+ * Cada familia nombra y tipa sus cosas distinto, y ninguna avisa cuando se le
+ * manda lo que no entiende:
  *
- * Y equivocarse **no da error**: el campo que no reconoce se ignora y devuelve
- * un vídeo bonito generado sin la referencia. Es el peor tipo de fallo, porque
- * parece que funcionó.
+ * - La imagen de referencia es `image_urls` en unas, `image_url` en otras,
+ *   `reference_image_urls` o `image_references` en otras.
+ * - La duración es **texto** en casi todas y **número** en Seedance y PixVerse.
+ * - Y no todas la aceptan libre: Wan solo vende 5, 10 o 15 segundos, y Hailuo
+ *   6 o 10. Pedirle siete a Hailuo no da un vídeo de siete.
+ * - La resolución tampoco se escribe igual: `720p` en Wan y en Grok, pero
+ *   `768P` en Hailuo.
  *
- * Por eso cada entrada dice literalmente cómo se llama cada campo, y todo está
- * sacado de la documentación de la API, no de suponerlo.
+ * Todo esto está sacado de la documentación de cada modelo, no de suponerlo.
  *
  * ## Los precios que faltan
  *
@@ -38,18 +38,31 @@ export interface VideoGenerator {
   refField: string | null;
   /** Si ese campo es una lista o una sola dirección. */
   refIsArray: boolean;
-  /** Si acepta que se le pida la duración. */
-  hasDuration: boolean;
-  /** Si acepta que se le pida la proporción. */
-  hasAspectRatio: boolean;
-  /** Si acepta que se le pida la resolución. Varios salen a 480p sin pedirla. */
-  hasResolution: boolean;
+  /**
+   * Las duraciones que vende, cuando solo vende unas cuantas.
+   *
+   * Vacío significa que acepta cualquiera entre el mínimo y el máximo. Con la
+   * lista llena, **cualquier otro valor lo rechaza**: no redondea al más
+   * cercano.
+   */
+  durations: number[];
   minSeconds: number;
   maxSeconds: number;
+  /** Si la duración viaja como número. En casi todos va como texto. */
+  durationIsNumber: boolean;
+  /** Si acepta que se le pida la proporción. */
+  hasAspectRatio: boolean;
+  /**
+   * La resolución que hay que pedirle, **escrita como la escribe él**.
+   *
+   * `null` cuando no acepta el campo. Varios salen a 480p sin pedirla, que es
+   * la mitad que los keyframes y en el montaje se nota el salto.
+   */
+  resolution: string | null;
+  /** Cómo se llama el interruptor de sonido propio. `null` si no sabe generarlo. */
+  audioField: string | null;
   /** Dólares por segundo. Cero cuando no está confirmado. */
   usdPerSecond: number;
-  /** Si puede generar sonido él mismo. */
-  nativeAudio: boolean;
   note: string;
 }
 
@@ -61,14 +74,15 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "imagen",
     refField: "image_urls",
     refIsArray: true,
-    hasAspectRatio: true,
-    hasResolution: true,
-    hasDuration: true,
+    durations: [],
     minSeconds: 6,
     maxSeconds: 30,
+    durationIsNumber: false,
+    hasAspectRatio: true,
+    resolution: "720p",
+    audioField: null,
     usdPerSecond: 0.015,
-    nativeAudio: false,
-    note: "El más barato con diferencia y cobra por segundo. Hasta siete referencias.",
+    note: "El más barato con diferencia y el único que llega a 30 s. Duración libre.",
   },
   {
     id: "grok-t2v",
@@ -77,13 +91,14 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "texto",
     refField: null,
     refIsArray: false,
-    hasAspectRatio: true,
-    hasResolution: true,
-    hasDuration: true,
+    durations: [],
     minSeconds: 6,
     maxSeconds: 30,
+    durationIsNumber: false,
+    hasAspectRatio: true,
+    resolution: "720p",
+    audioField: null,
     usdPerSecond: 0.015,
-    nativeAudio: false,
     note: "Sin imagen de partida: se lo inventa del prompt. Barato para probar ideas.",
   },
   {
@@ -93,46 +108,50 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "imagen",
     refField: "image_urls",
     refIsArray: true,
+    durations: [],
+    minSeconds: 3,
+    maxSeconds: 15,
+    durationIsNumber: false,
     hasAspectRatio: true,
-    hasResolution: false,
-    hasDuration: true,
-    minSeconds: 5,
-    maxSeconds: 10,
+    resolution: null,
+    // Kling lo llama así, y en 9:16 el modo estándar ya da 720×1280.
+    audioField: "sound",
     usdPerSecond: 0.07,
-    nativeAudio: false,
-    note: "La mejor imagen. Solo vende clips de cinco o de diez, así que 5,6 s pagan diez.",
+    note: "La mejor imagen y la más cara. Duración libre de 3 a 15 s.",
   },
   {
     id: "kling26-i2v",
-    label: "Kling 2.6 · de imagen, con sonido",
+    label: "Kling 2.6 · de imagen",
     slug: "kling-2.6/image-to-video",
     mode: "imagen",
     refField: "image_urls",
     refIsArray: true,
-    hasAspectRatio: false,
-    hasResolution: false,
-    hasDuration: true,
+    durations: [5, 10],
     minSeconds: 5,
     maxSeconds: 10,
+    durationIsNumber: false,
+    hasAspectRatio: false,
+    resolution: null,
+    audioField: "sound",
     usdPerSecond: 0,
-    nativeAudio: true,
-    note: "Puede generar sonido ambiente él mismo. Útil para planos sin locución encima.",
+    note: "Solo 5 o 10 segundos. Puede generar sonido ambiente él mismo.",
   },
   {
     id: "kling26-t2v",
-    label: "Kling 2.6 · de texto, con sonido",
+    label: "Kling 2.6 · de texto",
     slug: "kling-2.6/text-to-video",
     mode: "texto",
     refField: null,
     refIsArray: false,
-    hasAspectRatio: true,
-    hasResolution: false,
-    hasDuration: true,
+    durations: [5, 10],
     minSeconds: 5,
     maxSeconds: 10,
+    durationIsNumber: false,
+    hasAspectRatio: true,
+    resolution: null,
+    audioField: "sound",
     usdPerSecond: 0,
-    nativeAudio: true,
-    note: "Sin imagen de partida y con sonido propio.",
+    note: "Solo 5 o 10 segundos, sin imagen de partida y con sonido propio.",
   },
   {
     id: "seedance2",
@@ -141,14 +160,16 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "referencias",
     refField: "reference_image_urls",
     refIsArray: true,
+    durations: [],
+    minSeconds: 4,
+    maxSeconds: 15,
+    // Aquí la duración va como **número**, no como texto.
+    durationIsNumber: true,
     hasAspectRatio: false,
-    hasResolution: false,
-    hasDuration: false,
-    minSeconds: 0,
-    maxSeconds: 0,
+    resolution: null,
+    audioField: "generate_audio",
     usdPerSecond: 0,
-    nativeAudio: false,
-    note: "Mantiene un personaje o un producto entre planos con varias referencias.",
+    note: "Mantiene un personaje o un producto entre planos. Duración libre de 4 a 15 s.",
   },
   {
     id: "wan26-i2v",
@@ -157,14 +178,15 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "imagen",
     refField: "image_urls",
     refIsArray: true,
-    hasAspectRatio: false,
-    hasResolution: true,
-    hasDuration: true,
+    durations: [5, 10, 15],
     minSeconds: 5,
-    maxSeconds: 10,
+    maxSeconds: 15,
+    durationIsNumber: false,
+    hasAspectRatio: false,
+    resolution: "720p",
+    audioField: null,
     usdPerSecond: 0,
-    nativeAudio: false,
-    note: "Movimiento suelto y buen detalle. Alternativa a Kling.",
+    note: "Solo 5, 10 o 15 segundos. Movimiento suelto y buen detalle.",
   },
   {
     id: "wan26-t2v",
@@ -173,14 +195,15 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "texto",
     refField: null,
     refIsArray: false,
-    hasAspectRatio: false,
-    hasResolution: true,
-    hasDuration: true,
+    durations: [5, 10, 15],
     minSeconds: 5,
-    maxSeconds: 10,
+    maxSeconds: 15,
+    durationIsNumber: false,
+    hasAspectRatio: false,
+    resolution: "720p",
+    audioField: null,
     usdPerSecond: 0,
-    nativeAudio: false,
-    note: "Sin imagen de partida.",
+    note: "Solo 5, 10 o 15 segundos, sin imagen de partida.",
   },
   {
     id: "hailuo-i2v",
@@ -190,14 +213,17 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     // Aquí es **una sola** dirección, no una lista. Mandar la lista se ignora.
     refField: "image_url",
     refIsArray: false,
-    hasAspectRatio: false,
-    hasResolution: true,
-    hasDuration: true,
+    durations: [6, 10],
     minSeconds: 6,
     maxSeconds: 10,
+    durationIsNumber: false,
+    hasAspectRatio: false,
+    // Con P mayúscula y 768, no 720: es como lo escribe esta familia y el otro
+    // valor lo rechaza.
+    resolution: "768P",
+    audioField: null,
     usdPerSecond: 0,
-    nativeAudio: false,
-    note: "Bueno con caras y con movimiento de cámara. Una sola imagen de partida.",
+    note: "Solo 6 o 10 segundos. Bueno con caras y con movimiento de cámara.",
   },
   {
     id: "pixverse-ref",
@@ -206,14 +232,15 @@ export const VIDEO_GENERATORS: VideoGenerator[] = [
     mode: "referencias",
     refField: "image_references",
     refIsArray: true,
+    durations: [],
+    minSeconds: 5,
+    maxSeconds: 15,
+    durationIsNumber: true,
     hasAspectRatio: false,
-    hasResolution: false,
-    hasDuration: false,
-    minSeconds: 0,
-    maxSeconds: 0,
+    resolution: null,
+    audioField: "generate_audio_switch",
     usdPerSecond: 0,
-    nativeAudio: false,
-    note: "Varias referencias a la vez para mantener el mismo personaje.",
+    note: "Varias referencias para mantener el mismo personaje. De 5 a 15 s.",
   },
 ];
 
@@ -226,12 +253,41 @@ export function acceptsReferences(model: VideoGenerator): boolean {
   return model.refField !== null;
 }
 
+/** Si sabe generar sonido él mismo. */
+export function hasNativeAudio(model: VideoGenerator): boolean {
+  return model.audioField !== null;
+}
+
 /**
- * La entrada que espera ese generador, con sus nombres.
+ * La duración válida más cercana a la que se pide.
  *
- * Aquí está el valor de la tabla: cada campo se pone con el nombre que ese
- * modelo reconoce, y los que no acepta **no se mandan**. Un campo de más se
- * ignora sin avisar y devuelve un vídeo generado sin la referencia.
+ * Con lista cerrada se sube al siguiente que exista en vez de bajar: quien pide
+ * siete segundos necesita que quepa lo que va a contar, y un clip corto de más
+ * deja la frase a medias. Solo se baja cuando lo pedido pasa del máximo.
+ */
+export function nearestDuration(model: VideoGenerator, seconds: number): number {
+  const wanted = Math.round(seconds);
+
+  if (model.durations.length === 0) {
+    return Math.min(model.maxSeconds, Math.max(model.minSeconds, wanted));
+  }
+
+  return model.durations.find((option) => option >= wanted) ?? model.durations[model.durations.length - 1];
+}
+
+/** Cómo describir las duraciones en la pantalla. */
+export function durationLabel(model: VideoGenerator): string {
+  if (model.durations.length === 0) return `De ${model.minSeconds} a ${model.maxSeconds} s`;
+
+  return `Solo ${model.durations.slice(0, -1).join(", ")} o ${model.durations[model.durations.length - 1]} s`;
+}
+
+/**
+ * La entrada que espera ese generador, con sus nombres y sus tipos.
+ *
+ * Aquí está el valor de la tabla: cada campo se pone como ese modelo lo
+ * reconoce, y los que no acepta **no se mandan**. Un campo de más se ignora sin
+ * avisar y devuelve un vídeo generado sin la referencia.
  */
 export function buildInput(
   model: VideoGenerator,
@@ -252,23 +308,19 @@ export function buildInput(
     input[model.refField] = model.refIsArray ? references.slice(0, 7) : references[0];
   }
 
-  if (model.hasDuration && options.seconds) {
-    const seconds = Math.min(
-      model.maxSeconds,
-      Math.max(model.minSeconds, Math.round(options.seconds)),
-    );
+  if (options.seconds) {
+    const seconds = nearestDuration(model, options.seconds);
 
-    // Como cadena: es lo que piden todas las familias comprobadas.
-    input.duration = String(seconds);
+    // Número o texto según el modelo: el tipo equivocado lo rechaza igual que
+    // un valor fuera de lista.
+    input.duration = model.durationIsNumber ? seconds : String(seconds);
   }
 
   if (model.hasAspectRatio && options.aspectRatio) {
     input.aspect_ratio = options.aspectRatio;
   }
 
-  // 720p no es el valor por defecto en varios: sin pedirlo sale a 480p, la mitad
-  // que los keyframes, y en el montaje se nota el salto de nitidez.
-  if (model.hasResolution) input.resolution = "720p";
+  if (model.resolution) input.resolution = model.resolution;
 
   if (model.slug.startsWith("kling-3.0")) {
     input.mode = "std";
@@ -285,7 +337,7 @@ export function buildInput(
    * generado encima se solaparía con ella. En el estudio se enciende a mano
    * cuando el plano va suelto.
    */
-  if (model.nativeAudio) input.sound = options.sound === true;
+  if (model.audioField) input[model.audioField] = options.sound === true;
 
   return input;
 }
@@ -294,9 +346,5 @@ export function buildInput(
 export function estimateCost(model: VideoGenerator, seconds: number): number | null {
   if (model.usdPerSecond <= 0) return null;
 
-  const billed = model.hasDuration
-    ? Math.min(model.maxSeconds, Math.max(model.minSeconds, Math.round(seconds)))
-    : seconds;
-
-  return Number((billed * model.usdPerSecond).toFixed(2));
+  return Number((nearestDuration(model, seconds) * model.usdPerSecond).toFixed(2));
 }
