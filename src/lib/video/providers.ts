@@ -480,3 +480,43 @@ export async function transcribe(audio: Buffer, languageCode?: string): Promise<
   const data = (await response.json()) as { text?: string };
   return typeof data.text === "string" ? data.text.trim() : "";
 }
+
+/* --------------------------------- Música ---------------------------------- */
+
+/**
+ * Genera una cama musical a medida.
+ *
+ * Se pide en fal y no en kie porque el generador de música vive ahí. Devuelve un
+ * WAV, que es justo el formato al que se le puede bajar el volumen sin
+ * decodificar nada — y bajárselo es obligatorio, porque el montaje mezcla sin
+ * control de volumen y una pista a nivel de canción tapa la voz.
+ */
+export async function makeMusic(options: {
+  prompt: string;
+  seconds: number;
+}): Promise<{ url: string }> {
+  const response = await fetch("https://fal.run/cassetteai/music-generator", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key("FAL_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: options.prompt,
+      // El generador acepta de diez a ciento ochenta segundos.
+      duration: Math.max(10, Math.min(180, Math.round(options.seconds))),
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
+    throw new Error(`La música respondió ${response.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const payload = (await response.json()) as { audio_file?: { url?: string } };
+  if (!payload.audio_file?.url) throw new Error("El generador no devolvió ninguna música.");
+
+  return { url: payload.audio_file.url };
+}

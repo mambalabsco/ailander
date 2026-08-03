@@ -6,6 +6,7 @@ import { Button } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import {
   assembleVideoAction,
+  generateMusicAction,
   uploadMusicAction,
   generateClipsAction,
   generateKeyframesAction,
@@ -41,6 +42,7 @@ export function ShotBoard({
 }) {
   const [redo, setRedo] = useState<Set<string>>(new Set());
   const [musicNote, setMusicNote] = useState("");
+  const [musicMood, setMusicMood] = useState("");
   const [isPending, startTransition] = useTransition();
   const musicRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -182,9 +184,39 @@ export function ShotBoard({
               accept="audio/*"
               className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
             />
-            <span className="text-xs text-amber-700 dark:text-amber-400">
-              Súbela ya baja de volumen: no hay control de volumen y a nivel normal tapa la voz.
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Si la subes tú, que venga ya baja: el montaje mezcla sin control de volumen.
             </span>
+          </label>
+
+          {/*
+            Generada a medida y ya calibrada.
+
+            Es lo que evita el único fallo que hace inútil un vídeo entero: una
+            cama a volumen de canción tapa la locución. Generándola aquí se le
+            baja el volumen antes de guardarla.
+          */}
+          <GenerateButton
+            variant="secondary"
+            action={() =>
+              generateMusicAction({ videoId: video.id, productId, mood: musicMood })
+            }
+            label={video.musicUrl ? "Generar otra" : "Generar música"}
+            disabled={!providers.compose}
+            disabledReason={!providers.compose ? "Falta FAL_KEY" : undefined}
+            hint="Instrumental, del largo de la voz y al 12 % de volumen para que no la tape. Céntimos."
+          />
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Qué aire quieres (opcional)
+            </span>
+            <input
+              value={musicMood}
+              onChange={(event) => setMusicMood(event.target.value)}
+              placeholder="tenso al principio, esperanzador al final"
+              className="w-64 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
           </label>
 
           <Button

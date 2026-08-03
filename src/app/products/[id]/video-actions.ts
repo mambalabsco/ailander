@@ -32,7 +32,15 @@ import {
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
 import { drawCaptions } from "@/lib/video/caption-image";
-import { animate, compose, keyframe, listVoices, speak } from "@/lib/video/providers";
+import { MUSIC_GAIN, attenuateWav, buildMusicPrompt } from "@/lib/video/wav-gain";
+import {
+  animate,
+  compose,
+  keyframe,
+  listVoices,
+  makeMusic,
+  speak,
+} from "@/lib/video/providers";
 import { uploadVideoAsset } from "@/lib/data/video-assets";
 import type { JobOutcome } from "@/lib/background";
 import type { LaunchResult } from "@/types/jobs";
@@ -656,6 +664,72 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
   }
 }
 
+/**
+ * Genera la música de fondo a medida del anuncio.
+ *
+ * Se le baja el volumen **antes de guardarla**, no al mezclar: el montaje mezcla
+ * sin control de volumen y una pista a nivel de canción tapa la voz, que es el
+ * único fallo que hace inútil un vídeo entero.
+ */
+export async function generateMusicAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const videoId = readText(raw.videoId);
+  const productId = readText(raw.productId);
+  const mood = readText(raw.mood);
+
+  if (!videoId || !productId) throw new Error("Falta el vídeo.");
+  await guard();
+
+  const video = await readVideo(videoId);
+  if (!video) throw new Error("Ese vídeo ya no existe.");
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  // La duración sale de la voz: una cama más corta deja el final en silencio.
+  const seconds = Math.max(10, Math.ceil(video.voiceSeconds || 30));
+
+  return runInBackground({
+    productId,
+    kind: "imagenes",
+    label: `Música · ${video.title}`,
+    resume: { videoId, productId, mood },
+    work: async (report) => {
+      await report(`Componiendo ${seconds} s de cama musical`);
+
+      const { url } = await makeMusic({
+        prompt: buildMusicPrompt({
+          productName: product.name,
+          audience: product.targetAudience || "el público objetivo",
+          mood,
+        }),
+        seconds,
+      });
+
+      await report("Bajándole el volumen para que no tape la voz");
+
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error("No se pudo descargar la música generada.");
+
+      const quiet = attenuateWav(new Uint8Array(await response.arrayBuffer()));
+
+      const stored = await uploadVideoAsset({
+        videoId,
+        name: "musica.wav",
+        data: Buffer.from(quiet),
+        contentType: "audio/wav",
+      });
+
+      await updateVideo(videoId, { musicUrl: stored });
+
+      return {
+        summary: `Cama de ${seconds} s puesta, al ${Math.round(MUSIC_GAIN * 100)} % de volumen para que no tape la voz.`,
+      };
+    },
+  });
+}
+
 /* ------------------------------ 5 · Montaje -------------------------------- */
 
 /**
@@ -728,6 +802,9 @@ export async function assembleVideoAction(
       const timeline = buildTimeline({
         captions,
         musicUrl: video.musicUrl || undefined,
+        // Sin esto, la imagen se acaba con el último corte y el resto queda en
+        // negro mientras la voz sigue sonando.
+        voiceSeconds: video.voiceSeconds || undefined,
         cuts: video.shots
           .filter((shot) => shot.cutStart !== null && shot.cutEnd !== null)
           .map((shot) => ({ n: shot.n, start: shot.cutStart!, end: shot.cutEnd! })),

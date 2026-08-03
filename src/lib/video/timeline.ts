@@ -63,6 +63,15 @@ export interface TimelineInput {
   clips: Record<string, string>;
   /** La voz completa, la misma que dio los cortes. */
   voiceUrl: string;
+  /**
+   * Lo que dura la voz de verdad.
+   *
+   * Es lo que impide que el vídeo acabe en negro. La imagen se acaba cuando
+   * acaba el último corte, pero la voz sigue sonando hasta el final del audio:
+   * todo ese rato quedaba a oscuras. Y si a la mayoría de las tomas les faltaban
+   * los tiempos, «ese rato» era casi el vídeo entero.
+   */
+  voiceSeconds?: number;
   /** Los subtítulos ya dibujados, con su tiempo. */
   captions?: { url: string; start: number; end: number }[];
   /**
@@ -153,7 +162,18 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
      * Una toma que se cayó no deja hueco: la anterior se estira por encima,
      * porque el siguiente corte se calcula contra la siguiente **que sí está**.
      */
-    const end = index + 1 < usable.length ? usable[index + 1].start : cut.end;
+    /*
+     * Hasta el arranque de la siguiente; la última, hasta que se calla la voz.
+     *
+     * Estirar la última es lo que quita el negro del final. Una imagen sostenida
+     * de más se lee como un plano largo, que es una decisión de montaje normal;
+     * el negro se lee como que el vídeo se rompió.
+     */
+    const end =
+      index + 1 < usable.length
+        ? usable[index + 1].start
+        : Math.max(cut.end, input.voiceSeconds ?? 0);
+
     const duration = Math.max(0, end - start);
 
     if (duration <= 0) continue;
@@ -172,6 +192,9 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
       url: caption.url,
     }));
 
+  // La voz manda sobre la duración total: si sigue sonando, el vídeo sigue.
+  const total = Math.max(cursor, input.voiceSeconds ?? 0);
+
   return {
     tracks: [
       { id: "broll", type: "video", keyframes: video },
@@ -185,7 +208,7 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
       {
         id: "voz",
         type: "audio",
-        keyframes: [{ timestamp: 0, duration: toMs(cursor), url: input.voiceUrl }],
+        keyframes: [{ timestamp: 0, duration: toMs(total), url: input.voiceUrl }],
       },
 
       /*
@@ -199,7 +222,7 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
             {
               id: "musica",
               type: "audio" as const,
-              keyframes: [{ timestamp: 0, duration: toMs(cursor), url: input.musicUrl }],
+              keyframes: [{ timestamp: 0, duration: toMs(total), url: input.musicUrl }],
             },
           ]
         : []),
@@ -209,6 +232,6 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
         : []),
     ],
     missing,
-    seconds: Number(cursor.toFixed(2)),
+    seconds: Number(total.toFixed(2)),
   };
 }

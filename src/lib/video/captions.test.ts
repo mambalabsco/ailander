@@ -12,9 +12,9 @@ test("una frase se parte en trozos que se leen al ritmo de la voz", () => {
     end: 4,
   });
 
-  assert.equal(pieces.length, 2);
-  assert.equal(pieces[0].text, "Duermes ocho horas y");
-  assert.equal(pieces[1].text, "despiertas cansada otra vez");
+  assert.equal(pieces.length, 3);
+  assert.equal(pieces[0].text, "Duermes ocho horas");
+  assert.equal(pieces[1].text, "y despiertas cansada");
 });
 
 test("los trozos cubren el tramo entero y no se solapan", () => {
@@ -26,12 +26,13 @@ test("los trozos cubren el tramo entero y no se solapan", () => {
 });
 
 test("el último trozo dura a proporción de lo que lleva", () => {
-  // A partes iguales, un trozo de una palabra duraría lo mismo que uno de
-  // cuatro y se quedaría clavado en pantalla.
-  const pieces = captionPieces({ written: "una dos tres cuatro cinco", start: 0, end: 5 });
+  // A partes iguales, un trozo de una palabra duraría lo mismo que uno de tres y
+  // se quedaría clavado en pantalla.
+  const pieces = captionPieces({ written: "una dos tres cuatro", start: 0, end: 4 });
 
-  assert.equal(pieces[0].end, 4);
-  assert.equal(pieces[1].start, 4);
+  assert.equal(pieces[0].end, 3, "las tres primeras ocupan tres cuartos");
+  assert.equal(pieces[1].start, 3);
+  assert.equal(pieces[1].end, 4);
 });
 
 test("el texto escrito manda sobre el hablado", () => {
@@ -56,7 +57,7 @@ test("el tamaño de trozo se puede ajustar", () => {
   const pieces = captionPieces({ written: "una dos tres cuatro", start: 0, end: 4, perLine: 2 });
 
   assert.equal(pieces.length, 2);
-  assert.equal(WORDS_PER_LINE, 4);
+  assert.equal(WORDS_PER_LINE, 3);
 });
 
 /* --------------------------------- El dibujo ------------------------------- */
@@ -69,11 +70,12 @@ test("el subtítulo lleva borde: sin él desaparece sobre fondo claro", () => {
   assert.match(svg, /paint-order="stroke fill"/);
 });
 
-test("va anclado abajo, donde no tapa la cara de quien habla", () => {
+test("va a dos tercios: abajo del todo lo tapa la interfaz de la red", () => {
   const svg = captionSvg({ text: "Hola", width: 720, height: 1280, fontSize: 40 });
-  const y = Number(/y="(\d+)"/.exec(svg)![1]);
+  const y = Number(/<tspan[^>]*y="(\d+)"/.exec(svg)![1]);
 
-  assert.ok(y > 1280 * 0.85, `salió en ${y}`);
+  // A dos tercios, no pegado abajo: esa franja la tapan la interfaz y el pulgar.
+  assert.ok(y > 1280 * 0.6 && y < 1280 * 0.85, `salió en ${y}`);
 });
 
 test("un texto con signos raros no rompe el dibujo", () => {

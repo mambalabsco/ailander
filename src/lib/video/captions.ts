@@ -20,12 +20,19 @@
  * ## Se parte por trozos cortos
  *
  * Una frase entera en pantalla se lee de un vistazo y deja de acompañar a la
- * voz. Tres o cuatro palabras cada vez van al ritmo de lo que se oye, que es lo
- * que hace que se sigan sin esfuerzo.
+ * voz. Dos o tres palabras cada vez van al ritmo de lo que se oye, que es lo que
+ * hace que se sigan sin esfuerzo.
  */
 
-/** Palabras por trozo. Cuatro es lo que cabe en una línea de vídeo vertical. */
-export const WORDS_PER_LINE = 4;
+/**
+ * Palabras por trozo.
+ *
+ * Tres, no cuatro. El subtítulo de vídeo vertical que funciona va **grande y
+ * corto**: dos o tres palabras enormes que cambian al ritmo de la voz. Con
+ * cuatro ya hay que encogerlo para que quepa, y encogerlo es lo que lo convierte
+ * en un subtítulo de película que nadie mira.
+ */
+export const WORDS_PER_LINE = 3;
 
 export interface CaptionPiece {
   text: string;
@@ -83,11 +90,19 @@ export function captionPieces(options: {
 }
 
 /**
- * El SVG de un trozo de subtítulo.
+ * El SVG de un trozo de subtítulo, al estilo de los vídeos verticales.
  *
- * Se dibuja con un borde grueso del color de fondo por debajo del relleno. Sin
- * él, un subtítulo blanco sobre una escena clara desaparece — y las escenas
- * claras son la mitad de un anuncio de suplementos.
+ * Cuatro decisiones y cada una tapa un fallo distinto:
+ *
+ * - **Grande y en mayúsculas.** Ocupa el ancho de la pantalla. Un subtítulo
+ *   pequeño de película se lee si uno se fija; el de un anuncio tiene que leerse
+ *   sin querer, mientras se pasa de largo.
+ * - **Borde grueso del color del fondo.** Sin él, el blanco sobre una escena
+ *   clara desaparece — y media escena de un anuncio de suplementos es clara.
+ * - **Sombra debajo.** Separa el texto de la imagen aunque el borde coincida en
+ *   tono con lo que hay detrás.
+ * - **A dos tercios de altura, no pegado abajo.** En el móvil, la franja de
+ *   abajo la tapan la interfaz de la red social y el pulgar.
  *
  * El texto se escapa: un guion con un `&` o un `<` rompería el SVG entero y la
  * imagen saldría vacía sin que nada avisara.
@@ -99,16 +114,21 @@ export function captionSvg(options: {
   fontSize?: number;
   color?: string;
   strokeColor?: string;
+  /** El color de las palabras que se quieren destacar. */
+  accent?: string;
+  upper?: boolean;
 }): string {
-  const size = options.fontSize ?? Math.round(options.width * 0.062);
+  const size = options.fontSize ?? Math.round(options.width * 0.105);
   const color = options.color ?? "#ffffff";
   const stroke = options.strokeColor ?? "#000000";
 
-  const lines = wrap(options.text, 18);
-  const lineHeight = Math.round(size * 1.25);
+  const text = options.upper === false ? options.text : options.text.toUpperCase();
 
-  // Ancladas abajo, que es donde se leen sin tapar la cara de quien habla.
-  const first = options.height - lineHeight * lines.length - Math.round(size * 0.6);
+  const lines = wrap(text, 14);
+  const lineHeight = Math.round(size * 1.12);
+
+  // A dos tercios: abajo del todo lo tapan la interfaz de la red y el pulgar.
+  const first = Math.round(options.height * 0.68) - Math.round((lineHeight * lines.length) / 2);
 
   const tspans = lines
     .map(
@@ -118,9 +138,16 @@ export function captionSvg(options: {
     .join("");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${options.width}" height="${options.height}">
-  <text text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${size}" font-weight="700"
-        fill="${color}" stroke="${stroke}" stroke-width="${Math.max(2, Math.round(size * 0.14))}"
-        paint-order="stroke fill">${tspans}</text>
+  <defs>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="${Math.round(size * 0.06)}" stdDeviation="${Math.round(size * 0.05)}" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <text text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif"
+        font-size="${size}" font-weight="900" letter-spacing="${Math.round(size * 0.01)}"
+        fill="${options.accent ?? color}" stroke="${stroke}"
+        stroke-width="${Math.max(4, Math.round(size * 0.16))}"
+        paint-order="stroke fill" filter="url(#s)">${tspans}</text>
 </svg>`;
 }
 

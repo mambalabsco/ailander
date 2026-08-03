@@ -184,3 +184,25 @@ test("los cortes desordenados se colocan igual", () => {
     ["https://cdn/1.mp4", "https://cdn/2.mp4"],
   );
 });
+
+test("la última toma se estira hasta que se calla la voz: nunca queda negro", () => {
+  /*
+   * La imagen acababa con el último corte y la voz seguía sonando: todo ese rato
+   * quedaba a oscuras. Con la mayoría de tomas sin tiempos, «ese rato» era casi
+   * el vídeo entero — se veía el primer clip y después negro.
+   */
+  const result = buildTimeline({
+    cuts: [{ n: "01", start: 0, end: 4 }],
+    clips: { "01": "https://cdn/1.mp4" },
+    voiceUrl: VOZ,
+    voiceSeconds: 30,
+  });
+
+  const [uno] = result.tracks[0].keyframes;
+
+  assert.equal(uno.duration, 30000, "cubre toda la voz");
+  assert.equal(result.seconds, 30);
+
+  const audio = result.tracks.find((track) => track.id === "voz");
+  assert.equal(audio?.keyframes[0].duration, 30000, "y la voz suena entera");
+});
