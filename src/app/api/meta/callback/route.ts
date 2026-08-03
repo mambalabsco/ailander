@@ -6,6 +6,7 @@ import { peekStore, readState } from "@/lib/meta-app";
 import { listAccounts } from "@/lib/meta-ads";
 import { saveAdAccount, saveAdCredentials } from "@/lib/data/analytics";
 import { resolveMetaApp } from "@/lib/data/meta-apps";
+import { saveMetaLogin, setStoreMetaLogin } from "@/lib/data/meta-logins";
 import { logError } from "@/lib/data/errors";
 
 /**
@@ -19,7 +20,14 @@ import { logError } from "@/lib/data/errors";
 export const dynamic = "force-dynamic";
 
 function back(origin: string, storeId: string, params: Record<string, string>): NextResponse {
-  const url = new URL(`${origin}/datos/conexiones`);
+  /*
+   * Sin tienda se vuelve a Configuración, que es de donde se vino.
+   *
+   * Devolver siempre a Conexiones dejaría a quien inició sesión desde
+   * Configuración en una pantalla que no había pedido, preguntándose si
+   * funcionó.
+   */
+  const url = new URL(`${origin}${storeId ? "/datos/conexiones" : "/settings"}`);
   if (storeId) url.searchParams.set("tienda", storeId);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   return NextResponse.redirect(url);
@@ -91,6 +99,29 @@ export async function GET(request: Request) {
     if (missing.length > 0) {
       return back(origin, storeId, { meta: "sin-permiso", detalle: missing.join(", ") });
     }
+
+    /*
+     * La sesión se guarda **una vez**, no dentro de cada tienda.
+     *
+     * El token es de la persona: con él se ven las cuentas de todos sus Business
+     * Manager. Guardarlo por tienda obligaba a repetir el mismo login en cada
+     * una, y a repetirlo otra vez en todas cada sesenta días.
+     */
+    const loginId = await saveMetaLogin({
+      name: token.userName ?? "Perfil de Facebook",
+      accessToken: token.accessToken,
+      expiresAt: token.expiresAt,
+      scopes: token.scopes,
+      metaAppId: null,
+    });
+
+    // Sin tienda se venía de Configuración: la sesión ya está y no hay dónde
+    // meter cuentas todavía.
+    if (!storeId) {
+      return back(origin, "", { meta: "sesion", detalle: token.userName ?? "" });
+    }
+
+    await setStoreMetaLogin(storeId, loginId);
 
     await saveAdCredentials(storeId, "facebook", {
       accessToken: token.accessToken,

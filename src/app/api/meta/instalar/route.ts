@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findStore } from "@/lib/store-registry";
-import { resolveMetaApp } from "@/lib/data/meta-apps";
+import { resolveMetaApp, resolveMetaAppById } from "@/lib/data/meta-apps";
 import { requireContext } from "@/lib/supabase/session";
 import { siteOrigin } from "@/lib/site-url";
 import { authorizeUrl } from "@/lib/meta-oauth";
@@ -25,16 +25,30 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const storeId = url.searchParams.get("tienda") ?? "";
 
-  const store = await findStore(storeId);
-  if (!store) return NextResponse.json({ error: "No se encontró la tienda." }, { status: 404 });
+  /*
+   * Sin tienda también vale: se inicia sesión desde Configuración.
+   *
+   * El token es de la persona y sirve para todas las tiendas, así que obligar a
+   * elegir una tienda para iniciar sesión era pedir el mismo login cinco veces
+   * —y otras cinco cada sesenta días, cuando caduca—.
+   *
+   * Con tienda se sigue admitiendo: es el camino de quien ya lo tenía así, y
+   * además deja traer sus cuentas en el mismo paso.
+   */
+  if (storeId) {
+    const store = await findStore(storeId);
+    if (!store) return NextResponse.json({ error: "No se encontró la tienda." }, { status: 404 });
+  }
 
   /*
-   * La app de esta tienda, y si no tiene, la del entorno.
+   * La app: la de esta tienda, la de por defecto, o la del entorno.
    *
-   * Cada Business Manager en un perfil de Facebook distinto necesita su propia
-   * app: la del entorno solo sirve para el primero.
+   * Cada Business Manager en un perfil de Facebook distinto puede necesitar su
+   * propia app, y sin tienda se usa la de por defecto.
    */
-  const app = await resolveMetaApp(storeId);
+  const app = url.searchParams.get("app")
+    ? await resolveMetaAppById(url.searchParams.get("app") ?? "")
+    : await resolveMetaApp(storeId);
 
   if (!app) {
     return NextResponse.json(
@@ -60,7 +74,7 @@ export async function GET(request: Request) {
     authorizeUrl({
       appId: app.appId,
       redirectUri: `${origin}/api/meta/callback`,
-      state: signState(store.id, app.appSecret),
+      state: signState(storeId, app.appSecret),
       configId: app.configId,
     }),
   );

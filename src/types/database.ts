@@ -628,6 +628,8 @@ type AdCredentialRow = {
   config_id: string | null;
   /** Meta: con qué app dada de alta se conecta esta tienda. */
   meta_app_id: string | null;
+  /** Meta: con qué sesión de Facebook lee su gasto. */
+  meta_login_id: string | null;
   /** Nulo = no caduca. Es el caso de Google con la app publicada. */
   token_expires_at: string | null;
   scopes: string[];
@@ -849,6 +851,27 @@ type MetaAppRow = {
   /** Nunca sale de aquí: la pantalla solo sabe si está puesto. */
   app_secret: string;
   config_id: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Una sesión de Facebook.
+ *
+ * El token es de la persona, no de una tienda: con él se ven las cuentas de
+ * todos sus Business Manager. Por eso vive aparte y las tiendas la apuntan.
+ */
+type MetaLoginRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  /** No sale de aquí: a la pantalla van el nombre y la caducidad. */
+  access_token: string;
+  /** `null` es «no caduca», no «caducó en 1970». */
+  token_expires_at: string | null;
+  scopes: string[];
+  meta_app_id: string | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -1198,6 +1221,11 @@ export type Database = {
         VideoRow,
         Insertable<VideoRow, Exclude<keyof VideoRow, "user_id" | "product_id" | "title">>,
         [Belongs<"product_id", "products">]
+      >;
+      meta_logins: Table<
+        MetaLoginRow,
+        Insertable<MetaLoginRow, Exclude<keyof MetaLoginRow, "user_id" | "access_token">>,
+        [Belongs<"meta_app_id", "meta_apps">]
       >;
       meta_apps: Table<
         MetaAppRow,

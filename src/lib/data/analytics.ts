@@ -578,6 +578,8 @@ export interface AdCredentials {
   configId?: string;
   /** Meta: con qué app dada de alta se conecta. Vacío es la de por defecto. */
   metaAppId?: string;
+  /** Meta: con qué sesión de Facebook lee su gasto. */
+  metaLoginId?: string;
   /**
    * Cuándo caduca el permiso. `null` significa «no caduca».
    *
@@ -621,6 +623,7 @@ export async function readAdCredentials(
     loginCustomerId: data.login_customer_id ?? undefined,
     configId: data.config_id ?? undefined,
     metaAppId: data.meta_app_id ?? undefined,
+    metaLoginId: data.meta_login_id ?? undefined,
     expiresAt: data.token_expires_at ? new Date(data.token_expires_at) : null,
     scopes: data.scopes ?? [],
     accountName: data.account_name ?? undefined,

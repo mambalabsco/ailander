@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SelectField, TextField } from "@/components/ui";
 import { RANGE_LABELS, RANGE_PRESETS } from "@/lib/date-range";
-import { syncStoreAction } from "@/app/datos/actions";
+import { syncSpendAction, syncStoreAction } from "@/app/datos/actions";
 
 /**
  * Tienda y rango, en la barra de direcciones.
@@ -140,6 +140,31 @@ export function ReportControls({
           className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-40 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
         >
           {isPending ? "…" : "Sincronizar"}
+        </button>
+
+        {/*
+          Solo el gasto, sin los pedidos.
+
+          Los pedidos de tres meses son cientos de peticiones paginadas a Shopify
+          y tardan minutos; el gasto son unas pocas llamadas. Después de activar
+          una cuenta o cambiar un filtro, repetirlo todo para ver el efecto es
+          esperar por nada. Y no depende de Shopify, así que sirve aunque la
+          tienda no esté conectada.
+        */}
+        <button
+          type="button"
+          disabled={isPending}
+          title={`Trae solo el gasto publicitario del ${syncedRange.from} al ${syncedRange.to}`}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await syncSpendAction(storeId, syncedRange.from, syncedRange.to);
+              if (!result.started) window.alert(result.message);
+              router.refresh();
+            })
+          }
+          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          {isPending ? "…" : "Solo el gasto"}
         </button>
       </div>
     </div>

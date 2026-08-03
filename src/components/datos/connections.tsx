@@ -4,8 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField, TextField } from "@/components/ui";
 import {
+  importAccountsAction,
   setFiltersAction,
   setStoreMetaAppAction,
+  setStoreMetaLoginAction,
   setLoginCustomerIdAction,
   toggleAccountAction,
 } from "@/app/datos/actions";
@@ -131,6 +133,8 @@ export function MetaConnect({
   configured,
   apps,
   chosenApp,
+  logins,
+  chosenLogin,
 }: {
   storeId: string;
   state: ProviderState;
@@ -140,6 +144,9 @@ export function MetaConnect({
   apps: { id: string; name: string; isDefault: boolean }[];
   /** Cuál eligió esta tienda. Vacío es la de por defecto. */
   chosenApp: string;
+  /** Las sesiones de Facebook, sin tokens. */
+  logins: { id: string; name: string; isDefault: boolean }[];
+  chosenLogin: string;
 }) {
   const usable = configured || apps.length > 0;
 
@@ -177,70 +184,110 @@ export function MetaConnect({
         plataforma no puede crear, pausar ni modificar nada en tus campañas.
       </p>
 
-      <MetaAppPicker storeId={storeId} apps={apps} chosen={chosenApp} />
+      <MetaStorePanel
+        storeId={storeId}
+        apps={apps}
+        chosenApp={chosenApp}
+        logins={logins}
+        chosenLogin={chosenLogin}
+      />
     </div>
   );
 }
 
 /**
- * Con qué app de Meta se conecta esta tienda.
+ * Lo que esta tienda decide sobre Meta: con qué sesión, con qué app, y sus cuentas.
  *
- * Un desplegable y no un formulario: las apps se dan de alta una vez en
- * Configuración, y aquí solo se elige. Lo normal es no tocarlo nunca — la de por
- * defecto sirve para todos los Business Manager a los que llegue el perfil de
- * Facebook con el que inicias sesión.
+ * Los dos desplegables **solo aparecen cuando hay más de una** opción. Lo normal
+ * es una sesión y una app para todo —un perfil de Facebook ve las cuentas de
+ * todos sus Business Manager— y un desplegable de una sola opción solo invita a
+ * preguntarse qué hace.
  */
-function MetaAppPicker({
+function MetaStorePanel({
   storeId,
   apps,
-  chosen,
+  chosenApp,
+  logins,
+  chosenLogin,
 }: {
   storeId: string;
   apps: { id: string; name: string; isDefault: boolean }[];
-  chosen: string;
+  chosenApp: string;
+  logins: { id: string; name: string; isDefault: boolean }[];
+  chosenLogin: string;
 }) {
   const router = useRouter();
   const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  // Con una sola app no hay nada que elegir, y un desplegable de una opción
-  // solo invita a preguntarse qué hace.
-  if (apps.length < 2) return null;
+  const run = (work: Promise<{ message?: string }>) => {
+    setBusy(true);
+    void work
+      .then((result) => {
+        if (result.message) setNote(result.message);
+        router.refresh();
+      })
+      .finally(() => setBusy(false));
+  };
 
   return (
-    <div className="space-y-1 border-t border-slate-200 pt-3 dark:border-slate-800">
-      <label className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-slate-500 dark:text-slate-400">App de Meta</span>
+    <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-3">
+        {logins.length > 1 ? (
+          <label className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500 dark:text-slate-400">Sesión</span>
+            <SelectField
+              value={chosenLogin}
+              disabled={busy}
+              onChange={(event) => run(setStoreMetaLoginAction(storeId, event.target.value))}
+              className="min-w-48"
+            >
+              <option value="">La de por defecto</option>
+              {logins.map((login) => (
+                <option key={login.id} value={login.id}>
+                  {login.name}
+                  {login.isDefault ? " (por defecto)" : ""}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+        ) : null}
 
-        <SelectField
-          value={chosen}
-          disabled={saving}
-          onChange={(event) => {
-            const value = event.target.value;
-            setSaving(true);
+        {apps.length > 1 ? (
+          <label className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500 dark:text-slate-400">App</span>
+            <SelectField
+              value={chosenApp}
+              disabled={busy}
+              onChange={(event) => run(setStoreMetaAppAction(storeId, event.target.value))}
+              className="min-w-44"
+            >
+              <option value="">La de por defecto</option>
+              {apps.map((app) => (
+                <option key={app.id} value={app.id}>
+                  {app.name}
+                  {app.isDefault ? " (por defecto)" : ""}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+        ) : null}
 
-            void setStoreMetaAppAction(storeId, value)
-              .then((result) => {
-                setNote(result.message);
-                router.refresh();
-              })
-              .finally(() => setSaving(false));
-          }}
-          className="min-w-52"
-        >
-          <option value="">La de por defecto</option>
-          {apps.map((app) => (
-            <option key={app.id} value={app.id}>
-              {app.name}
-              {app.isDefault ? " (por defecto)" : ""}
-            </option>
-          ))}
-        </SelectField>
-      </label>
+        {/*
+          Traer las cuentas es un paso aparte desde que la sesión es compartida:
+          antes solo pasaba al iniciar sesión, así que una tienda nueva se
+          quedaba sin cuentas y la única salida era rehacer el login.
+        */}
+        <Button disabled={busy} onClick={() => run(importAccountsAction(storeId))}>
+          {busy ? "Trayendo…" : "Traer las cuentas"}
+        </Button>
+      </div>
+
+      {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Solo cámbiala si esta tienda entra con un perfil de Facebook que no tiene rol en la app
-        de por defecto. {note}
+        La sesión y la app se configuran una vez en <strong>Configuración</strong>. Aquí solo se
+        elige, y casi nunca hace falta.
       </p>
     </div>
   );
@@ -364,6 +411,7 @@ const MESSAGES: Record<string, { ok: boolean; text: string }> = {
     ok: false,
     text: "Falta configurar la app en el servidor. Está en docs/anuncios.md.",
   },
+  sesion: { ok: true, text: "Sesión iniciada. Ya vale para todas las tiendas." },
   error: { ok: false, text: "No se pudo conectar." },
 };
 

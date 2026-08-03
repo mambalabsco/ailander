@@ -20,6 +20,7 @@ import {
   saveOrders,
   saveShippingZone,
   saveSpend,
+  saveAdAccount,
   setAccountActive,
   setAccountFilters,
   setLoginCustomerId,
@@ -32,6 +33,13 @@ import {
   saveMetaApp,
   setStoreMetaApp,
 } from "@/lib/data/meta-apps";
+import {
+  deleteMetaLogin,
+  refreshLoginToken,
+  resolveMetaLogin,
+  setDefaultMetaLogin,
+  setStoreMetaLogin,
+} from "@/lib/data/meta-logins";
 import { clearFinishedJobs } from "@/lib/data/jobs";
 import type { LaunchResult } from "@/types/jobs";
 
@@ -149,7 +157,14 @@ export async function syncStoreAction(
       const accounts = (await listAdAccounts(storeId)).filter((account) => account.active);
       let spendRows = 0;
 
-      let facebook = await readAdCredentials(storeId, "facebook");
+      /*
+       * La sesión de Facebook, que ya no es de la tienda sino del perfil.
+       *
+       * Se cae al token viejo guardado en la propia tienda para las que se
+       * conectaron antes de que las sesiones existieran: sin eso dejarían de
+       * leer gasto de golpe al actualizar.
+       */
+      let facebook = await resolveMetaLogin(storeId);
       const googleCreds = await readAdCredentials(storeId, "google");
 
       /*
@@ -161,16 +176,23 @@ export async function syncStoreAction(
        * protege es guardar la caducidad y que la interfaz avise —y por eso el
        * fallo aquí no interrumpe nada, solo se anota—.
        */
-      if (facebook?.accessToken && metaOauth.shouldRenew(facebook.expiresAt ?? null)) {
-        // La app de esta tienda: el re-canje tiene que ir contra la que emitió
-        // el token, no contra otra si son distintas.
+      if (facebook && metaOauth.shouldRenew(facebook.expiresAt)) {
+        // El re-canje tiene que ir contra la app que emitió el token.
         const app = await resolveMetaApp(storeId);
 
         if (app) {
           try {
-            const renewed = await metaOauth.exchangeForLongLived(app, facebook.accessToken);
-            await refreshAdToken(storeId, "facebook", renewed.accessToken, renewed.expiresAt);
-            facebook = { ...facebook, accessToken: renewed.accessToken, expiresAt: renewed.expiresAt };
+            const renewed = await metaOauth.exchangeForLongLived(app, facebook.token);
+
+            // La sesión es compartida: renovarla aquí la renueva para todas las
+            // tiendas que la usen, que es justo lo que se buscaba.
+            if (facebook.loginId) {
+              await refreshLoginToken(facebook.loginId, renewed.accessToken, renewed.expiresAt);
+            } else {
+              await refreshAdToken(storeId, "facebook", renewed.accessToken, renewed.expiresAt);
+            }
+
+            facebook = { ...facebook, token: renewed.accessToken, expiresAt: renewed.expiresAt };
 
             const left = metaOauth.daysLeft(renewed.expiresAt);
             notes.push(
@@ -184,7 +206,7 @@ export async function syncStoreAction(
         }
       }
 
-      if (facebook?.accessToken && metaOauth.isExpired(facebook.expiresAt ?? null)) {
+      if (facebook && metaOauth.isExpired(facebook.expiresAt)) {
         // Se dice en vez de leer cero en silencio, que es el fallo que hace que
         // el beneficio se dispare sin motivo aparente.
         notes.push("el permiso de Meta caducó: el gasto de Meta no se ha traído");
@@ -193,9 +215,9 @@ export async function syncStoreAction(
       for (const account of accounts) {
         try {
           if (account.provider === "facebook") {
-            if (!facebook?.accessToken) continue;
-            if (metaOauth.isExpired(facebook.expiresAt ?? null)) continue;
-            const rows = await meta.readDailySpend(facebook.accessToken, account.externalId, {
+            if (!facebook) continue;
+            if (metaOauth.isExpired(facebook.expiresAt)) continue;
+            const rows = await meta.readDailySpend(facebook.token, account.externalId, {
               from,
               to,
             });
@@ -240,6 +262,104 @@ export async function syncStoreAction(
       } else {
         notes.push(`${spendRows} filas de gasto`);
       }
+
+      return { summary: notes.join(" · ") };
+    },
+  });
+}
+
+/**
+ * Trae **solo** el gasto publicitario, sin tocar los pedidos.
+ *
+ * Los pedidos de tres meses son cientos de peticiones paginadas a Shopify y
+ * tardan; el gasto son unas pocas. Cuando lo que se acaba de cambiar es un
+ * filtro o una cuenta activa, repetir la sincronización entera para ver el
+ * efecto es esperar varios minutos por nada.
+ *
+ * Los filtros se aplican **al leer**, así que cambiar uno no necesita ni esto:
+ * recalcula el pasado solo. Este botón hace falta cuando lo que falta son las
+ * filas de gasto — una cuenta recién activada, o un rango que nunca se trajo.
+ */
+export async function syncSpendAction(
+  storeId: string,
+  from: string,
+  to: string,
+): Promise<LaunchResult> {
+  const store = await findStore(storeId);
+  if (!store) return { started: false, message: "No se encontró la tienda." };
+
+  if (!from || !to || from > to) {
+    return { started: false, message: "El rango de fechas no es válido." };
+  }
+
+  const accounts = (await listAdAccounts(storeId)).filter((account) => account.active);
+
+  if (accounts.length === 0) {
+    return {
+      started: false,
+      message: "No hay ninguna cuenta publicitaria activa en esta tienda. Actívalas más abajo.",
+    };
+  }
+
+  return runInBackground({
+    kind: "datos",
+    label: `Gasto · ${store.name} · ${from} a ${to}`,
+    revalidate: "/datos/conexiones",
+    work: async () => {
+      const notes: string[] = [];
+      let spendRows = 0;
+
+      const facebook = await resolveMetaLogin(storeId);
+      const googleCreds = await readAdCredentials(storeId, "google");
+
+      if (facebook && metaOauth.isExpired(facebook.expiresAt)) {
+        // Se dice en vez de leer cero en silencio, que es el fallo que hace que
+        // el beneficio se dispare sin motivo aparente.
+        notes.push(`la sesión de «${facebook.name}» caducó: el gasto de Meta no se ha traído`);
+      }
+
+      for (const account of accounts) {
+        try {
+          if (account.provider === "facebook") {
+            if (!facebook || metaOauth.isExpired(facebook.expiresAt)) continue;
+
+            const rows = await meta.readDailySpend(facebook.token, account.externalId, {
+              from,
+              to,
+            });
+            spendRows += await saveSpend(account.id, rows);
+          } else {
+            if (!googleCreds?.refreshToken || !googleCreds.clientId || !googleCreds.clientSecret) {
+              continue;
+            }
+
+            const rows = await google.readDailySpend(
+              {
+                refreshToken: googleCreds.refreshToken,
+                clientId: googleCreds.clientId,
+                clientSecret: googleCreds.clientSecret,
+                developerToken: googleCreds.developerToken ?? "",
+                loginCustomerId: googleCreds.loginCustomerId ?? undefined,
+              },
+              account.externalId,
+              { from, to },
+            );
+            spendRows += await saveSpend(account.id, rows);
+          }
+        } catch (error) {
+          /*
+           * Una cuenta que falla no tumba las demás.
+           *
+           * Se anota cuál y por qué: un total incompleto sin decirlo es peor que
+           * un error, porque parece un dato bueno.
+           */
+          notes.push(
+            `${account.name}: ${error instanceof Error ? error.message : "no se pudo leer"}`,
+          );
+        }
+      }
+
+      notes.unshift(`${spendRows} filas de gasto de ${accounts.length} cuenta(s)`);
 
       return { summary: notes.join(" · ") };
     },
@@ -331,6 +451,99 @@ export async function deleteMetaAppAction(id: string): Promise<{ ok: boolean; me
     return { ok: true, message: "Borrada. Las tiendas que la usaban pasan a la de por defecto." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo borrar." };
+  }
+}
+
+/** Marca una sesión como la de por defecto. */
+export async function setDefaultMetaLoginAction(id: string): Promise<{ ok: boolean }> {
+  await requireCapability("secretos");
+  await setDefaultMetaLogin(id);
+
+  revalidatePath("/settings");
+  revalidatePath("/datos/conexiones");
+
+  return { ok: true };
+}
+
+/**
+ * Borra una sesión.
+ *
+ * Las tiendas que la usaran pasan a la de por defecto. Si no hay ninguna más,
+ * dejan de leer gasto de Meta —y la pantalla lo dice— en vez de quedarse
+ * apuntando a un token que ya no existe.
+ */
+export async function deleteMetaLoginAction(id: string): Promise<{ ok: boolean }> {
+  await requireCapability("secretos");
+  await deleteMetaLogin(id);
+
+  revalidatePath("/settings");
+  revalidatePath("/datos/conexiones");
+
+  return { ok: true };
+}
+
+/** Con qué sesión de Facebook lee su gasto esta tienda. */
+export async function setStoreMetaLoginAction(
+  storeId: string,
+  loginId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireCapability("secretos");
+    await setStoreMetaLogin(storeId, loginId);
+
+    revalidatePath("/datos/conexiones");
+
+    return { ok: true, message: "Sesión elegida. Trae las cuentas para ver las suyas." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo cambiar." };
+  }
+}
+
+/**
+ * Trae las cuentas publicitarias que ve la sesión de esta tienda.
+ *
+ * Antes esto pasaba solo al iniciar sesión, así que con una sesión compartida
+ * las tiendas nuevas se quedaban sin cuentas y la única salida era volver a
+ * hacer el login. Nacen desactivadas, como siempre.
+ */
+export async function importAccountsAction(
+  storeId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireCapability("secretos");
+
+    const login = await resolveMetaLogin(storeId);
+    if (!login) return { ok: false, message: "Esta tienda no tiene ninguna sesión de Facebook." };
+
+    if (metaOauth.isExpired(login.expiresAt)) {
+      return { ok: false, message: `La sesión de «${login.name}» caducó. Vuelve a iniciarla en Configuración.` };
+    }
+
+    const accounts = await meta.listAccounts(login.token);
+
+    for (const account of accounts) {
+      await saveAdAccount({
+        storeId,
+        provider: "facebook",
+        externalId: account.externalId,
+        name: account.name,
+        currency: account.currency,
+        businessId: account.businessId,
+        businessName: account.businessName,
+        // Desactivadas: activarlas todas restaría de esta tienda el gasto de
+        // campañas de otro sitio.
+        active: false,
+      });
+    }
+
+    revalidatePath("/datos/conexiones");
+
+    return {
+      ok: true,
+      message: `${accounts.length} cuenta(s) traídas de «${login.name}». Activa las de esta tienda.`,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudieron traer." };
   }
 }
 

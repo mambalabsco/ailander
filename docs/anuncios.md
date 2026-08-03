@@ -111,6 +111,20 @@ al editar se deja vacío para conservarlo.
 
 ### 4 · Iniciar sesión
 
+**Configuración → Sesiones de Facebook → Iniciar sesión con Facebook.** Una vez y
+vale para todas las tiendas: el permiso es del **perfil**, no de la tienda, y con
+él se ven las cuentas de todos sus Business Manager.
+
+Después, en cada tienda: **Datos y beneficio → Conexiones → Traer las cuentas**, y
+activa las que pagan las campañas de esa tienda.
+
+El permiso dura unos sesenta días. La caducidad se ve en Configuración y se
+renueva sola al sincronizar cuando Meta lo permite; cuando queden pocos días,
+vuelve a iniciar sesión desde ahí — una vez, no una por tienda.
+
+<details>
+<summary>El camino antiguo, por tienda, sigue funcionando</summary>
+
 **Datos y beneficio → Conexiones → Iniciar sesión con Facebook**. Se pide un solo
 permiso, `ads_read`: la plataforma puede leer tu gasto y **no** puede crear,
 pausar ni modificar nada.
@@ -118,6 +132,11 @@ pausar ni modificar nada.
 Al volver se comprueba que el permiso se concedió de verdad. En el diálogo de Meta
 los permisos se pueden desmarcar uno por uno, y sin esa comprobación la conexión
 se guardaría como buena y el fallo aparecería días después como un 403.
+
+Guarda el permiso **dentro de esa tienda** y trae sus cuentas en el mismo paso.
+Funciona, pero repetirlo en cinco tiendas son cinco logins y cinco renovaciones.
+
+</details>
 
 ### 5 · Activar solo las cuentas de esta tienda
 
@@ -137,6 +156,14 @@ vieja» son dos reglas. Coincide por trozo de nombre, sin distinguir mayúsculas
 
 Los filtros se aplican **al leer**: cambiar una regla recalcula también el
 historial ya descargado, sin volver a pedir nada a Meta.
+
+En **Conexiones → A qué tienda va cada gasto** se ve si el reparto cubre todo y no
+se pisa: lo que no encaja en ninguna tienda desaparece de los informes —y el
+beneficio sale más alto del real— y lo que encaja en dos se resta dos veces.
+
+Cuando falten filas de gasto —una cuenta recién activada, o un rango que nunca se
+trajo— está el botón **«Solo el gasto»** junto a «Sincronizar»: trae el gasto sin
+los pedidos, que es lo que tarda.
 
 ### ⚠ El permiso de Meta caduca cada ~60 días
 

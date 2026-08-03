@@ -174,6 +174,11 @@ export async function setStoreMetaApp(storeId: string, metaAppId: string): Promi
   if (error) throw new Error(`No se pudo elegir la app: ${error.message}`);
 }
 
+/** Una app concreta, con secreto, cayendo en la de por defecto si no existe. */
+export async function resolveMetaAppById(id: string) {
+  return chooseApp([await readMetaAppSecret(id), await readDefaultMetaApp(), envAppConfig()]);
+}
+
 /**
  * Con qué app se conecta una tienda, con secreto y todo.
  *

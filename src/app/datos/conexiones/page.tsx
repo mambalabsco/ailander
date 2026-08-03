@@ -17,6 +17,7 @@ import {
 } from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
 import { listMetaApps } from "@/lib/data/meta-apps";
+import { listMetaLogins } from "@/lib/data/meta-logins";
 import { SpendSplit } from "@/components/datos/spend-split";
 import * as googleOauth from "@/lib/google-oauth";
 
@@ -70,11 +71,14 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
    * de por defecto. Un secreto aquí acabaría en el HTML de cualquiera que abra
    * esta página.
    */
-  const metaApps = (await listMetaApps()).map((app) => ({
-    id: app.id,
-    name: app.name,
-    isDefault: app.isDefault,
-  }));
+  const [metaApps, metaLogins] = await Promise.all([
+    listMetaApps().then((apps) =>
+      apps.map((app) => ({ id: app.id, name: app.name, isDefault: app.isDefault })),
+    ),
+    listMetaLogins().then((logins) =>
+      logins.map((login) => ({ id: login.id, name: login.name, isDefault: login.isDefault })),
+    ),
+  ]);
 
   const shopifyConnected = Boolean(store.shopifyAdminToken && store.shopifyShopDomain);
   const googleApp = googleOauth.appConfig();
@@ -141,6 +145,8 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
           configured={metaOauth.isConfigured()}
           apps={metaApps}
           chosenApp={facebookCreds?.metaAppId ?? ""}
+          logins={metaLogins}
+          chosenLogin={facebookCreds?.metaLoginId ?? ""}
         />
       </SectionCard>
 
