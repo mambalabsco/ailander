@@ -20,7 +20,9 @@ import {
 } from "@/lib/video/providers";
 import { generateWithCli } from "@/lib/higgsfield-cli";
 import { attenuateWav, MUSIC_GAIN } from "@/lib/video/wav-gain";
-import { findVideoModel, VIDEO_MODELS } from "@/lib/video/shots";
+import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
+import { polishPrompt, POLISH_SCHEMA, type PolishedPrompt } from "@/lib/video/prompt-polish";
+import { generateStructured } from "@/lib/generators";
 import { move, sorted } from "@/lib/studio-order";
 import {
   addAsset,
@@ -287,36 +289,62 @@ export async function makeImageAction(input: unknown): Promise<LaunchResult> {
   });
 }
 
-/** Anima una imagen del proyecto. */
+/**
+ * Genera un clip con cualquiera de los modelos del catálogo.
+ *
+ * De una imagen, de varias referencias o solo de un texto, según lo que admita
+ * el modelo elegido. La comprobación de qué admite se hace **aquí**, en el
+ * servidor: la pantalla ya no ofrece lo imposible, pero eso es comodidad, no una
+ * garantía — la petición llega igual si alguien la manda a mano.
+ */
 export async function makeClipAction(input: unknown): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const projectId = readText(raw.projectId);
-  const imageUrl = readText(raw.imageUrl);
   const prompt = readText(raw.prompt);
-  const modelId = readText(raw.model) || VIDEO_MODELS[0].id;
+  const modelId = readText(raw.model) || VIDEO_GENERATORS[0].id;
   const seconds = Number(raw.seconds) || 6;
+  const sound = raw.sound === true;
 
-  if (!projectId || !imageUrl) throw new Error("Elige la imagen que quieres animar.");
+  const references = [readText(raw.imageUrl), ...(Array.isArray(raw.references) ? raw.references : [])]
+    .map((value) => readText(value))
+    .filter(Boolean);
+
+  if (!projectId) throw new Error("Falta el proyecto.");
+
+  const model = findGenerator(modelId);
+
+  if (model.mode === "texto" && !prompt) {
+    throw new Error(`${model.label} parte solo del texto, así que el prompt es obligatorio.`);
+  }
+
+  if (model.mode !== "texto" && references.length === 0) {
+    throw new Error(`${model.label} necesita al menos una imagen. Elige una del proyecto.`);
+  }
 
   await guard();
   await needsKey();
 
-  const model = findVideoModel(modelId);
+  const cost = estimateCost(model, seconds);
 
   return runInBackground({
     kind: "imagenes",
     label: `Clip · ${model.label}`,
     revalidate: "/estudio",
-    resume: { projectId, imageUrl, prompt, model: modelId, seconds },
+    resume: { projectId, prompt, model: modelId, seconds, references, sound },
     work: async (report) => {
-      await report(`Animando ${seconds} s con ${model.label}`);
+      await report(
+        model.mode === "texto"
+          ? `Generando ${seconds} s de texto con ${model.label}`
+          : `Animando ${seconds} s con ${model.label} y ${references.length} referencia${references.length === 1 ? "" : "s"}`,
+      );
 
       const url = await animate({
-        imageUrl,
+        references,
         prompt: prompt || "subtle natural motion, camera moves slowly",
-        seconds: Math.min(model.maxSeconds, Math.max(1, Math.round(seconds))),
+        seconds: Math.max(1, Math.round(seconds)),
         model: model.slug,
+        sound,
       });
 
       await addAsset({
@@ -329,9 +357,65 @@ export async function makeClipAction(input: unknown): Promise<LaunchResult> {
         seconds,
       });
 
-      return { summary: `Clip de ${seconds} s listo. Cuesta ${(seconds * model.usdPerSecond).toFixed(2)} USD.` };
+      // Sin precio confirmado no se inventa uno: lo que se cobre lo dice el
+      // proveedor, y un número puesto a ojo se toma por bueno al decidir.
+      return {
+        summary:
+          cost === null
+            ? `Clip de ${seconds} s listo con ${model.label}. El precio de este modelo no está confirmado.`
+            : `Clip de ${seconds} s listo. Cuesta ${cost.toFixed(2)} USD.`,
+      };
     },
   });
+}
+
+/**
+ * Reescribe un prompt flojo como un prompt de vídeo.
+ *
+ * Va en directo y no en segundo plano: son unos segundos y la persona está
+ * mirando el campo de texto esperando para seguir escribiendo. Mandarlo a la
+ * cola de trabajos obligaría a cambiar de pantalla para leer el resultado.
+ *
+ * Lo escribe el mismo modelo que redacta los copys de la plataforma. Se pidió
+ * «un llamado a chatgpt» y aquí el proveedor configurado es Claude; si hace
+ * falta OpenAI concretamente, es una clave más y este es el único sitio que
+ * habría que tocar.
+ */
+export async function polishPromptAction(
+  input: unknown,
+): Promise<{ ok: boolean; prompt: string; message: string }> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const draft = readText(raw.draft);
+
+  if (!draft) return { ok: false, prompt: "", message: "Escribe algo primero, aunque sea flojo." };
+
+  try {
+    await guard();
+
+    const model = findGenerator(readText(raw.model));
+
+    const outcome = await generateStructured<PolishedPrompt>({
+      prompt: polishPrompt({
+        draft,
+        modelLabel: model.label,
+        fromImage: model.mode !== "texto",
+        seconds: Number(raw.seconds) || 0,
+        context: readText(raw.context),
+      }),
+      schema: POLISH_SCHEMA as unknown as Record<string, unknown>,
+      role: "copy",
+      maxTokens: 2_000,
+      effort: "low",
+    });
+
+    return { ok: true, prompt: outcome.data.prompt, message: outcome.data.cambios };
+  } catch (error) {
+    return {
+      ok: false,
+      prompt: "",
+      message: error instanceof Error ? error.message : "No se pudo mejorar el prompt.",
+    };
+  }
 }
 
 /** Una locución con la voz que se elija. */

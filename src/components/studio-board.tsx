@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
-import { VIDEO_MODELS } from "@/lib/video/shots";
+import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import {
   assembleProjectAction,
   cloneVoiceAction,
@@ -17,6 +17,7 @@ import {
   makeMusicAction,
   makeVoiceAction,
   moveAssetAction,
+  polishPromptAction,
   studioVoicesAction,
   toggleAssetAction,
   uploadToStudioAction,
@@ -88,9 +89,11 @@ export function StudioBoard({
   const [refs, setRefs] = useState<Set<string>>(new Set());
 
   const [clipPrompt, setClipPrompt] = useState("");
-  const [clipModel, setClipModel] = useState(VIDEO_MODELS[0].id);
+  const [clipModel, setClipModel] = useState(VIDEO_GENERATORS[0].id);
   const [clipSeconds, setClipSeconds] = useState(6);
-  const [clipFrom, setClipFrom] = useState("");
+  const [clipRefs, setClipRefs] = useState<Set<string>>(new Set());
+  const [clipSound, setClipSound] = useState(false);
+  const [polishing, setPolishing] = useState(false);
 
   const [voiceText, setVoiceText] = useState("");
   const [voiceId, setVoiceId] = useState("");
@@ -108,6 +111,50 @@ export function StudioBoard({
   const inMontage = assets.filter((asset) => asset.included);
 
   const go = (id: string) => router.push(`/estudio?p=${id}`);
+
+  /*
+   * Lo que admite el modelo elegido manda sobre lo que se ve.
+   *
+   * Uno de solo texto no tiene dónde meter una imagen: ofrecerle el selector de
+   * referencias es prometer algo que la API va a ignorar en silencio, que es
+   * exactamente el fallo que se está evitando en toda esta parte.
+   */
+  const clipGenerator = findGenerator(clipModel);
+  const clipTakesRefs = clipGenerator.refField !== null;
+  const clipCost = estimateCost(clipGenerator, clipSeconds);
+
+  const clipReferences = [...clipRefs];
+  const clipReady = clipTakesRefs ? clipReferences.length > 0 : clipPrompt.trim().length > 0;
+
+  const toggleClipRef = (url: string) =>
+    setClipRefs((current) => {
+      const next = new Set(current);
+
+      if (next.has(url)) next.delete(url);
+      // Los que quieren una sola imagen se quedan con la última marcada, para que
+      // no haya duda de cuál va a usar.
+      else if (clipGenerator.refIsArray) next.add(url);
+      else return new Set([url]);
+
+      return next;
+    });
+
+  /** Le pide al modelo que reescriba el prompt como un encargo de cámara. */
+  const polish = () => {
+    setPolishing(true);
+
+    void polishPromptAction({
+      draft: clipPrompt,
+      model: clipModel,
+      seconds: clipSeconds,
+      context: current?.name ?? "",
+    })
+      .then((result) => {
+        if (result.ok) setClipPrompt(result.prompt);
+        setNote(result.message);
+      })
+      .finally(() => setPolishing(false));
+  };
 
   return (
     <div className="space-y-6">
@@ -304,52 +351,119 @@ export function StudioBoard({
 
             {/* Clip */}
             <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-              <p className="text-sm font-medium">Animar una imagen</p>
+              <p className="text-sm font-medium">Vídeo</p>
 
               <SelectField
-                value={clipFrom}
-                onChange={(event) => setClipFrom(event.target.value)}
+                value={clipModel}
+                onChange={(event) => setClipModel(event.target.value)}
                 className="mt-2 w-full"
               >
-                <option value="">Elige la imagen…</option>
-                {images.map((image) => (
-                  <option key={image.id} value={image.url}>
-                    {image.name || "Imagen"}
+                {VIDEO_GENERATORS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                    {model.usdPerSecond > 0 ? ` · $${model.usdPerSecond.toFixed(3)}/s` : ""}
                   </option>
                 ))}
               </SelectField>
 
-              <input
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {clipGenerator.note}
+              </p>
+
+              <textarea
                 value={clipPrompt}
                 onChange={(event) => setClipPrompt(event.target.value)}
-                placeholder="Se lleva la mano al cuello, la cámara se acerca despacio"
+                rows={3}
+                placeholder={
+                  clipTakesRefs
+                    ? "Se lleva la mano al cuello, la cámara se acerca despacio"
+                    : "Descríbelo todo: no hay imagen de partida y esto es lo único que va a ver"
+                }
                 className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
               />
 
-              <div className="mt-2 flex flex-wrap items-end gap-2">
-                <SelectField
-                  value={clipModel}
-                  onChange={(event) => setClipModel(event.target.value)}
-                  className="min-w-44"
+              <div className="mt-2">
+                <Button
+                  variant="ghost"
+                  onClick={polish}
+                  disabled={polishing || !clipPrompt.trim()}
                 >
-                  {VIDEO_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label} · ${model.usdPerSecond.toFixed(3)}/s
-                    </option>
-                  ))}
-                </SelectField>
+                  {polishing ? "Reescribiendo…" : "Mejorar el prompt"}
+                </Button>
+              </div>
 
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={clipSeconds}
-                    onChange={(event) => setClipSeconds(Number(event.target.value))}
-                    className="w-20 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </label>
+              {/*
+                Las referencias solo aparecen donde el modelo sabe leerlas.
+                Enseñarlas siempre haría creer que la foto se está usando cuando
+                el modelo elegido ni la mira.
+              */}
+              {clipTakesRefs ? (
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {clipGenerator.refIsArray
+                      ? "Imágenes de partida — marca las que quieras"
+                      : "Imagen de partida — este modelo admite una sola"}
+                  </p>
+
+                  {images.length === 0 ? (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Todavía no hay imágenes en el proyecto. Genera una arriba o sube la tuya.
+                    </p>
+                  ) : (
+                    <ul className="mt-1 flex flex-wrap gap-2">
+                      {images.map((image) => {
+                        const on = clipRefs.has(image.url);
+
+                        return (
+                          <li key={image.id}>
+                            <button
+                              type="button"
+                              onClick={() => toggleClipRef(image.url)}
+                              className={`rounded-xl border px-2 py-1 text-xs ${
+                                on
+                                  ? "border-violet-500 bg-violet-50 text-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
+                                  : "border-slate-300 dark:border-slate-700"
+                              }`}
+                            >
+                              {image.name || "Imagen"}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                {clipGenerator.hasDuration ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
+                    <input
+                      type="number"
+                      min={clipGenerator.minSeconds}
+                      max={clipGenerator.maxSeconds}
+                      value={clipSeconds}
+                      onChange={(event) => setClipSeconds(Number(event.target.value))}
+                      className="w-20 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Este modelo decide él la duración.
+                  </p>
+                )}
+
+                {clipGenerator.nativeAudio ? (
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={clipSound}
+                      onChange={(event) => setClipSound(event.target.checked)}
+                    />
+                    <span>Que genere sonido él mismo</span>
+                  </label>
+                ) : null}
               </div>
 
               <div className="mt-3">
@@ -358,16 +472,27 @@ export function StudioBoard({
                   action={() =>
                     makeClipAction({
                       projectId: current.id,
-                      imageUrl: clipFrom,
                       prompt: clipPrompt,
                       model: clipModel,
                       seconds: clipSeconds,
+                      references: clipReferences,
+                      sound: clipSound,
                     })
                   }
-                  label="Animar"
-                  disabled={!clipFrom}
-                  disabledReason={!clipFrom ? "Elige una imagen primero" : undefined}
-                  hint={`Unos ${(clipSeconds * (VIDEO_MODELS.find((m) => m.id === clipModel)?.usdPerSecond ?? 0.015)).toFixed(2)} USD. Es lo caro del vídeo.`}
+                  label="Generar vídeo"
+                  disabled={!clipReady}
+                  disabledReason={
+                    clipReady
+                      ? undefined
+                      : clipTakesRefs
+                        ? "Marca al menos una imagen"
+                        : "Escribe el prompt: este modelo parte solo del texto"
+                  }
+                  hint={
+                    clipCost === null
+                      ? "El precio de este modelo no está confirmado; lo que cobre lo dirá el proveedor."
+                      : `Unos ${clipCost.toFixed(2)} USD. Es lo caro del vídeo.`
+                  }
                 />
               </div>
             </div>

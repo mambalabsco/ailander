@@ -1,5 +1,6 @@
 import "server-only";
 
+import { buildInput, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import { charactersToWords, spokenSeconds, type Alignment, type TimedWord } from "@/lib/video/words";
 import type { Track } from "@/lib/video/timeline";
 
@@ -354,58 +355,53 @@ export async function keyframe(options: {
 }
 
 /**
- * Anima un keyframe.
+ * Genera un clip con cualquiera de los modelos del catálogo.
  *
- * `multi_shots` es obligatorio aunque no se use: si falta, la API responde 422
- * con «multi_shots cannot be empty». Va explícito por eso.
+ * Los campos los pone `buildInput`, que sabe cómo los llama cada familia. Antes
+ * había aquí dos ramas escritas a mano, y con diez modelos eso deja de escalar:
+ * mandar `image_urls` a uno que espera `image_url` **no da error**, devuelve un
+ * clip generado sin la referencia.
  *
- * El modo estándar da 720p, que es exactamente el formato del entregable
- * (720×1280). El modo alto cuesta el doble para una resolución que después se
- * reescala hacia abajo.
+ * Sin `imageUrl` ni referencias parte solo del texto, y con un modelo de solo
+ * texto las imágenes ni se mandan.
  */
 export async function animate(options: {
-  imageUrl: string;
+  imageUrl?: string;
+  /** Referencias extra. La primera imagen sigue siendo `imageUrl` si va. */
+  references?: string[];
   prompt: string;
   seconds: number;
-  /** El modelo del proveedor. Por defecto, el de mejor imagen. */
+  /** El identificador que espera la API. Por defecto, el más barato. */
   model?: string;
+  /** Que genere sonido él mismo. Solo lo miran los que saben. */
+  sound?: boolean;
   negativePrompt?: string;
   timeoutMs?: number;
 }): Promise<string> {
-  const model = options.model || "kling-3.0/video";
+  const slug = options.model || VIDEO_GENERATORS[0].slug;
 
-  /*
-   * Cada modelo tiene sus campos y no se parecen.
-   *
-   * Grok no entiende `mode: "std"` ni `multi_shots`, y su resolución por defecto
-   * es 480p: si no se pide 720p, el vídeo sale a la mitad de tamaño que los
-   * keyframes y se nota en el montaje. Mandar los campos del otro no da error
-   * claro — se ignoran y el resultado sale distinto de lo esperado.
-   */
-  const input = model.startsWith("grok-imagine")
-    ? {
-        prompt: options.prompt,
-        image_urls: [options.imageUrl],
-        // De 6 a 30, paso de uno, y como cadena: así lo pide la API.
-        duration: String(Math.min(30, Math.max(6, Math.round(options.seconds)))),
-        resolution: "720p",
-        aspect_ratio: "9:16",
-        mode: "normal",
-      }
-    : {
-        prompt: options.prompt,
-        image_urls: [options.imageUrl],
-        duration: String(options.seconds),
-        aspect_ratio: "9:16",
-        mode: "std",
-        // La voz va aparte y se pega en el montaje.
-        sound: false,
-        // Obligatorio en Kling: si falta, responde 422.
-        multi_shots: false,
-        ...(options.negativePrompt ? { negative_prompt: options.negativePrompt } : {}),
-      };
+  const generator =
+    VIDEO_GENERATORS.find((entry) => entry.slug === slug) ??
+    // Uno que no está en la tabla: se trata como el más común de todos.
+    { ...VIDEO_GENERATORS[0], slug };
 
-  const urls = await runTask(model, input, options.timeoutMs ?? 10 * 60_000);
+  const references = [options.imageUrl ?? "", ...(options.references ?? [])].filter(Boolean);
+
+  if (generator.mode !== "texto" && references.length === 0) {
+    throw new Error(`${generator.label} necesita al menos una imagen de partida.`);
+  }
+
+  const input = buildInput(generator, {
+    prompt: options.prompt,
+    references,
+    seconds: options.seconds,
+    aspectRatio: "9:16",
+    sound: options.sound,
+  });
+
+  if (options.negativePrompt) input.negative_prompt = options.negativePrompt;
+
+  const urls = await runTask(generator.slug, input, options.timeoutMs ?? 10 * 60_000);
 
   return urls[0];
 }
