@@ -8,7 +8,12 @@ import {
   MetaConnect,
 } from "@/components/datos/connections";
 import { reportContext } from "@/app/datos/report";
-import { credentialsStatus, lastSyncedOrderDate, listAdAccounts } from "@/lib/data/analytics";
+import {
+  credentialsStatus,
+  lastSyncedOrderDate,
+  listAdAccounts,
+  readAdCredentials,
+} from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
 import * as googleOauth from "@/lib/google-oauth";
 
@@ -46,11 +51,24 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
 
   if (!store) return <DatosHeader context={context} synced={false} />;
 
-  const [accounts, status, lastOrder] = await Promise.all([
+  const [accounts, status, lastOrder, facebookCreds] = await Promise.all([
     listAdAccounts(store.id),
     credentialsStatus(store.id),
     lastSyncedOrderDate(store.id),
+    readAdCredentials(store.id, "facebook"),
   ]);
+
+  /*
+   * El secreto **no** se manda a la pantalla, solo si está puesto.
+   *
+   * Devolverlo lo dejaría en el HTML de cualquiera que abra esta página, y para
+   * decidir si hay app propia basta con saber que existe.
+   */
+  const metaApp = {
+    appId: facebookCreds?.clientId ?? "",
+    hasSecret: Boolean(facebookCreds?.clientSecret),
+    configId: facebookCreds?.configId ?? "",
+  };
 
   const shopifyConnected = Boolean(store.shopifyAdminToken && store.shopifyShopDomain);
   const googleApp = googleOauth.appConfig();
@@ -115,6 +133,7 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
           storeId={store.id}
           state={status.facebook}
           configured={metaOauth.isConfigured()}
+          app={metaApp}
         />
       </SectionCard>
 

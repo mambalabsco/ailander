@@ -588,6 +588,9 @@ type AdAccountRow = {
   external_id: string;
   name: string;
   currency: string;
+  /** De qué Business Manager es. Vacío en las dadas de alta antes de guardarlo. */
+  business_id: string;
+  business_name: string;
   active: boolean;
   include_filters: string[];
   exclude_filters: string[];
@@ -621,6 +624,8 @@ type AdCredentialRow = {
   client_secret: string | null;
   developer_token: string | null;
   login_customer_id: string | null;
+  /** Meta: la configuración de Facebook Login for Business, cuando la app la usa. */
+  config_id: string | null;
   /** Nulo = no caduca. Es el caso de Google con la app publicada. */
   token_expires_at: string | null;
   scopes: string[];

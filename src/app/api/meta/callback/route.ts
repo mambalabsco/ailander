@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireContext } from "@/lib/supabase/session";
 import { siteOrigin } from "@/lib/site-url";
-import { appConfig, exchangeCode, META_SCOPES, readState } from "@/lib/meta-oauth";
+import { exchangeCode, META_SCOPES } from "@/lib/meta-oauth";
+import { peekStore, pickAppConfig, readState } from "@/lib/meta-app";
 import { listAccounts } from "@/lib/meta-ads";
-import { saveAdAccount, saveAdCredentials } from "@/lib/data/analytics";
+import { readAdCredentials, saveAdAccount, saveAdCredentials } from "@/lib/data/analytics";
 import { logError } from "@/lib/data/errors";
 
 /**
@@ -33,7 +34,14 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state") ?? "";
   const denied = url.searchParams.get("error");
 
-  const app = appConfig();
+  /*
+   * Primero la tienda, luego su app, y con ella se comprueba la firma.
+   *
+   * La tienda sale del `state` sin verificar, que es seguro porque solo elige
+   * con qué llave comprobar: una tienda inventada carga otro secreto y la firma
+   * deja de cuadrar. Ver `peekStore`.
+   */
+  const app = pickAppConfig(await readAdCredentials(peekStore(state), "facebook"));
   if (!app) return back(origin, "", { meta: "sin-configurar" });
 
   /*
@@ -106,6 +114,8 @@ export async function GET(request: Request) {
         externalId: account.externalId,
         name: account.name,
         currency: account.currency,
+        businessId: account.businessId,
+        businessName: account.businessName,
         active: false,
       });
     }

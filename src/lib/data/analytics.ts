@@ -269,6 +269,8 @@ export interface AdAccount {
   externalId: string;
   name: string;
   currency: string;
+  /** De qué Business Manager es. Vacío en las de antes de guardarlo. */
+  businessName: string;
   active: boolean;
   includeFilters: string[];
   excludeFilters: string[];
@@ -293,6 +295,7 @@ export async function listAdAccounts(storeId: string): Promise<AdAccount[]> {
     externalId: row.external_id,
     name: row.name,
     currency: row.currency,
+    businessName: row.business_name ?? "",
     active: row.active,
     includeFilters: row.include_filters ?? [],
     excludeFilters: row.exclude_filters ?? [],
@@ -306,6 +309,8 @@ export async function saveAdAccount(input: {
   externalId: string;
   name: string;
   currency: string;
+  businessId?: string;
+  businessName?: string;
   active?: boolean;
   includeFilters?: string[];
   excludeFilters?: string[];
@@ -322,6 +327,8 @@ export async function saveAdAccount(input: {
         external_id: input.externalId,
         name: input.name,
         currency: input.currency,
+        ...(input.businessId === undefined ? {} : { business_id: input.businessId }),
+        ...(input.businessName === undefined ? {} : { business_name: input.businessName }),
         ...(input.active === undefined ? {} : { active: input.active }),
         ...(input.includeFilters === undefined ? {} : { include_filters: input.includeFilters }),
         ...(input.excludeFilters === undefined ? {} : { exclude_filters: input.excludeFilters }),
@@ -566,6 +573,8 @@ export interface AdCredentials {
   clientSecret?: string;
   developerToken?: string;
   loginCustomerId?: string;
+  /** Meta: la configuración de Facebook Login for Business, si la app la usa. */
+  configId?: string;
   /**
    * Cuándo caduca el permiso. `null` significa «no caduca».
    *
@@ -607,12 +616,22 @@ export async function readAdCredentials(
     clientSecret: data.client_secret ?? undefined,
     developerToken: data.developer_token ?? undefined,
     loginCustomerId: data.login_customer_id ?? undefined,
+    configId: data.config_id ?? undefined,
     expiresAt: data.token_expires_at ? new Date(data.token_expires_at) : null,
     scopes: data.scopes ?? [],
     accountName: data.account_name ?? undefined,
   };
 }
 
+/**
+ * Guarda las credenciales de una tienda.
+ *
+ * **Lo que no llega no se toca.** Antes escribía `null` en todo lo que faltara,
+ * y eso rompía el caso de la app propia: al volver de Facebook con el token, el
+ * callback no manda el identificador ni el secreto de la app —no son suyos— y
+ * los borraba. La siguiente reconexión de esa tienda ya no encontraba su app y
+ * caía en la del entorno, que es de otro Business Manager.
+ */
 export async function saveAdCredentials(
   storeId: string,
   provider: AdProvider,
@@ -620,25 +639,40 @@ export async function saveAdCredentials(
 ): Promise<void> {
   const { supabase, userId } = await requireContext();
 
-  const { error } = await supabase.from("ad_credentials").upsert(
-    {
-      user_id: userId,
-      store_id: storeId,
-      provider,
-      access_token: credentials.accessToken ?? null,
-      refresh_token: credentials.refreshToken ?? null,
-      client_id: credentials.clientId ?? null,
-      client_secret: credentials.clientSecret ?? null,
-      developer_token: credentials.developerToken ?? null,
-      login_customer_id: credentials.loginCustomerId ?? null,
-      token_expires_at: credentials.expiresAt ? credentials.expiresAt.toISOString() : null,
-      scopes: credentials.scopes ?? [],
-      account_name: credentials.accountName ?? null,
-      connected_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "store_id,provider" },
-  );
+  const changes: Record<string, unknown> = {
+    user_id: userId,
+    store_id: storeId,
+    provider,
+    updated_at: new Date().toISOString(),
+  };
+
+  const set = (column: string, value: string | undefined) => {
+    if (value !== undefined) changes[column] = value;
+  };
+
+  set("access_token", credentials.accessToken);
+  set("refresh_token", credentials.refreshToken);
+  set("client_id", credentials.clientId);
+  set("client_secret", credentials.clientSecret);
+  set("developer_token", credentials.developerToken);
+  set("login_customer_id", credentials.loginCustomerId);
+  set("config_id", credentials.configId);
+  set("account_name", credentials.accountName);
+
+  if (credentials.expiresAt !== undefined) {
+    changes.token_expires_at = credentials.expiresAt ? credentials.expiresAt.toISOString() : null;
+  }
+  if (credentials.scopes !== undefined) changes.scopes = credentials.scopes;
+
+  // Solo cuenta como conexión nueva cuando trae un permiso; guardar la app a
+  // secas no es haberse conectado a nada.
+  if (credentials.accessToken || credentials.refreshToken) {
+    changes.connected_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase
+    .from("ad_credentials")
+    .upsert(changes as never, { onConflict: "store_id,provider" });
 
   if (error) throw new Error(`No se pudieron guardar las credenciales: ${error.message}`);
 }

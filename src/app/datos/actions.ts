@@ -14,6 +14,7 @@ import {
   listAdAccounts,
   readAdCredentials,
   refreshAdToken,
+  saveAdCredentials,
   saveCogs,
   saveCustomCost,
   saveGatewayFees,
@@ -25,6 +26,7 @@ import {
   setLoginCustomerId,
 } from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
+import { requireCapability } from "@/lib/permissions";
 import { clearFinishedJobs } from "@/lib/data/jobs";
 import type { LaunchResult } from "@/types/jobs";
 
@@ -155,7 +157,9 @@ export async function syncStoreAction(
        * fallo aquí no interrumpe nada, solo se anota—.
        */
       if (facebook?.accessToken && metaOauth.shouldRenew(facebook.expiresAt ?? null)) {
-        const app = metaOauth.appConfig();
+        // La app de esta tienda: el re-canje tiene que ir contra la que emitió
+        // el token, no contra la del entorno si son distintas.
+        const app = metaOauth.pickAppConfig(facebook);
 
         if (app) {
           try {
@@ -252,6 +256,67 @@ export async function setLoginCustomerIdAction(
 ): Promise<void> {
   await setLoginCustomerId(storeId, value.trim());
   revalidatePath("/datos/conexiones");
+}
+
+/**
+ * La app de Meta de esta tienda.
+ *
+ * Hace falta cuando hay más de un Business Manager: si cuelgan de perfiles de
+ * Facebook distintos, Meta obliga a una app por perfil, y la de las variables de
+ * entorno solo puede ser una. Con esto cada tienda apunta a la suya.
+ *
+ * **El secreto entra pero no sale.** Se escribe aquí y a la pantalla solo vuelve
+ * si está puesto o no; leerlo de vuelta sería enseñarlo en el navegador de quien
+ * abra la página.
+ */
+export async function saveMetaAppAction(
+  storeId: string,
+  appId: string,
+  appSecret: string,
+  configId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireCapability("secretos");
+
+    const id = appId.trim();
+    const secret = appSecret.trim();
+
+    /*
+     * Vaciar los dos a la vez es volver a la del entorno, y es legítimo.
+     * Vaciar solo uno deja media configuración, que produce un diálogo de
+     * Facebook que falla al canjear el código con un error que no dice cuál de
+     * las dos mitades falta.
+     */
+    if (!id && !secret) {
+      await saveAdCredentials(storeId, "facebook", {
+        clientId: "",
+        clientSecret: "",
+        configId: "",
+      });
+
+      revalidatePath("/datos/conexiones");
+      return { ok: true, message: "Quitada. Esta tienda vuelve a usar la app por defecto." };
+    }
+
+    if (!id || !secret) {
+      return { ok: false, message: "Hacen falta el identificador y el secreto, o ninguno de los dos." };
+    }
+
+    await saveAdCredentials(storeId, "facebook", {
+      clientId: id,
+      clientSecret: secret,
+      configId: configId.trim(),
+    });
+
+    revalidatePath("/datos/conexiones");
+
+    return {
+      ok: true,
+      message: "App guardada. Vuelve a iniciar sesión con Facebook para conectarla con esa app.",
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo guardar." };
+  }
 }
 
 export async function setFiltersAction(

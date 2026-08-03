@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { findStore } from "@/lib/store-registry";
+import { readAdCredentials } from "@/lib/data/analytics";
 import { requireContext } from "@/lib/supabase/session";
 import { siteOrigin } from "@/lib/site-url";
-import { appConfig, authorizeUrl, signState } from "@/lib/meta-oauth";
+import { authorizeUrl } from "@/lib/meta-oauth";
+import { pickAppConfig, signState } from "@/lib/meta-app";
 
 /**
  * Manda al diálogo de Facebook. Se llega desde «Iniciar sesión con Facebook».
@@ -26,12 +28,19 @@ export async function GET(request: Request) {
   const store = await findStore(storeId);
   if (!store) return NextResponse.json({ error: "No se encontró la tienda." }, { status: 404 });
 
-  const app = appConfig();
+  /*
+   * La app de esta tienda, y si no tiene, la del entorno.
+   *
+   * Cada Business Manager en un perfil de Facebook distinto necesita su propia
+   * app: la del entorno solo sirve para el primero.
+   */
+  const app = pickAppConfig(await readAdCredentials(storeId, "facebook"));
+
   if (!app) {
     return NextResponse.json(
       {
         error:
-          "Faltan META_APP_ID y META_APP_SECRET en el entorno del servidor. Están en docs/anuncios.md.",
+          "Esta tienda no tiene app de Meta y tampoco hay una por defecto. Ponle la suya en Datos › Conexiones, o define META_APP_ID y META_APP_SECRET en el servidor.",
       },
       { status: 500 },
     );

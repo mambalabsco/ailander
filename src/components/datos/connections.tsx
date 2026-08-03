@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, TextField } from "@/components/ui";
 import {
+  saveMetaAppAction,
   setFiltersAction,
   setLoginCustomerIdAction,
   toggleAccountAction,
@@ -36,6 +37,8 @@ export interface AccountRow {
   externalId: string;
   name: string;
   currency: string;
+  /** De qué Business Manager es. Vacío en las de antes de guardarlo. */
+  businessName: string;
   active: boolean;
   includeFilters: string[];
   excludeFilters: string[];
@@ -126,28 +129,30 @@ export function MetaConnect({
   storeId,
   state,
   configured,
+  app,
 }: {
   storeId: string;
   state: ProviderState;
   /** Si el servidor tiene META_APP_ID y META_APP_SECRET. */
   configured: boolean;
+  /** La app propia de esta tienda, si la tiene. El secreto no viaja. */
+  app: { appId: string; hasSecret: boolean; configId: string };
 }) {
-  if (!configured) {
-    return (
-      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-        <p className="font-medium">Falta configurar la app de Meta en el servidor</p>
-        <p className="mt-1">
-          Hacen falta <code>META_APP_ID</code> y <code>META_APP_SECRET</code> en{" "}
-          <code>.env.local</code>. Se sacan una sola vez y sirven para todas las tiendas; está en{" "}
-          <code>docs/anuncios.md</code>.
-        </p>
-      </div>
-    );
-  }
+  const usable = configured || (app.appId !== "" && app.hasSecret);
 
   return (
     <div className="space-y-3">
-      <ConnectionState state={state} provider="facebook" />
+      {usable ? (
+        <ConnectionState state={state} provider="facebook" />
+      ) : (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">Esta tienda no tiene app de Meta</p>
+          <p className="mt-1">
+            Ponle la suya abajo, o define <code>META_APP_ID</code> y <code>META_APP_SECRET</code> en
+            el servidor para que valga como la de por defecto.
+          </p>
+        </div>
+      )}
 
       {/*
         Un enlace y no un botón con `fetch`: el flujo termina en una redirección
@@ -168,6 +173,127 @@ export function MetaConnect({
         Solo se pide permiso de <strong>lectura</strong> de anuncios (<code>ads_read</code>). La
         plataforma no puede crear, pausar ni modificar nada en tus campañas.
       </p>
+
+      <MetaAppForm storeId={storeId} app={app} fallback={configured} />
+    </div>
+  );
+}
+
+/**
+ * La app de Meta de esta tienda.
+ *
+ * ## Por qué esto existe
+ *
+ * Una app de Meta sirve para todas las cuentas a las que llegue **el perfil de
+ * Facebook con el que se creó**. En cuanto hay un segundo Business Manager en
+ * otro perfil, Meta obliga a otra app, y con la configuración en variables de
+ * entorno solo cabía una: conectar la segunda tienda significaba cambiar la
+ * variable del servidor y dejar la primera apuntando a una app que no es suya.
+ *
+ * ## El secreto entra y no sale
+ *
+ * Se escribe aquí y nunca se devuelve: la pantalla solo sabe si está puesto. Un
+ * campo que lo reenviara lo dejaría en el navegador de cualquiera que abra esta
+ * página.
+ */
+function MetaAppForm({
+  storeId,
+  app,
+  fallback,
+}: {
+  storeId: string;
+  app: { appId: string; hasSecret: boolean; configId: string };
+  /** Si hay una app en el entorno que sirva de respaldo. */
+  fallback: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [appId, setAppId] = useState(app.appId);
+  const [secret, setSecret] = useState("");
+  const [configId, setConfigId] = useState(app.configId);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const own = app.appId !== "" && app.hasSecret;
+
+  if (!open) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 pt-3 text-xs dark:border-slate-800">
+        <span className="text-slate-500 dark:text-slate-400">
+          {own
+            ? `App propia: ${app.appId}`
+            : fallback
+              ? "Usa la app por defecto del servidor"
+              : "Sin app"}
+        </span>
+        <Button variant="ghost" onClick={() => setOpen(true)}>
+          {own ? "Cambiar la app" : "Usar otra app"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Solo hace falta si esta tienda va contra un Business Manager de otro perfil de Facebook.
+        Con uno solo, deja esto vacío.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={appId}
+          onChange={(event) => setAppId(event.target.value)}
+          placeholder="App ID"
+          className="w-48 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+        <input
+          value={secret}
+          onChange={(event) => setSecret(event.target.value)}
+          type="password"
+          autoComplete="off"
+          placeholder={app.hasSecret ? "Secreto (guardado)" : "App Secret"}
+          className="w-56 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+        <input
+          value={configId}
+          onChange={(event) => setConfigId(event.target.value)}
+          placeholder="Config ID (opcional)"
+          className="w-52 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={saving}
+          onClick={() => {
+            setSaving(true);
+
+            void saveMetaAppAction(storeId, appId, secret, configId)
+              .then((result) => {
+                setNote(result.message);
+                if (result.ok) {
+                  setSecret("");
+                  setOpen(false);
+                  router.refresh();
+                }
+              })
+              .finally(() => setSaving(false));
+          }}
+        >
+          {saving ? "Guardando…" : "Guardar"}
+        </Button>
+
+        <Button variant="ghost" onClick={() => setOpen(false)}>
+          Cancelar
+        </Button>
+
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Vaciando los dos primeros vuelve a la app por defecto.
+        </span>
+      </div>
+
+      {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
     </div>
   );
 }
@@ -368,6 +494,18 @@ export function AccountList({ accounts }: { accounts: AccountRow[] }) {
                     {account.currency}
                   </span>
                 </p>
+
+                {/*
+                  De qué Business Manager es.
+
+                  Con dos BM, dos cuentas pueden llamarse igual y activar la que
+                  no es resta el gasto de otra tienda del beneficio de esta.
+                */}
+                {account.businessName ? (
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Business Manager: {account.businessName}
+                  </p>
+                ) : null}
 
                 {account.includeFilters.length > 0 || account.excludeFilters.length > 0 ? (
                   <p className="mt-1 flex flex-wrap gap-1 text-xs">

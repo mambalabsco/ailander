@@ -71,9 +71,24 @@ del de empresa, déjalo vacío: entonces se usa `scope`, que sigue funcionando.
 
 Después, `sudo systemctl restart plataforma`.
 
-> Son de la app, no de una tienda: una sola app de Meta sirve para todas tus
-> cuentas publicitarias. Por eso van en el entorno y no en cada tienda, al
-> contrario que las de Shopify —que sí exige una app distinta por tienda—.
+> Estas son la app **por defecto**: la que usa cualquier tienda que no tenga la
+> suya. Con un solo Business Manager no hace falta nada más.
+
+### Si tienes más de un Business Manager
+
+Una app de Meta solo llega a las cuentas del **perfil de Facebook con el que se
+creó**. Si tu segundo BM cuelga de otro perfil, hace falta otra app —lo obliga
+Meta— y en el entorno solo cabe una.
+
+Para eso cada tienda puede tener la suya: en **Datos y beneficio → Conexiones →
+Meta Ads**, abajo, *«Usar otra app»*. Se pega el App ID, el App Secret y el
+Config ID de esa segunda app, y esa tienda inicia sesión contra ella.
+
+El secreto se guarda y no vuelve a salir: la pantalla solo dice si está puesto.
+Vaciando los dos primeros campos, la tienda vuelve a la app por defecto.
+
+Acuérdate de dar de alta la misma URL de retorno —`/api/meta/callback`— también
+en la segunda app.
 
 ### 4 · Iniciar sesión
 

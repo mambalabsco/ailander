@@ -42,6 +42,9 @@ export interface MetaAccount {
   /** 1 es activa; el resto son grados de «no va a gastar». */
   status: number;
   timeZone: string;
+  /** De qué Business Manager cuelga. Vacío en las cuentas personales. */
+  businessId: string;
+  businessName: string;
 }
 
 export interface MetaDailySpend {
@@ -123,10 +126,16 @@ export async function listAccounts(token: string): Promise<MetaAccount[]> {
         currency?: string;
         account_status?: number;
         timezone_name?: string;
+        business?: { id?: string; name?: string };
       }[];
       paging?: { cursors?: { after?: string }; next?: string };
     } = await call("me/adaccounts", token, {
-      fields: "account_id,name,currency,account_status,timezone_name",
+      /*
+       * `business` viene en el propio nodo de la cuenta, así que no cuesta una
+       * llamada más. Sin él la lista es plana, y con dos Business Manager que
+       * tengan cada uno una «Naturox MX» no hay forma de saber cuál se activa.
+       */
+      fields: "account_id,name,currency,account_status,timezone_name,business{id,name}",
       limit: "100",
       ...(after ? { after } : {}),
     });
@@ -138,6 +147,10 @@ export async function listAccounts(token: string): Promise<MetaAccount[]> {
         currency: item.currency ?? "USD",
         status: item.account_status ?? 0,
         timeZone: item.timezone_name ?? "",
+        // Vacío cuando la cuenta no cuelga de ningún Business Manager, que es
+        // el caso de las personales antiguas.
+        businessId: item.business?.id ?? "",
+        businessName: item.business?.name ?? "",
       });
     }
 

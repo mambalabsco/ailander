@@ -1,6 +1,16 @@
 import "server-only";
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { type MetaAppConfig } from "@/lib/meta-app";
+
+export {
+  envAppConfig,
+  isConfigured,
+  peekStore,
+  pickAppConfig,
+  readState,
+  signState,
+  type MetaAppConfig,
+} from "@/lib/meta-app";
 
 /**
  * Iniciar sesión en Meta, sin pegar ningún token.
@@ -39,81 +49,6 @@ export const META_SCOPES = ["ads_read"];
 
 function version(): string {
   return process.env.META_API_VERSION?.trim() || DEFAULT_VERSION;
-}
-
-export interface MetaAppConfig {
-  appId: string;
-  appSecret: string;
-  /**
-   * Identificador de la «configuración» de Facebook Login for Business.
-   *
-   * Las apps de tipo Empresa usan **Login for Business**, que no pide los
-   * permisos con `scope` sino con `config_id`: la lista de permisos y el tipo de
-   * token se declaran una vez en el panel de Meta y el diálogo se invoca
-   * apuntando a esa configuración.
-   *
-   * Es opcional porque `scope` **sigue funcionando** —Meta solo recomienda no
-   * usarlo— y así una app con Login clásico también sirve. Cuando está, se
-   * prefiere: es el camino que Meta mantiene, y permite elegir un token de
-   * usuario de sistema, que no caduca.
-   */
-  configId?: string;
-}
-
-/**
- * Las credenciales de la app, del entorno.
- *
- * **Del entorno y no de la base de datos, al contrario que las de Shopify.** Es
- * la diferencia entre las dos plataformas: Shopify exige una app distinta por
- * tienda, mientras que una sola app de Meta sirve para todas las cuentas
- * publicitarias a las que el usuario tenga acceso. Guardar lo mismo por tienda
- * sería pedir el mismo dato varias veces.
- */
-export function appConfig(): MetaAppConfig | null {
-  const appId = process.env.META_APP_ID?.trim();
-  const appSecret = process.env.META_APP_SECRET?.trim();
-  if (!appId || !appSecret) return null;
-
-  return { appId, appSecret, configId: process.env.META_CONFIG_ID?.trim() || undefined };
-}
-
-export function isConfigured(): boolean {
-  return appConfig() !== null;
-}
-
-/* ---------------------------- Estado anti-CSRF ------------------------------ */
-
-/**
- * El `state` lleva la tienda dentro, firmado.
- *
- * Hace dos trabajos a la vez y los dos hacen falta. Protege de que alguien te
- * mande a un callback con un `code` suyo, y **transporta a qué tienda hay que
- * asociar la cuenta** —el callback de Meta no puede llevar parámetros propios—.
- *
- * Va firmado con el secreto de la app y se compara en tiempo constante: sin la
- * firma, cualquiera podría cambiar el id de la tienda en la URL de vuelta y
- * conectar sus cuentas a otra.
- */
-export function signState(storeId: string, secret: string): string {
-  const nonce = randomBytes(12).toString("hex");
-  const payload = `${storeId}.${nonce}`;
-  const signature = createHmac("sha256", secret).update(payload).digest("hex");
-  return `${payload}.${signature}`;
-}
-
-export function readState(state: string, secret: string): { storeId: string } | null {
-  const parts = state.split(".");
-  if (parts.length !== 3) return null;
-
-  const [storeId, nonce, signature] = parts;
-  const expected = createHmac("sha256", secret).update(`${storeId}.${nonce}`).digest("hex");
-
-  const given = Buffer.from(signature, "hex");
-  const mine = Buffer.from(expected, "hex");
-  if (given.length !== mine.length) return null;
-  if (!timingSafeEqual(given, mine)) return null;
-
-  return { storeId };
 }
 
 /* --------------------------------- Diálogo --------------------------------- */
