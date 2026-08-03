@@ -223,6 +223,68 @@ function unscopedCss(source: string): string[] {
 }
 
 /**
+ * Colores escritos a fuego donde debería haber un ajuste.
+ *
+ * ## Por qué esto importa
+ *
+ * Una sección con `color: #1a1a1a` en el CSS se ve bien y **no se puede
+ * cambiar**: quien la use abre el editor, busca el color del titular y no está.
+ * No hay ningún error, no falta nada — simplemente ese texto es de ese color
+ * para siempre, y el único arreglo es editar el archivo del tema a mano.
+ *
+ * El prompt ya lo pide, pero pedirlo no basta: el modelo escribe un color
+ * literal con toda naturalidad cuando la referencia tenía uno.
+ *
+ * ## Qué se deja pasar
+ *
+ * Lo que no es «el color de un texto o de un fondo que alguien querría cambiar»:
+ *
+ * - Lo que sale de un ajuste, que es Liquid y ya se sustituyó por `LIQUID`.
+ * - `transparent`, `inherit`, `currentColor` y demás palabras: no son un color
+ *   elegido, son una relación con otro.
+ * - Los colores dentro de un `<svg>`: son el dibujo de un icono, y sacarlos a
+ *   un ajuste llenaría el editor de campos que nadie va a tocar.
+ * - Las sombras y los bordes translúcidos —`rgba(0,0,0,.1)`—: son profundidad,
+ *   no identidad, y nadie entra al editor a cambiar la sombra de una tarjeta.
+ */
+function hardcodedColors(source: string): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+
+  for (const style of source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    const body = style[1]
+      .replace(/\{\{[\s\S]*?\}\}/g, "LIQUID")
+      .replace(/\{%[\s\S]*?%\}/g, "LIQUID");
+
+    for (const rule of body.matchAll(
+      /(^|[;{])\s*(color|background|background-color|border-color|fill|stroke)\s*:\s*([^;}]+)/gi,
+    )) {
+      const property = rule[2].toLowerCase();
+      const value = rule[3].trim();
+
+      // Ya viene de un ajuste: es exactamente lo que se quiere.
+      if (value.includes("LIQUID")) continue;
+
+      // Translúcido es profundidad, no identidad.
+      if (/rgba\(|hsla\(/i.test(value)) continue;
+
+      const color = value.match(/#[0-9a-f]{3,8}\b|\brgb\([^)]*\)|\bhsl\([^)]*\)/i);
+      if (!color) continue;
+
+      const key = `${property}:${color[0]}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      problems.push(
+        `\`${property}: ${color[0]}\` está escrito a fuego: quien use la sección no podrá cambiarlo desde el editor. Declara un ajuste \`color\` en el esquema y úsalo con \`{{ section.settings.… }}\`.`,
+      );
+    }
+  }
+
+  return problems;
+}
+
+/**
  * Repasa una sección entera.
  *
  * Devuelve **todos** los problemas, no el primero. Se le mandan de vuelta al
@@ -283,6 +345,10 @@ export function reviewSection(source: string): LiquidReview {
   }
 
   problems.push(...unscopedCss(source));
+
+  // Solo fuera de los SVG: los colores de un icono son el dibujo, no algo que
+  // nadie vaya a cambiar desde el editor.
+  problems.push(...hardcodedColors(source.replace(/<svg[\s\S]*?<\/svg>/gi, "")));
 
   return { ok: problems.length === 0, problems, schema };
 }

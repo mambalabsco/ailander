@@ -171,3 +171,78 @@ test("un ajuste inexistente se salta en vez de inventarlo", () => {
 test("un fichero ilegible no se escribe a medias", () => {
   assert.equal(applySettings("{ roto", [{ path: "a", label: "A", from: "1", to: "2" }]), null);
 });
+
+/* ------------------- Lo que no se puede perder al escribir ------------------ */
+
+/*
+ * El fallo que persigue esto: el logotipo desaparece y el tema enseña el nombre
+ * de la tienda en texto. No da ningún error — un logotipo en blanco es un
+ * estado válido— así que la única forma de cazarlo es no dejar que ocurra.
+ */
+const CON_PRESET = JSON.stringify(
+  {
+    current: "Default",
+    presets: {
+      Default: {
+        logo: "shopify://shop_images/logo.png",
+        favicon: "shopify://shop_images/favicon.png",
+        color_schemes: { "scheme-1": { settings: { background: "#ffffff" } } },
+      },
+    },
+  },
+  null,
+  2,
+);
+
+const SIN_PRESET = JSON.stringify(
+  {
+    current: {
+      logo: "shopify://shop_images/logo.png",
+      color_schemes: { "scheme-1": { settings: { background: "#ffffff" } } },
+    },
+  },
+  null,
+  2,
+);
+
+const CAMBIO = [
+  {
+    path: "color_schemes.scheme-1.settings.background",
+    label: "Fondo",
+    from: "#ffffff",
+    to: "#000000",
+  },
+];
+
+/*
+ * El logotipo vive en los ajustes del tema y aquí solo se tocan colores y
+ * letras. Que sobreviva es lo que hay que poder afirmar, venga el fichero con
+ * preestablecido o sin él.
+ */
+test("el logotipo sobrevive venga como venga el fichero", () => {
+  const conPreset = JSON.parse(applySettings(CON_PRESET, CAMBIO)!);
+  const sinPreset = JSON.parse(applySettings(SIN_PRESET, CAMBIO)!);
+
+  assert.equal(conPreset.current.logo, "shopify://shop_images/logo.png");
+  assert.equal(sinPreset.current.logo, "shopify://shop_images/logo.png");
+
+  // Y el preestablecido original se conserva por si hay que volver.
+  assert.equal(conPreset.presets.Default.logo, "shopify://shop_images/logo.png");
+});
+
+test("sin preestablecido se escribe en `current`, como siempre", () => {
+  const salida = JSON.parse(applySettings(SIN_PRESET, CAMBIO)!);
+
+  assert.equal(typeof salida.current, "object");
+  assert.equal(salida.current.color_schemes["scheme-1"].settings.background, "#000000");
+});
+
+test("no se inventan ajustes que el tema no declara", () => {
+  const salida = JSON.parse(
+    applySettings(SIN_PRESET, [
+      { path: "no_existe", label: "x", from: "a", to: "b" },
+    ])!,
+  );
+
+  assert.equal("no_existe" in salida.current, false);
+});

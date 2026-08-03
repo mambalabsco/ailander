@@ -165,14 +165,15 @@ Y escribe el contenido **de este producto**, con esta investigación. Ni una fra
 Estas no son estilo: si fallas una, la sección no aparece o rompe la tienda.
 
 1. **Un solo bloque \`{% schema %}\`, con JSON válido.** Shopify no da ningún error si tiene una coma de más: la sección simplemente no aparece en el editor.
-2. **Todo ajuste que uses, decláralo.** Cada \`section.settings.x\` en un \`settings\`, cada \`block.settings.y\` en el \`settings\` de un tipo de bloque. Un ajuste sin declarar sale vacío y nada falla.
-3. **El esquema lleva \`name\` y \`presets\`.** Sin \`presets\` no se puede añadir desde el editor.
-4. **Ningún \`default\` vacío.** Un ajuste puede no tener \`default\`; lo que no puede es tenerlo en blanco. Shopify rechaza el archivo entero con «default can't be blank». Si no hay valor por defecto, no pongas la clave.
-5. **Todo el CSS encerrado en \`#shopify-section-{{ section.id }}\`.** Cada selector, sin excepción — uno suelto le cambia los colores al resto de la página.
-6. **Cierra todas las etiquetas de bloque**: \`{% for %}\`/\`{% endfor %}\`, \`{% if %}\`/\`{% endif %}\`.
-7. **Nada de \`{% render %}\` ni \`{% include %}\`**: no sabemos qué fragmentos trae ese tema.
-8. **Nada de \`<script>\`.** Los desplegables se hacen con \`<details>\`, no con JavaScript.
-9. **Nada que se cargue de fuera de la tienda.** Los iconos, SVG en línea; las imágenes, un \`image_picker\`.
+2. **Ni un color escrito a fuego.** Cada color de texto, de fondo, de borde o de botón sale de un ajuste \`color\` del esquema —\`{{ section.settings.titulo_color }}\`—, nunca de un \`#1a1a1a\` en el CSS. Un color literal se ve bien y **no se puede cambiar**: quien abra el editor buscará ese color y no estará, sin ningún error que lo explique. Los valores de la paleta van como \`default\` del ajuste. Se salvan las sombras y los translúcidos \`rgba(...)\`, que son profundidad y no identidad, y los colores dentro de un \`<svg>\`, que son el dibujo de un icono.
+3. **Todo ajuste que uses, decláralo.** Cada \`section.settings.x\` en un \`settings\`, cada \`block.settings.y\` en el \`settings\` de un tipo de bloque. Un ajuste sin declarar sale vacío y nada falla.
+4. **El esquema lleva \`name\` y \`presets\`.** Sin \`presets\` no se puede añadir desde el editor.
+5. **Ningún \`default\` vacío.** Un ajuste puede no tener \`default\`; lo que no puede es tenerlo en blanco. Shopify rechaza el archivo entero con «default can't be blank». Si no hay valor por defecto, no pongas la clave.
+6. **Todo el CSS encerrado en \`#shopify-section-{{ section.id }}\`.** Cada selector, sin excepción — uno suelto le cambia los colores al resto de la página.
+7. **Cierra todas las etiquetas de bloque**: \`{% for %}\`/\`{% endfor %}\`, \`{% if %}\`/\`{% endif %}\`.
+8. **Nada de \`{% render %}\` ni \`{% include %}\`**: no sabemos qué fragmentos trae ese tema.
+9. **Nada de \`<script>\`.** Los desplegables se hacen con \`<details>\`, no con JavaScript.
+10. **Nada que se cargue de fuera de la tienda.** Los iconos, SVG en línea; las imágenes, un \`image_picker\`.
 
 ## Cómo debe verse en cualquier pantalla
 

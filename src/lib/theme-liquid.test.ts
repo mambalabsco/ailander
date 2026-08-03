@@ -381,3 +381,64 @@ test("si el esquema no declara bloques, sobran", () => {
   // Colocarlos igualmente sería el mismo fallo por el otro lado.
   assert.equal(coerceBlockType({ settings: [] }, "item", []), null);
 });
+
+/* --------------------- Colores que no se pueden cambiar -------------------- */
+
+const conColor = (css: string, extra = "") => `<div class="lp">x</div>${extra}
+<style>
+#shopify-section-{{ section.id }} .lp { ${css} }
+</style>
+{% schema %}
+{"name":"X","presets":[{"name":"X"}]}
+{% endschema %}`;
+
+const colorAFuego = (source: string) =>
+  reviewSection(source).problems.filter((problem) => problem.includes("a fuego"));
+
+/*
+ * El fallo que persigue esto no rompe nada y no se ve: la sección queda
+ * perfecta y ese texto es de ese color **para siempre**. Quien abre el editor
+ * busca el color del titular y no está, sin ningún error que lo explique.
+ */
+test("un color escrito a fuego se rechaza", () => {
+  assert.equal(colorAFuego(conColor("color: #1a1a1a;")).length, 1);
+  assert.equal(colorAFuego(conColor("background: rgb(20, 20, 20);")).length, 1);
+});
+
+test("un color que sale de un ajuste es justo lo que se quiere", () => {
+  assert.deepEqual(colorAFuego(conColor("color: {{ section.settings.titulo_color }};")), []);
+});
+
+test("las palabras no son un color elegido", () => {
+  // Son una relación con otro, no una decisión de diseño que alguien cambiaría.
+  assert.deepEqual(colorAFuego(conColor("color: inherit; border-color: transparent;")), []);
+  assert.deepEqual(colorAFuego(conColor("fill: currentColor;")), []);
+});
+
+test("las sombras y los translúcidos pasan", () => {
+  // Son profundidad, no identidad: nadie entra al editor a cambiar la sombra
+  // de una tarjeta, y sacarlas a un ajuste llenaría el editor de ruido.
+  assert.deepEqual(colorAFuego(conColor("background: rgba(0, 0, 0, .08);")), []);
+});
+
+test("los colores de un icono en línea no cuentan", () => {
+  // Son el dibujo del icono, no el color de un texto.
+  const svg = '<svg><path fill="#ff0000" stroke="#00ff00" /></svg>';
+
+  assert.deepEqual(colorAFuego(conColor("color: {{ section.settings.c }};", svg)), []);
+});
+
+test("el mismo color repetido se dice una vez", () => {
+  // Cinco veces el mismo aviso ahoga los demás problemas de la lista.
+  const problems = colorAFuego(
+    conColor("color: #1a1a1a;} #shopify-section-{{ section.id }} .otra { color: #1a1a1a;"),
+  );
+
+  assert.equal(problems.length, 1);
+});
+
+test("el aviso dice qué hacer, no solo qué está mal", () => {
+  // Vuelve al modelo para que corrija: sin la instrucción, la siguiente pasada
+  // escribe lo mismo.
+  assert.match(colorAFuego(conColor("color: #1a1a1a;"))[0], /Declara un ajuste/);
+});

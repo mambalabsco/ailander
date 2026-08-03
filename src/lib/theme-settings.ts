@@ -257,6 +257,11 @@ export function applySettings(json: string, changes: SettingsChange[]): string |
     if (node && last in node) node[last] = change.to;
   }
 
+  /*
+   * `current` pasa a ser un objeto, que es lo que hace el propio editor de
+   * Shopify al tocar el primer ajuste. El preestablecido original se conserva
+   * intacto en `presets`, por si hay que volver.
+   */
   root.current = next;
 
   return `${JSON.stringify(root, null, 2)}\n`;
