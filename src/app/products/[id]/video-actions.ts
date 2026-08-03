@@ -861,7 +861,13 @@ export async function assembleVideoAction(
        * Los tiempos por palabra ya los tenemos: se escribe lo correcto en el
        * segundo correcto sin escuchar nada.
        */
-      const captions = await drawCaptions(videoId, video.shots).catch(() => []);
+      const subtitulos = await drawCaptions(videoId, video.shots).catch((error) => ({
+        drawn: [],
+        failed: -1,
+        reason: error instanceof Error ? error.message : "no se pudieron dibujar",
+      }));
+
+      const captions = subtitulos.drawn;
 
       await report("Montando el vídeo: esto tarda un rato");
 
@@ -952,7 +958,11 @@ export async function assembleVideoAction(
         summary:
           timeline.missing.length > 0
             ? `Montado, ${timeline.seconds} s con ${planos} de ${withClip.length} tomas. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
-            : `Montado, ${timeline.seconds} s con ${planos} plano(s) distintos${captions.length > 0 ? `, ${captions.length} subtítulos` : ""}${video.musicUrl ? " y música" : ""}.`,
+            : `Montado, ${timeline.seconds} s con ${planos} plano(s) distintos${captions.length > 0 ? `, ${captions.length} subtítulos` : ""}${
+              subtitulos.failed !== 0
+                ? ` Sin subtítulos: ${subtitulos.reason || "fallaron todos"}.`
+                : ""
+            }${video.musicUrl ? " y música" : ""}.`,
       };
     },
   });

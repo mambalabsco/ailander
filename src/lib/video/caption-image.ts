@@ -43,14 +43,18 @@ export interface DrawnCaption {
 /**
  * Un PNG por trozo de subtítulo, subido y con su tiempo.
  *
- * Un trozo que no se pueda dibujar o subir se salta: quedarse sin un subtítulo
- * es un vídeo con una línea menos, y quedarse sin vídeo por eso sería absurdo.
+ * Un trozo que no se pueda dibujar o subir se salta —quedarse sin vídeo por un
+ * subtítulo sería absurdo— pero se cuenta y se devuelve el motivo del primero.
+ * Saltárselo en silencio es lo que hizo que un vídeo saliera sin ni un subtítulo
+ * sin que nada lo dijera.
  */
 export async function drawCaptions(
   videoId: string,
   shots: CaptionShot[],
-): Promise<DrawnCaption[]> {
+): Promise<{ drawn: DrawnCaption[]; failed: number; reason: string }> {
   const drawn: DrawnCaption[] = [];
+  let failed = 0;
+  let reason = "";
 
   for (const shot of shots) {
     if (shot.cutStart === null || shot.cutEnd === null) continue;
@@ -76,11 +80,19 @@ export async function drawCaptions(
         });
 
         drawn.push({ url, start: piece.start, end: piece.end });
-      } catch {
-        continue;
+      } catch (error) {
+        /*
+         * Un subtítulo que no sale no tumba el montaje, pero **se cuenta**.
+         *
+         * Tragarse el fallo sin más fue lo que convirtió un problema de una
+         * línea —el almacén no aceptaba imágenes— en un vídeo entero sin
+         * subtítulos y sin nada que lo explicara.
+         */
+        failed += 1;
+        if (!reason) reason = error instanceof Error ? error.message : "no se pudo dibujar";
       }
     }
   }
 
-  return drawn;
+  return { drawn, failed, reason };
 }
