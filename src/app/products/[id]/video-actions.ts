@@ -861,7 +861,7 @@ export async function assembleVideoAction(
        * Los tiempos por palabra ya los tenemos: se escribe lo correcto en el
        * segundo correcto sin escuchar nada.
        */
-      const subtitulos = await drawCaptions(videoId, video.shots).catch((error) => ({
+      const subtitulos = await drawCaptions(videoId, video.shots, report).catch((error) => ({
         drawn: [],
         failed: -1,
         reason: error instanceof Error ? error.message : "no se pudieron dibujar",

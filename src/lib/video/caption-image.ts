@@ -2,7 +2,7 @@ import "server-only";
 
 import sharp from "sharp";
 
-import { captionPieces, captionSvg } from "@/lib/video/captions";
+import { captionFrames, captionPieces, captionSvg } from "@/lib/video/captions";
 import { uploadVideoAsset } from "@/lib/data/video-assets";
 
 /**
@@ -48,9 +48,19 @@ export interface DrawnCaption {
  * Saltárselo en silencio es lo que hizo que un vídeo saliera sin ni un subtítulo
  * sin que nada lo dijera.
  */
+/**
+ * Cuántos fotogramas de subtítulo se dibujan como mucho.
+ *
+ * Uno por palabra son unos ciento cincuenta en un anuncio de sesenta segundos, y
+ * cada uno es un dibujo y una subida. Trescientos cubren dos minutos largos; más
+ * allá el montaje tarda más en juntarlos que en montar el vídeo.
+ */
+const MAX_FRAMES = 300;
+
 export async function drawCaptions(
   videoId: string,
   shots: CaptionShot[],
+  report?: (progress: string) => Promise<void>,
 ): Promise<{ drawn: DrawnCaption[]; failed: number; reason: string }> {
   const drawn: DrawnCaption[] = [];
   let failed = 0;
@@ -64,22 +74,45 @@ export async function drawCaptions(
 
     const pieces = captionPieces({ written, start: shot.cutStart, end: shot.cutEnd });
 
-    for (const [index, piece] of pieces.entries()) {
+    /*
+     * Un fotograma por palabra, no por trozo.
+     *
+     * Es lo que hace que el subtítulo acompañe en vez de estar ahí: se pinta el
+     * trozo entero y se enciende la palabra que suena, así que la vista va sola
+     * detrás de la que cambia.
+     */
+    const frames = pieces.flatMap((piece) => captionFrames(piece));
+
+    for (const [index, frame] of frames.entries()) {
+      if (drawn.length >= MAX_FRAMES) break;
+
+      // Cada veinte, que si no el cartel cambia cien veces y no se lee ninguna.
+      if (report && drawn.length % 20 === 0) {
+        await report(`Dibujando subtítulos… ${drawn.length}`);
+      }
+
       try {
         const png = await sharp(
-          Buffer.from(captionSvg({ text: piece.text, width: WIDTH, height: HEIGHT })),
+          Buffer.from(
+            captionSvg({
+              words: frame.words,
+              active: frame.active,
+              width: WIDTH,
+              height: HEIGHT,
+            }),
+          ),
         )
           .png()
           .toBuffer();
 
         const url = await uploadVideoAsset({
           videoId,
-          name: `sub-${shot.n}-${index}.png`,
+          name: `sub-${shot.n}-${String(index).padStart(3, "0")}.png`,
           data: png,
           contentType: "image/png",
         });
 
-        drawn.push({ url, start: piece.start, end: piece.end });
+        drawn.push({ url, start: frame.start, end: frame.end });
       } catch (error) {
         /*
          * Un subtítulo que no sale no tumba el montaje, pero **se cuenta**.

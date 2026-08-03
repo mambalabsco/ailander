@@ -90,6 +90,61 @@ export function captionPieces(options: {
 }
 
 /**
+ * Un fotograma de subtítulo: el trozo entero con **una** palabra encendida.
+ *
+ * Es lo que separa un subtítulo que acompaña de uno que solo está ahí. La
+ * palabra que suena se pinta en amarillo y un poco más grande, y las de al lado
+ * se quedan en blanco: la vista va sola detrás de la que cambia, así que se lee
+ * al ritmo de la voz sin esfuerzo.
+ */
+export interface CaptionFrame {
+  /** Las palabras del trozo, todas. */
+  words: string[];
+  /** Cuál está sonando. */
+  active: number;
+  start: number;
+  end: number;
+}
+
+/**
+ * Reparte el trozo en un fotograma por palabra.
+ *
+ * El reparto es **proporcional a lo larga que es cada palabra**, no a partes
+ * iguales. «de» y «convertirla» no se tardan lo mismo en decir, y con partes
+ * iguales el resaltado se adelanta en las largas y se atrasa en las cortas — que
+ * es exactamente cuando se nota que va mal.
+ */
+export function captionFrames(piece: CaptionPiece): CaptionFrame[] {
+  const words = piece.text.trim().split(/\s+/).filter(Boolean);
+  const span = piece.end - piece.start;
+
+  if (words.length === 0 || span <= 0) return [];
+
+  // Se cuenta una letra de más por palabra: la pausa entre palabras existe y sin
+  // ella las de una sola letra salen casi instantáneas.
+  const weights = words.map((word) => word.length + 1);
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+
+  const frames: CaptionFrame[] = [];
+  let elapsed = 0;
+
+  for (const [index, weight] of weights.entries()) {
+    const start = piece.start + (elapsed / total) * span;
+    elapsed += weight;
+    const end = piece.start + (elapsed / total) * span;
+
+    frames.push({
+      words,
+      active: index,
+      start: Number(start.toFixed(3)),
+      end: Number(end.toFixed(3)),
+    });
+  }
+
+  return frames;
+}
+
+/**
  * El SVG de un trozo de subtítulo, al estilo de los vídeos verticales.
  *
  * Cuatro decisiones y cada una tapa un fallo distinto:
@@ -108,33 +163,58 @@ export function captionPieces(options: {
  * imagen saldría vacía sin que nada avisara.
  */
 export function captionSvg(options: {
-  text: string;
+  words: string[];
+  /** Cuál está sonando. `-1` para no encender ninguna. */
+  active?: number;
   width: number;
   height: number;
   fontSize?: number;
   color?: string;
   strokeColor?: string;
-  /** El color de las palabras que se quieren destacar. */
+  /** El color de la palabra que suena. */
   accent?: string;
   upper?: boolean;
 }): string {
   const size = options.fontSize ?? Math.round(options.width * 0.105);
   const color = options.color ?? "#ffffff";
   const stroke = options.strokeColor ?? "#000000";
+  const accent = options.accent ?? "#ffe11a";
+  const active = options.active ?? -1;
 
-  const text = options.upper === false ? options.text : options.text.toUpperCase();
+  const words =
+    options.upper === false ? options.words : options.words.map((word) => word.toUpperCase());
 
-  const lines = wrap(text, 14);
-  const lineHeight = Math.round(size * 1.12);
+  /*
+   * La que suena, más grande.
+   *
+   * Un 14 % basta: se nota el salto y no descoloca la línea. Más la levanta
+   * sobre las de al lado y el renglón deja de leerse como una frase.
+   */
+  const bigger = Math.round(size * 1.14);
+
+  const lines = wrapWords(words, 14);
+  const lineHeight = Math.round(bigger * 1.12);
 
   // A dos tercios: abajo del todo lo tapan la interfaz de la red y el pulgar.
   const first = Math.round(options.height * 0.68) - Math.round((lineHeight * lines.length) / 2);
 
+  let index = -1;
+
   const tspans = lines
-    .map(
-      (line, index) =>
-        `<tspan x="${options.width / 2}" y="${first + lineHeight * (index + 1)}">${escapeXml(line)}</tspan>`,
-    )
+    .map((line, row) => {
+      const inner = line
+        .map((word) => {
+          index += 1;
+          const on = index === active;
+
+          return `<tspan fill="${on ? accent : color}" font-size="${on ? bigger : size}">${escapeXml(word)}</tspan>`;
+        })
+        // El espacio va fuera del `tspan` para que no herede su tamaño: dentro,
+        // el de la palabra grande abre un hueco que se ve como un salto.
+        .join(" ");
+
+      return `<tspan x="${options.width / 2}" y="${first + lineHeight * (row + 1)}">${inner}</tspan>`;
+    })
     .join("");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${options.width}" height="${options.height}">
@@ -144,11 +224,35 @@ export function captionSvg(options: {
     </filter>
   </defs>
   <text text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif"
-        font-size="${size}" font-weight="900" letter-spacing="${Math.round(size * 0.01)}"
-        fill="${options.accent ?? color}" stroke="${stroke}"
+        font-weight="900" letter-spacing="${Math.round(size * 0.01)}"
+        fill="${color}" stroke="${stroke}"
         stroke-width="${Math.max(4, Math.round(size * 0.16))}"
         paint-order="stroke fill" filter="url(#s)">${tspans}</text>
 </svg>`;
+}
+
+/** Parte una lista de palabras en líneas, sin cortar ninguna. */
+export function wrapWords(words: string[], maxChars: number): string[][] {
+  const lines: string[][] = [];
+  let current: string[] = [];
+  let length = 0;
+
+  for (const word of words) {
+    const next = length === 0 ? word.length : length + 1 + word.length;
+
+    if (next > maxChars && current.length > 0) {
+      lines.push(current);
+      current = [word];
+      length = word.length;
+    } else {
+      current.push(word);
+      length = next;
+    }
+  }
+
+  if (current.length > 0) lines.push(current);
+
+  return lines;
 }
 
 /** Parte en líneas sin cortar palabras. */
