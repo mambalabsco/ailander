@@ -29,12 +29,15 @@ export default async function EstudioPage(props: {
 
   const { p } = await props.searchParams;
 
-  const [projects, products, jobs, higgs, cliModels] = await Promise.all([
+  const [projects, products, jobs, higgs, cliModels, cliVideoModels] = await Promise.all([
     listProjects().catch(() => []),
     listOwnProducts(),
     listJobsByKind("imagenes", 6).catch(() => []),
     cliStatus().catch(() => ({ authenticated: false })),
-    listCliModels().catch(() => []),
+    listCliModels("image").catch(() => []),
+    // Los de vídeo son otra llamada porque el CLI filtra por tipo. Sin ella no
+    // aparecía ninguno, que es lo que se veía en la pantalla.
+    listCliModels("video").catch(() => []),
   ]);
 
   const current = projects.find((project) => project.id === p) ?? projects[0];
@@ -57,11 +60,20 @@ export default async function EstudioPage(props: {
         current={current ?? null}
         assets={assets}
         products={products.map((product) => ({ id: product.id, name: product.name }))}
-        cliModels={cliModels
-          // Solo los de imagen: los de vídeo van por el otro proveedor, que es
-          // el que cobra por segundo y sabe la duración.
-          .filter((model) => !model.jobType.includes("video"))
-          .map((model) => ({ slug: model.slug, name: model.title }))}
+        cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
+        cliVideoModels={cliVideoModels.map((model) => ({
+          slug: model.slug,
+          name: model.title,
+          /*
+           * `null` es «todavía no se sabe», y se pinta como que sí acepta.
+           *
+           * El listado no siempre trae los parámetros de cada modelo; se
+           * resuelven preguntando por el modelo concreto justo antes de generar.
+           * Esconder el selector de imágenes por no saberlo dejaría sin
+           * referencias a modelos que sí las admiten.
+           */
+          takesReferences: model.mediaParams === null || model.mediaParams.length > 0,
+        }))}
         hasHiggsfield={higgs.authenticated === true}
       />
     </div>

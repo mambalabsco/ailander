@@ -6,7 +6,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { declaresImageReferences, extractImageUrls } from "@/lib/higgsfield-urls";
+import {
+  declaredMediaParams,
+  extractMediaUrls,
+  MEDIA_PARAMS,
+  type MediaKind,
+} from "@/lib/higgsfield-urls";
 
 const run = promisify(execFile);
 
@@ -64,12 +69,13 @@ export interface CliModel {
   /** `text2image`, `image2video`… tal y como lo devuelve el CLI. */
   jobType: string;
   /**
-   * Si acepta la foto del producto como referencia.
+   * Con qué banderas acepta imágenes: `image_references`, `start_image`…
    *
    * `null` cuando el listado no trae los parámetros de cada modelo: entonces se
-   * resuelve con `modelAcceptsReferences` justo antes de generar. Nunca se
-   * asume que sí.
+   * resuelve con `modelMediaParams` justo antes de generar. Nunca se asume.
    */
+  mediaParams: string[] | null;
+  /** Si acepta la foto del producto como referencia. Atajo sobre lo anterior. */
   acceptsReferences: boolean | null;
 }
 
@@ -209,10 +215,15 @@ export async function cliStatus(): Promise<CliStatus> {
   return { installed: true, authenticated: true, version };
 }
 
-export async function listCliModels(): Promise<CliModel[]> {
-  // `--image` lo filtra el propio CLI. Sin él llegan también los de vídeo, audio
-  // y texto, y habría que adivinar cuáles descartar por el nombre.
-  const { stdout, stderr } = await exec(["model", "list", "--image", "--json"], 30_000);
+/**
+ * Los modelos del CLI de un tipo.
+ *
+ * El filtro lo hace el propio CLI con `--image` o `--video`. Sin bandera llegan
+ * los cuatro tipos mezclados —también audio y texto— y habría que adivinar
+ * cuáles descartar por el nombre.
+ */
+export async function listCliModels(kind: "image" | "video" = "image"): Promise<CliModel[]> {
+  const { stdout, stderr } = await exec(["model", "list", `--${kind}`, "--json"], 30_000);
   const combined = `${stdout}\n${stderr}`;
 
   if (looksUnauthenticated(combined)) {
@@ -241,7 +252,10 @@ export async function listCliModels(): Promise<CliModel[]> {
       jobType: String(item.output_type ?? item.type ?? ""),
       // Si el listado trae los parámetros, ya se sabe; si no, `null` y se
       // preguntará por el modelo concreto. Un `false` aquí sería mentir.
-      acceptsReferences: hasParams(item) ? declaresImageReferences(item) : null,
+      mediaParams: hasParams(item) ? declaredMediaParams(item) : null,
+      acceptsReferences: hasParams(item)
+        ? declaredMediaParams(item).includes("image_references")
+        : null,
     }))
     .filter((model) => model.slug);
 }
@@ -252,17 +266,17 @@ function hasParams(item: Record<string, unknown>): boolean {
 }
 
 /**
- * Pregunta al CLI si un modelo concreto acepta imágenes de referencia.
+ * Con qué banderas acepta imágenes un modelo concreto.
  *
  * Una llamada por modelo elegido, no por modelo del catálogo: `model get` es una
  * ida y vuelta a la API y hacerla cuarenta veces para pintar un desplegable
  * dejaría la página en blanco varios segundos.
  *
- * Ante la duda devuelve `false`: generar sin la referencia da una imagen
+ * Ante la duda devuelve lista vacía: generar sin la referencia da un resultado
  * mejorable, mientras que mandarla a un modelo que no la entiende aborta la
  * generación entera con «Unknown params».
  */
-export async function modelAcceptsReferences(slug: string): Promise<boolean> {
+export async function modelMediaParams(slug: string): Promise<string[]> {
   const { stdout, stderr } = await exec(["model", "get", slug, "--json"], 30_000);
 
   if (looksUnauthenticated(`${stdout}\n${stderr}`)) {
@@ -270,10 +284,15 @@ export async function modelAcceptsReferences(slug: string): Promise<boolean> {
   }
 
   try {
-    return declaresImageReferences(JSON.parse(stdout));
+    return declaredMediaParams(JSON.parse(stdout));
   } catch {
-    return false;
+    return [];
   }
+}
+
+/** Si un modelo concreto acepta la foto del producto como referencia. */
+export async function modelAcceptsReferences(slug: string): Promise<boolean> {
+  return (await modelMediaParams(slug)).includes("image_references");
 }
 
 export interface CliGenerationResult {
@@ -287,17 +306,32 @@ export interface CliGenerationResult {
  * Las referencias llegan como bytes —vienen del bucket privado, no de una URL
  * pública— y se escriben en un directorio temporal porque las banderas del CLI
  * esperan una ruta. Se borra siempre, también si la generación falla.
+ *
+ * `kind` decide qué URL se recoge del resultado. Un modelo de vídeo devuelve el
+ * clip **y** su miniatura, así que buscar imágenes en su salida encontraría el
+ * `.jpg` de la miniatura y lo guardaría como si fuera el vídeo.
  */
 export async function generateWithCli(options: {
   model: string;
   prompt: string;
   /** Imágenes de referencia ya descargadas. El CLI las sube él. */
   references?: { filename: string; bytes: Uint8Array }[];
+  /** Qué se espera de vuelta. Por defecto, imágenes. */
+  kind?: MediaKind;
+  /**
+   * Con qué bandera mandar las referencias.
+   *
+   * Se resuelve preguntándole al modelo, no suponiendo: el que hace vídeo desde
+   * un primer fotograma quiere `--start-image` y el que mantiene un personaje
+   * quiere `--image-references`. La equivocada aborta con «Unknown params».
+   */
+  referenceParam?: string;
   aspectRatio?: string;
   resolution?: string;
   timeoutMs?: number;
 }): Promise<CliGenerationResult> {
   const references = options.references ?? [];
+  const kind = options.kind ?? "imagen";
   let workdir: string | null = null;
 
   // Antes de gastar: sin workspace activo la generación falla siempre, y el
@@ -311,15 +345,27 @@ export async function generateWithCli(options: {
     if (options.resolution) args.push("--resolution", options.resolution);
 
     if (references.length > 0) {
+      const flag = MEDIA_PARAMS[options.referenceParam ?? "image_references"];
+
+      if (!flag) {
+        throw new Error(
+          `No sé con qué bandera mandarle las imágenes a ${options.model} («${options.referenceParam}»).`,
+        );
+      }
+
       workdir = await mkdtemp(path.join(tmpdir(), "higgsfield-"));
 
-      for (const reference of references) {
+      // Los que quieren un primer fotograma aceptan **uno**: mandarles varios
+      // repetiría la bandera y el CLI se queda con el último sin avisar.
+      const usable = flag === "--image-references" ? references : references.slice(0, 1);
+
+      for (const reference of usable) {
         // Nombre saneado: el del archivo original puede traer cualquier cosa y
         // acaba siendo un argumento de línea de comandos.
         const safe = reference.filename.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-80);
         const file = path.join(workdir, safe || "referencia.png");
         await writeFile(file, reference.bytes);
-        args.push("--image-references", file);
+        args.push(flag, file);
       }
     }
 
@@ -348,11 +394,11 @@ export async function generateWithCli(options: {
       );
     }
 
-    const urls = extractImageUrls(stdout);
+    const urls = extractMediaUrls(stdout, kind);
 
     if (urls.length === 0) {
       throw new Error(
-        `El CLI terminó sin devolver ninguna imagen: ${combined.trim().slice(0, 300) || "sin salida"}`,
+        `El CLI terminó sin devolver ningún ${kind === "video" ? "vídeo" : "imagen"}: ${combined.trim().slice(0, 300) || "sin salida"}`,
       );
     }
 

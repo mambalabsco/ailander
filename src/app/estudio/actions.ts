@@ -18,7 +18,7 @@ import {
   speak,
   trimClip,
 } from "@/lib/video/providers";
-import { generateWithCli } from "@/lib/higgsfield-cli";
+import { generateWithCli, modelMediaParams } from "@/lib/higgsfield-cli";
 import { attenuateWav, MUSIC_GAIN } from "@/lib/video/wav-gain";
 import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import { subtitleLanguage } from "@/lib/video/vocabulary";
@@ -291,6 +291,86 @@ export async function makeImageAction(input: unknown): Promise<LaunchResult> {
 }
 
 /**
+ * Un clip con un modelo de vídeo de Higgsfield, por su CLI.
+ *
+ * Va aparte del resto porque no se le parece en nada: el catálogo lo dice el
+ * CLI en marcha, las referencias viajan como archivos en vez de como
+ * direcciones, y **la duración no se pide** — cada modelo tiene la suya. Meterlo
+ * en la misma función que los de kie obligaría a fingir campos que aquí no
+ * existen.
+ */
+async function makeCliClip(input: {
+  projectId: string;
+  prompt: string;
+  slug: string;
+  references: string[];
+}): Promise<LaunchResult> {
+  if (!input.prompt) throw new Error("Escribe qué quieres ver.");
+
+  await guard();
+
+  return runInBackground({
+    kind: "imagenes",
+    label: `Clip · ${input.slug}`,
+    revalidate: "/estudio",
+    resume: { projectId: input.projectId, prompt: input.prompt, model: `hf:${input.slug}`, references: input.references },
+    work: async (report) => {
+      /*
+       * Se le pregunta al modelo con qué bandera quiere las imágenes.
+       *
+       * Uno que hace vídeo desde un primer fotograma quiere `--start-image` y
+       * otro que mantiene un personaje quiere `--image-references`. La bandera
+       * equivocada no se ignora: aborta la generación con «Unknown params».
+       */
+      const params = input.references.length > 0 ? await modelMediaParams(input.slug) : [];
+
+      if (input.references.length > 0 && params.length === 0) {
+        throw new Error(
+          `${input.slug} no acepta imágenes de partida. Escribe el prompt sin marcar ninguna, o elige otro modelo.`,
+        );
+      }
+
+      await report(
+        params.length > 0
+          ? `Generando con ${input.slug} y ${input.references.length} imagen(es)`
+          : `Generando con ${input.slug}`,
+      );
+
+      const bytes = await Promise.all(
+        input.references.map(async (reference, index) => {
+          const response = await fetch(reference, { cache: "no-store" });
+          return {
+            filename: `ref-${index}.png`,
+            bytes: new Uint8Array(await response.arrayBuffer()),
+          };
+        }),
+      );
+
+      const result = await generateWithCli({
+        model: input.slug,
+        prompt: input.prompt,
+        kind: "video",
+        // El primero que declare: `image_references` si está, y si no el que haya.
+        referenceParam: params.includes("image_references") ? "image_references" : params[0],
+        references: bytes,
+        aspectRatio: "9:16",
+      });
+
+      await addAsset({
+        projectId: input.projectId,
+        kind: "clip",
+        url: result.imageUrls[0],
+        name: input.prompt.slice(0, 60) || "Clip",
+        model: input.slug,
+        prompt: input.prompt,
+      });
+
+      return { summary: `Clip listo con ${input.slug}. Lo que cobra Higgsfield lo dice tu cuenta.` };
+    },
+  });
+}
+
+/**
  * Genera un clip con cualquiera de los modelos del catálogo.
  *
  * De una imagen, de varias referencias o solo de un texto, según lo que admita
@@ -312,6 +392,12 @@ export async function makeClipAction(input: unknown): Promise<LaunchResult> {
     .filter(Boolean);
 
   if (!projectId) throw new Error("Falta el proyecto.");
+
+  // Los de Higgsfield van por su CLI y llevan `hf:` delante, igual que en las
+  // imágenes. Su catálogo lo da él en marcha, así que no está en la tabla.
+  if (modelId.startsWith("hf:")) {
+    return makeCliClip({ projectId, prompt, slug: modelId.slice(3), references });
+  }
 
   const model = findGenerator(modelId);
 

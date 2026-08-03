@@ -68,6 +68,7 @@ export function StudioBoard({
   assets,
   products,
   cliModels,
+  cliVideoModels,
   hasHiggsfield,
 }: {
   projects: StudioProjectView[];
@@ -75,6 +76,7 @@ export function StudioBoard({
   assets: StudioAssetView[];
   products: { id: string; name: string }[];
   cliModels: { slug: string; name: string }[];
+  cliVideoModels: { slug: string; name: string; takesReferences: boolean }[];
   hasHiggsfield: boolean;
 }) {
   const router = useRouter();
@@ -118,13 +120,35 @@ export function StudioBoard({
    * Uno de solo texto no tiene dónde meter una imagen: ofrecerle el selector de
    * referencias es prometer algo que la API va a ignorar en silencio, que es
    * exactamente el fallo que se está evitando en toda esta parte.
+   *
+   * Los de Higgsfield van por su CLI y llevan `hf:` delante. De ellos se sabe
+   * bastante menos —ni duración ni precio, porque cada uno tiene el suyo y lo
+   * dice él— así que se pregunta lo justo y el resto no se pinta.
    */
+  const cliClip = clipModel.startsWith("hf:")
+    ? (cliVideoModels.find((model) => `hf:${model.slug}` === clipModel) ?? null)
+    : null;
+
   const clipGenerator = findGenerator(clipModel);
-  const clipTakesRefs = clipGenerator.refField !== null;
-  const clipCost = estimateCost(clipGenerator, clipSeconds);
+
+  const clipTakesRefs = cliClip ? cliClip.takesReferences : clipGenerator.refField !== null;
+  const clipManyRefs = cliClip ? true : clipGenerator.refIsArray;
+  const clipHasDuration = cliClip ? false : clipGenerator.hasDuration;
+  const clipNativeAudio = cliClip ? false : clipGenerator.nativeAudio;
+  const clipCost = cliClip ? null : estimateCost(clipGenerator, clipSeconds);
+
+  const clipNote = cliClip
+    ? "De Higgsfield, por su CLI. La duración y el precio los pone el modelo; lo que cobre lo verás en tu cuenta."
+    : clipGenerator.note;
 
   const clipReferences = [...clipRefs];
-  const clipReady = clipTakesRefs ? clipReferences.length > 0 : clipPrompt.trim().length > 0;
+
+  // Higgsfield siempre quiere prompt; las imágenes son opcionales en los suyos.
+  const clipReady = cliClip
+    ? clipPrompt.trim().length > 0
+    : clipTakesRefs
+      ? clipReferences.length > 0
+      : clipPrompt.trim().length > 0;
 
   const toggleClipRef = (url: string) =>
     setClipRefs((current) => {
@@ -133,7 +157,7 @@ export function StudioBoard({
       if (next.has(url)) next.delete(url);
       // Los que quieren una sola imagen se quedan con la última marcada, para que
       // no haya duda de cuál va a usar.
-      else if (clipGenerator.refIsArray) next.add(url);
+      else if (clipManyRefs) next.add(url);
       else return new Set([url]);
 
       return next;
@@ -358,17 +382,40 @@ export function StudioBoard({
                 onChange={(event) => setClipModel(event.target.value)}
                 className="mt-2 w-full"
               >
-                {VIDEO_GENERATORS.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                    {model.usdPerSecond > 0 ? ` · $${model.usdPerSecond.toFixed(3)}/s` : ""}
-                  </option>
-                ))}
+                <optgroup label="kie">
+                  {VIDEO_GENERATORS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                      {model.usdPerSecond > 0 ? ` · $${model.usdPerSecond.toFixed(3)}/s` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+
+                {cliVideoModels.length > 0 ? (
+                  <optgroup label="Higgsfield">
+                    {cliVideoModels.map((model) => (
+                      <option key={model.slug} value={`hf:${model.slug}`}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </SelectField>
 
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {clipGenerator.note}
-              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{clipNote}</p>
+
+              {/*
+                Si no hay ninguno de Higgsfield se dice por qué, en vez de dejar
+                un desplegable a medias: casi siempre es la sesión caducada del
+                CLI, y desde la pantalla eso es indistinguible de «no existen».
+              */}
+              {cliVideoModels.length === 0 ? (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  {hasHiggsfield
+                    ? "Higgsfield no devolvió ningún modelo de vídeo."
+                    : "Los de Higgsfield no salen porque el CLI no tiene sesión. Ejecuta «higgsfield auth login» en el servidor."}
+                </p>
+              ) : null}
 
               <textarea
                 value={clipPrompt}
@@ -400,9 +447,11 @@ export function StudioBoard({
               {clipTakesRefs ? (
                 <div className="mt-3">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {clipGenerator.refIsArray
-                      ? "Imágenes de partida — marca las que quieras"
-                      : "Imagen de partida — este modelo admite una sola"}
+                    {cliClip
+                      ? "Imágenes de partida — opcionales; se le preguntará al modelo cómo las quiere"
+                      : clipManyRefs
+                        ? "Imágenes de partida — marca las que quieras"
+                        : "Imagen de partida — este modelo admite una sola"}
                   </p>
 
                   {images.length === 0 ? (
@@ -436,7 +485,7 @@ export function StudioBoard({
               ) : null}
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
-                {clipGenerator.hasDuration ? (
+                {clipHasDuration ? (
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
                     <input
@@ -454,7 +503,7 @@ export function StudioBoard({
                   </p>
                 )}
 
-                {clipGenerator.nativeAudio ? (
+                {clipNativeAudio ? (
                   <label className="flex items-center gap-2 text-xs">
                     <input
                       type="checkbox"
@@ -484,9 +533,9 @@ export function StudioBoard({
                   disabledReason={
                     clipReady
                       ? undefined
-                      : clipTakesRefs
-                        ? "Marca al menos una imagen"
-                        : "Escribe el prompt: este modelo parte solo del texto"
+                      : cliClip || !clipTakesRefs
+                        ? "Escribe el prompt"
+                        : "Marca al menos una imagen"
                   }
                   hint={
                     clipCost === null
