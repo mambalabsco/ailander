@@ -703,6 +703,8 @@ type VideoRow = {
   music_url: string;
   /** Con qué modelo se anima: ver `VIDEO_MODELS`. */
   video_model: string;
+  /** El estilo de subtítulo. Vacío es sin subtítulos. */
+  subtitle_preset: string;
 };
 
 type VideoShotRow = {

@@ -2,11 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, SelectField } from "@/components/ui";
+import { SUBTITLE_PRESETS } from "@/lib/video/captions";
 import { GenerateButton } from "@/components/generate-button";
 import {
   assembleVideoAction,
   generateMusicAction,
+  setSubtitlePresetAction,
   uploadMusicAction,
   generateClipsAction,
   generateKeyframesAction,
@@ -171,7 +173,7 @@ export function ShotBoard({
             label={video.finalUrl ? "Volver a montar" : "Montar el vídeo"}
             disabled={!providers.compose}
             disabledReason={!providers.compose ? "Falta FAL_KEY" : undefined}
-            hint="Céntimos. Lleva los subtítulos quemados con tu texto y la música si la has puesto."
+            hint="Céntimos. Lleva los subtítulos animados con tu texto y la música si la has puesto."
           />
         ) : null}
       </div>
@@ -274,6 +276,45 @@ export function ShotBoard({
           {musicNote ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">{musicNote}</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {/*
+        El estilo de subtítulo, junto al botón que lo usa.
+
+        Cada uno se explica: elegir «fusion» sin saber qué hace es como se acaba
+        con un subtítulo que no pega con el anuncio.
+      */}
+      {withClip.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Estilo de subtítulo
+            </span>
+            <SelectField
+              value={video.subtitlePreset}
+              disabled={isPending}
+              onChange={(event) =>
+                startTransition(async () => {
+                  await setSubtitlePresetAction(video.id, productId, event.target.value);
+                  router.refresh();
+                })
+              }
+              className="min-w-52"
+            >
+              <option value="">Sin subtítulos</option>
+              {SUBTITLE_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+
+          <p className="max-w-72 text-xs text-slate-500 dark:text-slate-400">
+            {SUBTITLE_PRESETS.find((preset) => preset.id === video.subtitlePreset)?.note ??
+              "El vídeo sale sin texto en pantalla."}
+          </p>
         </div>
       ) : null}
 

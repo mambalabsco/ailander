@@ -541,6 +541,49 @@ export async function mergeVideos(urls: string[]): Promise<string> {
   return payload.video.url;
 }
 
+/**
+ * Quema los subtítulos en el vídeo, con estilo de anuncio vertical.
+ *
+ * Se le pasa el SRT hecho **a propósito**. Sabe transcribir el audio él solo,
+ * pero aquí eso es un error: el guion va escrito fonético para que la voz
+ * pronuncie bien, así que escribiría «eme ce te» donde tiene que poner «MCT» —
+ * el fallo que más delata un vídeo generado. Con el SRT delante se salta la
+ * transcripción y solo pone la animación, que es lo que sabe hacer mejor que
+ * nosotros.
+ */
+export async function burnSubtitles(options: {
+  videoUrl: string;
+  srt: string;
+  preset: string;
+  language?: string;
+}): Promise<string> {
+  const response = await fetch("https://fal.run/veed/subtitles", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key("FAL_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      video_url: options.videoUrl,
+      preset: options.preset,
+      srt_content: options.srt,
+      ...(options.language ? { language: options.language } : {}),
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
+    throw new Error(`Los subtítulos respondieron ${response.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const payload = (await response.json()) as { video?: { url?: string } };
+  if (!payload.video?.url) throw new Error("No devolvió ningún vídeo con subtítulos.");
+
+  return payload.video.url;
+}
+
 /* --------------------------------- Música ---------------------------------- */
 
 /**

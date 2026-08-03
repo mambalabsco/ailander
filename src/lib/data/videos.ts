@@ -43,6 +43,8 @@ export interface Video {
   videoModel: string;
   /** Cuándo se tocó por última vez. Delata un montaje nuevo con la misma URL. */
   updatedAt: string;
+  /** El estilo de subtítulo. Vacío es sin subtítulos. */
+  subtitlePreset: string;
   words: TimedWord[];
   voiceSeconds: number;
   finalUrl: string | null;
@@ -121,6 +123,7 @@ export async function listVideos(productId: string): Promise<Video[]> {
     musicUrl: row.music_url ?? "",
     videoModel: row.video_model ?? "grok",
     updatedAt: row.updated_at,
+    subtitlePreset: row.subtitle_preset ?? "hustle",
     words: parseWords(row.words),
     voiceSeconds: num(row.voice_seconds),
     finalUrl: row.final_url,
@@ -265,6 +268,7 @@ export async function updateVideo(
     status?: VideoStatus;
     voiceUrl?: string | null;
     musicUrl?: string;
+    subtitlePreset?: string;
     words?: TimedWord[];
     voiceSeconds?: number;
     finalUrl?: string | null;
@@ -280,6 +284,7 @@ export async function updateVideo(
   if (patch.status !== undefined) changes.status = patch.status;
   if (patch.voiceUrl !== undefined) changes.voice_url = patch.voiceUrl;
   if (patch.musicUrl !== undefined) changes.music_url = patch.musicUrl;
+  if (patch.subtitlePreset !== undefined) changes.subtitle_preset = patch.subtitlePreset;
   if (patch.words !== undefined) changes.words = patch.words as unknown as TablesUpdate<"videos">["words"];
   if (patch.voiceSeconds !== undefined) changes.voice_seconds = patch.voiceSeconds.toFixed(2);
   if (patch.finalUrl !== undefined) changes.final_url = patch.finalUrl;

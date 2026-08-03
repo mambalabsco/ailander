@@ -31,13 +31,14 @@ import {
   type ShotRole,
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
-import { drawCaptions } from "@/lib/video/caption-image";
+import { buildSrt, captionPieces } from "@/lib/video/captions";
 import { MUSIC_GAIN, attenuateWav, buildMusicPrompt } from "@/lib/video/wav-gain";
 import {
   animate,
   compose,
   keyframe,
   listVoices,
+  burnSubtitles,
   makeMusic,
   mergeVideos,
   speak,
@@ -647,6 +648,20 @@ export async function generateClipsAction(
   });
 }
 
+/** El estilo de subtítulo del vídeo. Vacío deja el vídeo sin texto. */
+export async function setSubtitlePresetAction(
+  videoId: unknown,
+  productId: unknown,
+  preset: unknown,
+): Promise<void> {
+  const id = readText(videoId);
+  const product = readText(productId);
+  if (!id) return;
+
+  await updateVideo(id, { subtitlePreset: readText(preset) });
+  if (product) revalidatePath(`/products/${product}`);
+}
+
 /* ------------------------------ La música ---------------------------------- */
 
 /**
@@ -851,28 +866,9 @@ export async function assembleVideoAction(
     work: async (report) => {
       // El montaje es una sola llamada larga, así que no hay pasos que contar:
       // decir que está esperando ya evita pensar que se colgó.
-      await report("Dibujando los subtítulos");
-
-      /*
-       * Se dibujan con **tu** texto, no transcribiendo el audio.
-       *
-       * El guion va fonético para que la voz pronuncie bien —«eme ce te» por
-       * «MCT»— así que un servicio que escuche el vídeo escribiría lo que oye.
-       * Los tiempos por palabra ya los tenemos: se escribe lo correcto en el
-       * segundo correcto sin escuchar nada.
-       */
-      const subtitulos = await drawCaptions(videoId, video.shots, report).catch((error) => ({
-        drawn: [],
-        failed: -1,
-        reason: error instanceof Error ? error.message : "no se pudieron dibujar",
-      }));
-
-      const captions = subtitulos.drawn;
-
       await report("Montando el vídeo: esto tarda un rato");
 
       const timeline = buildTimeline({
-        captions,
         musicUrl: video.musicUrl || undefined,
         // Sin esto, la imagen se acaba con el último corte y el resto queda en
         // negro mientras la voz sigue sonando.
@@ -948,9 +944,58 @@ export async function assembleVideoAction(
         ...timeline.tracks.filter((track) => track.type !== "video"),
       ]);
 
+      /*
+       * Los subtítulos se queman al final, sobre el vídeo ya montado.
+       *
+       * Se le da el SRT hecho con **nuestro** texto y nuestros tiempos: el
+       * servicio sabe transcribir él solo, pero el guion va fonético para que la
+       * voz pronuncie bien y escribiría «eme ce te» donde va «MCT».
+       *
+       * Antes se dibujaban aquí como imágenes y se apilaban en el montaje. Salía
+       * un subtítulo correcto y quieto; este anima palabra a palabra, que es lo
+       * que hace que se lean sin querer.
+       */
+      let finalUrl = result.videoUrl;
+      let subtitulos = "";
+
+      if (video.subtitlePreset) {
+        await report("Quemando los subtítulos");
+
+        const srt = buildSrt(
+          video.shots.flatMap((shot) =>
+            shot.cutStart === null || shot.cutEnd === null
+              ? []
+              : captionPieces({
+                  written: shot.sub?.trim() || shot.guion,
+                  start: shot.cutStart,
+                  end: shot.cutEnd,
+                }),
+          ),
+        );
+
+        if (srt.trim()) {
+          try {
+            finalUrl = await burnSubtitles({
+              videoUrl: result.videoUrl,
+              srt,
+              preset: video.subtitlePreset,
+            });
+
+            subtitulos = `, subtítulos «${video.subtitlePreset}»`;
+          } catch (error) {
+            /*
+             * Un fallo aquí no tira el vídeo: ya está montado y se ve entero.
+             * Pero se dice — un `catch` mudo fue lo que convirtió la vez pasada
+             * un problema de una línea en media hora de buscar.
+             */
+            subtitulos = `. Sin subtítulos: ${error instanceof Error ? error.message : "falló"}`;
+          }
+        }
+      }
+
       await updateVideo(videoId, {
         status: "montado",
-        finalUrl: result.videoUrl,
+        finalUrl,
         thumbnailUrl: result.thumbnailUrl,
       });
 
@@ -958,11 +1003,7 @@ export async function assembleVideoAction(
         summary:
           timeline.missing.length > 0
             ? `Montado, ${timeline.seconds} s con ${planos} de ${withClip.length} tomas. Faltaron ${timeline.missing.join(", ")}: sin tiempos no entran, y las de al lado se estiran para cubrirlas.`
-            : `Montado, ${timeline.seconds} s con ${planos} plano(s) distintos${captions.length > 0 ? `, ${captions.length} subtítulos` : ""}${
-              subtitulos.failed !== 0
-                ? ` Sin subtítulos: ${subtitulos.reason || "fallaron todos"}.`
-                : ""
-            }${video.musicUrl ? " y música" : ""}.`,
+            : `Montado, ${timeline.seconds} s con ${planos} plano(s) distintos${subtitulos}${video.musicUrl ? " y música" : ""}.`,
       };
     },
   });

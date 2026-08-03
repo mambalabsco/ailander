@@ -7,6 +7,9 @@ import {
   captionSvg,
   wrap,
   wrapWords,
+  SUBTITLE_PRESETS,
+  buildSrt,
+  srtTime,
 } from "./captions.ts";
 
 /* -------------------------------- Los trozos ------------------------------- */
@@ -155,4 +158,49 @@ test("un trozo largo se parte en líneas sin cortar palabras", () => {
 
   assert.ok(lines.length > 1);
   assert.deepEqual(lines.flat(), ["DUERMES", "OCHO", "HORAS", "SEGUIDAS"]);
+});
+
+/* ----------------------------- El archivo de subtítulos -------------------- */
+
+test("el tiempo va en el formato que entiende un SRT", () => {
+  assert.equal(srtTime(0), "00:00:00,000");
+  assert.equal(srtTime(83.456), "00:01:23,456");
+  assert.equal(srtTime(3661.5), "01:01:01,500");
+});
+
+test("un tiempo negativo no rompe el archivo", () => {
+  assert.equal(srtTime(-3), "00:00:00,000");
+});
+
+test("el SRT lleva nuestro texto y nuestros tiempos", () => {
+  /*
+   * Es lo que permite quedarse con su animación sin su transcripción: el guion
+   * va fonético para que la voz pronuncie bien, así que transcribiendo saldría
+   * «eme ce te» donde tiene que poner «MCT».
+   */
+  const srt = buildSrt([
+    { text: "MCT al despertar", start: 0, end: 2 },
+    { text: "y nada más", start: 2, end: 3.5 },
+  ]);
+
+  assert.match(srt, /^1\n00:00:00,000 --> 00:00:02,000\nMCT al despertar/);
+  assert.match(srt, /2\n00:00:02,000 --> 00:00:03,500\ny nada más/);
+});
+
+test("los trozos vacíos o sin duración no entran", () => {
+  const srt = buildSrt([
+    { text: "   ", start: 0, end: 2 },
+    { text: "vale", start: 2, end: 2 },
+    { text: "este sí", start: 3, end: 4 },
+  ]);
+
+  assert.match(srt, /^1\n00:00:03,000/);
+});
+
+test("los estilos que se ofrecen están explicados", () => {
+  // Elegir «fusion» sin saber qué hace es como se acaba con un subtítulo que no
+  // pega con el anuncio.
+  for (const preset of SUBTITLE_PRESETS) {
+    assert.ok(preset.note.length > 20, `${preset.id} sin explicar`);
+  }
 });

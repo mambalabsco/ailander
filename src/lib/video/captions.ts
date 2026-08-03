@@ -286,3 +286,59 @@ function escapeXml(text: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 }
+
+
+/* ----------------------------- El archivo de subtítulos -------------------- */
+
+/**
+ * Los trozos, en formato SRT.
+ *
+ * Es lo que permite quedarse con lo mejor de los dos lados: **nuestro texto** y
+ * **su animación**. El servicio de subtítulos sabe transcribir el audio solo,
+ * pero eso aquí es un error — el guion va escrito fonético para que la voz
+ * pronuncie bien, así que escribiría «eme ce te» donde tiene que poner «MCT».
+ * Dándole el SRT hecho, se salta la transcripción y solo pone el estilo.
+ *
+ * Los tiempos salen de los cortes de voz que ya teníamos, que son exactos porque
+ * vienen de los tiempos por palabra del propio audio.
+ */
+export function buildSrt(pieces: CaptionPiece[]): string {
+  return pieces
+    .filter((piece) => piece.end > piece.start && piece.text.trim())
+    .map(
+      (piece, index) =>
+        `${index + 1}\n${srtTime(piece.start)} --> ${srtTime(piece.end)}\n${piece.text.trim()}\n`,
+    )
+    .join("\n");
+}
+
+/** `00:01:23,456`, que es el único formato que entiende un SRT. */
+export function srtTime(seconds: number): string {
+  const safe = Math.max(0, seconds);
+
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const rest = Math.floor(safe % 60);
+  const millis = Math.round((safe - Math.floor(safe)) * 1000);
+
+  const pad = (value: number, size = 2) => String(value).padStart(size, "0");
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(rest)},${pad(millis, 3)}`;
+}
+
+/**
+ * Los estilos de subtítulo que se pueden elegir.
+ *
+ * Son los del servicio, y aquí se listan los que van con un anuncio vertical:
+ * los que animan palabra a palabra. Los demás existen pero son de documental
+ * —quietos y pequeños— que es justo lo que no sirve.
+ */
+export const SUBTITLE_PRESETS: { id: string; label: string; note: string }[] = [
+  { id: "hustle", label: "Hustle", note: "Palabra a palabra, grande y con rebote. El de los anuncios." },
+  { id: "slay", label: "Slay", note: "Resalta con color la palabra que está sonando." },
+  { id: "glide", label: "Glide", note: "Entra deslizando, más suave que los de rebote." },
+  { id: "fusion", label: "Fusion", note: "Lleva fondo detrás del texto: se lee sobre cualquier imagen." },
+  { id: "backdrop", label: "Backdrop", note: "Caja sólida detrás. El más legible de todos." },
+  { id: "vegas", label: "Vegas", note: "Muy marcado y con mucho color, para ganchos cortos." },
+  { id: "simple", label: "Simple", note: "Blanco con borde y sin animación, por si molesta el movimiento." },
+];
