@@ -227,6 +227,8 @@ export async function replaceShots(videoId: string, shots: Shot[]): Promise<void
 export async function updateShot(
   shotId: string,
   patch: {
+    /** Su número, que es su posición. Solo se toca al reparar uno repetido. */
+    n?: string;
     cutStart?: number | null;
     cutEnd?: number | null;
     keyframeUrl?: string | null;
@@ -240,6 +242,7 @@ export async function updateShot(
   // Tipado con la fila y no con `Record`: una columna mal escrita la caza el
   // compilador en vez de acabar en un `update` que Postgres rechaza en marcha.
   const changes: TablesUpdate<"video_shots"> = {};
+  if (patch.n !== undefined) changes.n = patch.n;
   if (patch.cutStart !== undefined) changes.cut_start = patch.cutStart?.toString() ?? null;
   if (patch.cutEnd !== undefined) changes.cut_end = patch.cutEnd?.toString() ?? null;
   if (patch.keyframeUrl !== undefined) changes.keyframe_url = patch.keyframeUrl;

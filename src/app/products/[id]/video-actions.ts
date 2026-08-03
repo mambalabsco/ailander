@@ -193,7 +193,18 @@ export async function createVideoFromCopyAction(
       });
 
       const parsed: Shot[] = (script.data.shots ?? []).map((shot, index) => ({
-        n: shot.n || String(index + 1).padStart(2, "0"),
+        /*
+         * El número lo pone la posición, **nunca el modelo**.
+         *
+         * Es la clave con la que se emparejan la toma, su corte de voz y su
+         * clip. Si el modelo devuelve dos veces el mismo —y lo hace— el mapa de
+         * clips se queda con el último y **todas las tomas acaban apuntando a
+         * ese**: el vídeo repite el mismo plano de principio a fin.
+         *
+         * Nada se gana dejándoselo elegir, y esto se lleva por delante toda esa
+         * clase de fallo.
+         */
+        n: String(index + 1).padStart(2, "0"),
         guion: shot.guion,
         sub: shot.sub || undefined,
         role: (shot.role as ShotRole) ?? "story",
@@ -749,12 +760,44 @@ export async function assembleVideoAction(
   const productId = readText(raw.productId);
   if (!videoId || !productId) throw new Error("Falta el vídeo.");
 
-  const video = await readVideo(videoId);
+  let video = await readVideo(videoId);
   if (!video) throw new Error("Ese vídeo ya no existe.");
   if (!video.voiceUrl) throw new Error("Falta la voz: sin ella no hay tiempos que montar.");
 
   const withClip = video.shots.filter((shot) => shot.clipUrl || shot.lipsyncUrl);
   if (withClip.length === 0) throw new Error("No hay ningún clip que montar.");
+
+  /*
+   * Dos tomas con el mismo número no se pueden montar.
+   *
+   * El número es la clave que une la toma con su corte y con su clip, así que
+   * repetido hace que varias tomas resuelvan al mismo vídeo — y el montaje sale
+   * repitiendo un plano de principio a fin.
+   *
+   * Los guiones nuevos ya no pueden traerlo: el número lo pone la posición. Esto
+   * es para los que se escribieron antes, que si no fallarían siempre igual y
+   * sin decir por qué.
+   */
+  const repetidos = video.shots
+    .map((shot) => shot.n)
+    .filter((n, index, all) => all.indexOf(n) !== index);
+
+  if (repetidos.length > 0) {
+    /*
+     * Se renumeran en vez de rechazar el vídeo.
+     *
+     * El número **es** la posición: no lleva información que se pueda perder al
+     * reasignarlo. Y los clips y los cortes cuelgan de la fila de cada toma, no
+     * del número, así que renumerar arregla el montaje sin volver a generar ni
+     * pagar nada — que es lo contrario de mandar a reescribir el guion.
+     */
+    for (const [index, shot] of video.shots.entries()) {
+      const next = String(index + 1).padStart(2, "0");
+      if (shot.n !== next) await updateShot(shot.id, { n: next });
+    }
+
+    video = (await readVideo(videoId))!;
+  }
 
   /*
    * Una toma sin corte no entra en el montaje, y eso se avisa **antes**.

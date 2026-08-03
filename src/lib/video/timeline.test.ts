@@ -206,3 +206,33 @@ test("la última toma se estira hasta que se calla la voz: nunca queda negro", (
   const audio = result.tracks.find((track) => track.id === "voz");
   assert.equal(audio?.keyframes[0].duration, 30000, "y la voz suena entera");
 });
+
+test("dos tomas no pueden acabar apuntando al mismo clip", () => {
+  /*
+   * Era la causa de que el montaje repitiera un plano de principio a fin. El
+   * mapa de clips se indexa por el número de toma, y ese número lo ponía el
+   * modelo: con uno repetido, `Object.fromEntries` se queda con el último y
+   * todas las tomas resuelven a ese mismo vídeo.
+   *
+   * Ahora el número lo pone la posición, así que la colisión no puede ocurrir.
+   * Esta prueba fija lo que se espera: cada corte, su clip.
+   */
+  const result = buildTimeline({
+    cuts: [
+      { n: "01", start: 0, end: 3 },
+      { n: "02", start: 3, end: 6 },
+      { n: "03", start: 6, end: 9 },
+    ],
+    clips: {
+      "01": "https://cdn/1.mp4",
+      "02": "https://cdn/2.mp4",
+      "03": "https://cdn/3.mp4",
+    },
+    voiceUrl: VOZ,
+  });
+
+  const urls = result.tracks[0].keyframes.map((frame) => frame.url);
+
+  assert.deepEqual(urls, ["https://cdn/1.mp4", "https://cdn/2.mp4", "https://cdn/3.mp4"]);
+  assert.equal(new Set(urls).size, 3, "ningún clip se repite");
+});
