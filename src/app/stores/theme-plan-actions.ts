@@ -42,6 +42,7 @@ import {
   orderAfterRecreate,
   planRecreate,
   writeTemplate,
+  SECTION_LIMIT,
   type TemplateEntry,
 } from "@/lib/theme-sections";
 import {
@@ -355,6 +356,18 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
 
   const plan = planRecreate(current, sectionsOf(blueprint.sections, page));
   if (plan.create.length === 0) {
+    /*
+     * Sin sitio no es lo mismo que sin secciones, y se dice distinto.
+     *
+     * «Vuelve a analizar la tienda» no arregla una plantilla con veinticinco
+     * secciones tuyas: lo que hay que hacer es quitar alguna.
+     */
+    if (plan.overflow.length > 0) {
+      throw new Error(
+        `Tu plantilla ya tiene ${plan.keep.length} secciones y Shopify solo admite ${SECTION_LIMIT}. No queda sitio para ninguna nueva: quita alguna de ${templateName} en el editor y vuelve a intentarlo.`,
+      );
+    }
+
     throw new Error(
       "Ese análisis no tiene ninguna sección que se pueda crear para esta página. Vuelve a analizar la tienda si es anterior a esta versión.",
     );
@@ -716,8 +729,10 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
       }
 
       const order = orderAfterRecreate(plan, usable, current);
-      const nextTemplate = writeTemplate(file.body!, usable, order);
-      if (!nextTemplate) throw new Error("La plantilla no tiene el formato esperado; no se ha tocado.");
+      const written = writeTemplate(file.body!, usable, order);
+      if (!written) throw new Error("La plantilla no tiene el formato esperado; no se ha tocado.");
+
+      const nextTemplate = written.json;
 
       /*
        * La plantilla, al final y sola.
@@ -745,6 +760,30 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
             ? ` ${filledPhotos} más del montón. Son de ${blueprint.storeName}: sustitúyelas antes de publicar.`
             : "",
           photoNote,
+          /*
+           * Lo que no cupo en el tope de Shopify.
+           *
+           * Se dice aparte de las que fallaron la revisión: son dos motivos
+           * distintos y se arreglan distinto. Una que no cupo está bien escrita
+           * y solo sobra sitio; quitando otra de la plantilla entra.
+           */
+          /*
+           * Lo que se apartó **antes** de generarlo, por no caber.
+           *
+           * Va antes que lo demás porque no es un fallo: es una decisión que
+           * ahorró dinero, y quien la lea tiene que poder decidir si quiere
+           * hacer sitio y repetir.
+           */
+          plan.overflow.length > 0
+            ? ` ${plan.overflow.length} no se generaron por falta de sitio (Shopify admite ${SECTION_LIMIT} por plantilla): ${plan.overflow
+                .map((item) => item.kind)
+                .join(", ")}. Quita alguna de las tuyas si las quieres.`
+            : "",
+          written.dropped.length > 0
+            ? ` No cupieron ${written.dropped.length}: Shopify solo admite ${SECTION_LIMIT} secciones por plantilla y se quitaron las últimas (${written.dropped
+                .map((item) => item.type)
+                .join(", ")}). Quita alguna de las tuyas si las quieres.`
+            : "",
           lost.length > 0
             ? ` No entraron: ${lost
                 .map(

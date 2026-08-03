@@ -123,6 +123,16 @@ export function mustKeep(type: string): boolean {
   return ["cabecera", "pie", "anuncio"].includes(roleOf(type));
 }
 
+/**
+ * Lo máximo que admite una plantilla JSON de Shopify.
+ *
+ * Es un límite suyo, no una elección de aquí. Al pasarse rechaza **la escritura
+ * entera** con «sections: must have a maximum of 25» y no dice cuáles sobran,
+ * así que sin cortar antes se pierde el trabajo de todas las secciones —ya
+ * pagadas— por culpa de la vigesimosexta.
+ */
+export const SECTION_LIMIT = 25;
+
 export interface RecreatePlan {
   /** Las que se crean nuevas, en su sitio. */
   create: { kind: string; purpose: string; angle: string }[];
@@ -130,6 +140,13 @@ export interface RecreatePlan {
   keep: { id: string; type: string; reason: string }[];
   /** Las tuyas que salen de la página porque las sustituye una nueva. */
   retire: { id: string; type: string; replacedBy: string }[];
+  /**
+   * Las del plano que no caben en el tope de Shopify.
+   *
+   * Se apartan **antes de generarlas**: escribirlas cuesta dinero y acabarían
+   * cortadas al escribir la plantilla igualmente.
+   */
+  overflow: { kind: string; purpose: string; angle: string }[];
 }
 
 /**
@@ -147,8 +164,8 @@ export function planRecreate(
   current: TemplateSection[],
   blueprint: { kind: string; purpose: string; angle: string }[],
 ): RecreatePlan {
-  const create = blueprint.filter((section) => canCreate(section.kind));
-  const createdKinds = new Set(create.map((section) => section.kind));
+  const creatable = blueprint.filter((section) => canCreate(section.kind));
+  const createdKinds = new Set(creatable.map((section) => section.kind));
 
   const keep: RecreatePlan["keep"] = [];
   const retire: RecreatePlan["retire"] = [];
@@ -179,7 +196,22 @@ export function planRecreate(
     });
   }
 
-  return { create, keep, retire };
+  /*
+   * Lo que no va a caber se aparta **aquí**, antes de generar nada.
+   *
+   * Shopify no admite más de veinticinco secciones por plantilla, y cada una que
+   * se genera cuesta. Cortarlas al escribir dejaría pagadas seis secciones que
+   * se tiran; cortarlas aquí las deja sin pedir y el plan lo dice antes de
+   * empezar, que es cuando todavía se puede decidir otra cosa.
+   *
+   * Se cortan por el final por lo mismo que al escribir: una página se lee de
+   * arriba abajo.
+   */
+  const room = Math.max(0, SECTION_LIMIT - keep.length);
+  const create = creatable.slice(0, room);
+  const overflow = creatable.slice(room);
+
+  return { create, keep, retire, overflow };
 }
 
 /**
@@ -227,6 +259,59 @@ export function orderAfterRecreate(
   return order;
 }
 
+/* ------------------------------- El tope de 25 ----------------------------- */
+
+export interface CapResult {
+  order: string[];
+  /** Las que se quedaron fuera, en el orden en que se descartaron. */
+  dropped: { id: string; type: string }[];
+}
+
+/**
+ * Recorta el orden al tope, **por el final y sin tocar lo imprescindible**.
+ *
+ * Por el final porque una página se lee de arriba abajo: lo de abajo es lo que
+ * menos gente ve, y si algo tiene que caer es eso. Cortar por el principio
+ * dejaría fuera el héroe, que es lo único que se ve seguro.
+ *
+ * Y lo imprescindible se salva aunque esté al final: un pie en la posición
+ * treinta se conserva y cae la sección de relleno que tenía delante.
+ */
+export function capSections(
+  order: string[],
+  typeOf: (id: string) => string,
+  limit = SECTION_LIMIT,
+): CapResult {
+  if (order.length <= limit) return { order, dropped: [] };
+
+  const keep = new Set<string>();
+  const droppable: string[] = [];
+
+  for (const id of order) {
+    if (mustKeep(typeOf(id))) keep.add(id);
+    else droppable.push(id);
+  }
+
+  /*
+   * Si lo imprescindible ya no cabe, no se recorta más.
+   *
+   * Preferimos que Shopify rechace la escritura a entregar una página sin
+   * formulario de compra: lo primero se ve y se arregla, lo segundo es una
+   * tienda que no vende y nadie lo nota.
+   */
+  const room = Math.max(0, limit - keep.size);
+
+  // Se conservan las primeras que quepan y cae el resto: por el final.
+  const dropped = new Set(droppable.slice(room));
+
+  return {
+    order: order.filter((id) => !dropped.has(id)),
+    dropped: order
+      .filter((id) => dropped.has(id))
+      .map((id) => ({ id, type: typeOf(id) })),
+  };
+}
+
 /* ---------------------------- Escribir la plantilla ------------------------ */
 
 /**
@@ -239,11 +324,17 @@ export function orderAfterRecreate(
  * El orden se recorre sin repetir: una sección solo puede aparecer una vez, y
  * Shopify rechaza la escritura entera si aparece dos —sin decir cuál—.
  */
+export interface WriteResult {
+  json: string;
+  /** Las que no cupieron en el tope de Shopify. Se cuentan, no se callan. */
+  dropped: { id: string; type: string }[];
+}
+
 export function writeTemplate(
   json: string,
   additions: TemplateEntry[],
   order: string[],
-): string | null {
+): WriteResult | null {
   let data: unknown;
   try {
     data = JSON.parse(stripLeadingComments(json));
@@ -272,10 +363,30 @@ export function writeTemplate(
   // Lo que no venga en el orden pedido se conserva al final, no se pierde.
   for (const id of Object.keys(next)) if (!seen.has(id)) finalOrder.push(id);
 
-  root.sections = next;
-  root.order = finalOrder;
+  /*
+   * El tope de Shopify se aplica **aquí**, antes de escribir.
+   *
+   * Pasarse rechaza la escritura entera con «sections: must have a maximum of
+   * 25» sin decir cuáles sobran, así que se perdería el trabajo de todas —ya
+   * pagado— por culpa de la vigesimosexta.
+   */
+  const typeOf = (id: string) => {
+    const entry = next[id];
+    return typeof entry === "object" && entry !== null
+      ? String((entry as Record<string, unknown>).type ?? "")
+      : "";
+  };
 
-  return `${JSON.stringify(root, null, 2)}\n`;
+  const capped = capSections(finalOrder, typeOf);
+
+  // Las que no entran se quitan también de `sections`: dejarlas ahí sin estar en
+  // `order` cuenta igual para el límite y Shopify rechaza lo mismo.
+  for (const item of capped.dropped) delete next[item.id];
+
+  root.sections = next;
+  root.order = capped.order;
+
+  return { json: `${JSON.stringify(root, null, 2)}\n`, dropped: capped.dropped };
 }
 
 /**

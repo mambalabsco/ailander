@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   CREATABLE,
+  SECTION_LIMIT,
   buildTemplateEntry,
+  capSections,
   canCreate,
   clearDemoImages,
   orderAfterRecreate,
@@ -67,7 +69,7 @@ function seccionCreada(type: string) {
 
 test("las secciones nuevas se añaden y el formulario de compra se queda", () => {
   const salida = writeTemplate(PLANTILLA, [seccionCreada("lp-faq-1")], ["main", "lp-faq-1"]);
-  const data = JSON.parse(salida!);
+  const data = JSON.parse(salida!.json);
 
   assert.deepEqual(data.order, ["main", "lp-faq-1"]);
   assert.equal(data.sections.main.type, "main-product", "perder esto deja una página que no vende");
@@ -75,12 +77,12 @@ test("las secciones nuevas se añaden y el formulario de compra se queda", () =>
 });
 
 test("una sección que se quedó fuera del orden se conserva al final", () => {
-  assert.deepEqual(JSON.parse(writeTemplate(PLANTILLA, [], ["no-existe"])!).order, ["main"]);
+  assert.deepEqual(JSON.parse(writeTemplate(PLANTILLA, [], ["no-existe"])!.json).order, ["main"]);
 });
 
 test("un identificador repetido no se escribe dos veces", () => {
   // Shopify rechaza la escritura entera y no dice cuál está repetido.
-  assert.deepEqual(JSON.parse(writeTemplate(PLANTILLA, [], ["main", "main"])!).order, ["main"]);
+  assert.deepEqual(JSON.parse(writeTemplate(PLANTILLA, [], ["main", "main"])!.json).order, ["main"]);
 });
 
 test("una plantilla ilegible no se escribe a medias", () => {
@@ -208,4 +210,133 @@ test("sin nada que quitar no se reescribe la plantilla", () => {
 
 test("una plantilla ilegible no se toca", () => {
   assert.deepEqual(clearDemoImages("{ rota"), { cleared: 0, json: null });
+});
+
+/* --------------------------- El tope de Shopify ---------------------------- */
+
+/*
+ * Una plantilla JSON no admite más de veinticinco secciones. Pasarse rechaza
+ * **la escritura entera** con «sections: must have a maximum of 25» y sin decir
+ * cuáles sobran, así que se perdería el trabajo de todas —ya pagado— por culpa
+ * de la vigesimosexta.
+ */
+const tipos = (n: number, prefijo = "lp-x") =>
+  Array.from({ length: n }, (_, i) => `${prefijo}-${i + 1}`);
+
+const tipoDe = (id: string) => id;
+
+test("por debajo del tope no se toca nada", () => {
+  const order = tipos(25);
+  const result = capSections(order, tipoDe);
+
+  assert.deepEqual(result.order, order);
+  assert.deepEqual(result.dropped, []);
+});
+
+test("por encima del tope se corta por el final", () => {
+  // Una página se lee de arriba abajo: lo de abajo es lo que menos gente ve.
+  const result = capSections(tipos(31), tipoDe);
+
+  assert.equal(result.order.length, SECTION_LIMIT);
+  assert.equal(result.dropped.length, 6);
+  assert.deepEqual(
+    result.dropped.map((item) => item.id),
+    ["lp-x-26", "lp-x-27", "lp-x-28", "lp-x-29", "lp-x-30", "lp-x-31"],
+  );
+});
+
+test("el formulario de compra se salva aunque esté al final", () => {
+  // Perderlo deja una página preciosa donde no se puede comprar, y eso no se
+  // nota mirando: se nota en las ventas del día siguiente.
+  const order = [...tipos(30), "main-product"];
+  const result = capSections(order, tipoDe);
+
+  assert.ok(result.order.includes("main-product"));
+  assert.equal(result.order.length, SECTION_LIMIT);
+  assert.equal(result.dropped.some((item) => item.id === "main-product"), false);
+});
+
+test("la cabecera y el pie tampoco caen", () => {
+  const order = ["header", ...tipos(30), "footer"];
+  const result = capSections(order, tipoDe);
+
+  assert.ok(result.order.includes("header"));
+  assert.ok(result.order.includes("footer"));
+});
+
+test("si lo imprescindible ya no cabe, no se recorta más de la cuenta", () => {
+  // Preferimos que Shopify rechace a entregar una tienda sin formulario de
+  // compra: lo primero se ve y se arregla, lo segundo no lo nota nadie.
+  const order = Array.from({ length: 30 }, (_, i) => `main-${i}`);
+  const result = capSections(order, tipoDe);
+
+  assert.equal(result.order.length, 30);
+  assert.deepEqual(result.dropped, []);
+});
+
+test("lo que no cabe se quita también de `sections`, no solo del orden", () => {
+  // Dejarlas ahí sin estar en `order` cuenta igual para el límite y Shopify
+  // rechaza exactamente lo mismo.
+  const muchas = tipos(30).map((tipo) =>
+    buildTemplateEntry({ kind: "faq", type: tipo, index: 0, settings: {}, blocks: [] }),
+  );
+
+  const salida = writeTemplate(PLANTILLA, muchas, ["main", ...muchas.map((m) => m.id)]);
+  const data = JSON.parse(salida!.json);
+
+  assert.equal(data.order.length, SECTION_LIMIT);
+  assert.equal(Object.keys(data.sections).length, SECTION_LIMIT);
+  assert.equal(salida!.dropped.length, 6);
+
+  // Y el formulario de compra sigue ahí.
+  assert.equal(data.sections.main.type, "main-product");
+});
+
+/*
+ * Cortar al escribir llega tarde: cada sección generada cuesta, y seis que se
+ * tiran son seis pagadas para nada. Por eso el plan ya las aparta.
+ */
+test("el plan no pide más secciones de las que caben", () => {
+  const mias = Array.from({ length: 20 }, (_, i) => ({
+    id: `mia-${i}`,
+    type: `custom-${i}`,
+    position: i,
+  }));
+
+  const plano = Array.from({ length: 15 }, () => ({
+    kind: "faq",
+    purpose: "x",
+    angle: "y",
+  }));
+
+  const plan = planRecreate(mias, plano);
+
+  assert.equal(plan.keep.length + plan.create.length <= SECTION_LIMIT, true);
+  assert.equal(plan.overflow.length > 0, true);
+  assert.equal(plan.create.length + plan.overflow.length, 15);
+});
+
+test("con sitio de sobra no se aparta ninguna", () => {
+  const plan = planRecreate(
+    [{ id: "main", type: "main-product", position: 0 }],
+    [{ kind: "faq", purpose: "x", angle: "y" }],
+  );
+
+  assert.deepEqual(plan.overflow, []);
+  assert.equal(plan.create.length, 1);
+});
+
+test("una plantilla ya llena no deja crear nada, y se sabe por qué", () => {
+  const llena = Array.from({ length: 26 }, (_, i) => ({
+    id: `mia-${i}`,
+    type: `custom-${i}`,
+    position: i,
+  }));
+
+  const plan = planRecreate(llena, [{ kind: "faq", purpose: "x", angle: "y" }]);
+
+  assert.equal(plan.create.length, 0);
+  // La distinción importa: «no hay sitio» se arregla quitando secciones, y
+  // «no hay secciones creables» se arregla volviendo a analizar.
+  assert.equal(plan.overflow.length, 1);
 });
