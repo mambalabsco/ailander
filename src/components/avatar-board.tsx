@@ -81,6 +81,7 @@ export function AvatarBoard({
   const [perAvatar, setPerAvatar] = useState(3);
   const [pickedContexts, setPickedContexts] = useState<Set<string>>(new Set());
   const [holding, setHolding] = useState(true);
+  const [shotModel, setShotModel] = useState("");
 
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -430,6 +431,34 @@ export function AvatarBoard({
             />
           </label>
 
+          {/*
+            Con qué mezclar la cara y el envase.
+
+            Las dos vías reciben las mismas dos imágenes en el mismo orden. La de
+            kie sale por defecto porque son treinta generaciones a dos céntimos;
+            la de Higgsfield tiene mejores modelos y cuesta lo que cueste.
+          */}
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Generador</span>
+            <SelectField
+              value={shotModel}
+              onChange={(event) => setShotModel(event.target.value)}
+              className="min-w-48"
+            >
+              <option value="">Nano Banana · 0,02 USD por foto</option>
+
+              {models.length > 0 ? (
+                <optgroup label={`Higgsfield · ${models.length} modelos`}>
+                  {models.map((item) => (
+                    <option key={item.slug} value={`hf:${item.slug}`}>
+                      {item.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </SelectField>
+          </label>
+
           <label className="flex items-center gap-2 text-xs">
             <input
               type="checkbox"
@@ -486,6 +515,7 @@ export function AvatarBoard({
                 perAvatar,
                 contexts: [...pickedContexts],
                 holding,
+                model: shotModel,
               })
             }
             label={`Generar ${plan.images} foto(s)`}
@@ -493,7 +523,11 @@ export function AvatarBoard({
             disabledReason={
               !current ? "Elige el producto" : "Elige al menos una cara arriba"
             }
-            hint={`${chosen.size} cara(s) × ${perAvatar} = ${plan.images} imágenes, unos ${plan.usd.toFixed(2)} USD. Lleva la foto de tu envase como referencia.`}
+            hint={
+              shotModel
+                ? `${chosen.size} cara(s) × ${perAvatar} = ${plan.images} imágenes con Higgsfield. Lo que cobre lo verás en tu cuenta. Lleva la foto de tu envase como referencia.`
+                : `${chosen.size} cara(s) × ${perAvatar} = ${plan.images} imágenes, unos ${plan.usd.toFixed(2)} USD. Lleva la foto de tu envase como referencia.`
+            }
           />
         </div>
       </div>
