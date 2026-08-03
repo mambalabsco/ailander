@@ -6,7 +6,7 @@ export {
   envAppConfig,
   isConfigured,
   peekStore,
-  pickAppConfig,
+  chooseApp,
   readState,
   signState,
   type MetaAppConfig,

@@ -14,7 +14,6 @@ import {
   listAdAccounts,
   readAdCredentials,
   refreshAdToken,
-  saveAdCredentials,
   saveCogs,
   saveCustomCost,
   saveGatewayFees,
@@ -27,6 +26,12 @@ import {
 } from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
 import { requireCapability } from "@/lib/permissions";
+import {
+  deleteMetaApp,
+  resolveMetaApp,
+  saveMetaApp,
+  setStoreMetaApp,
+} from "@/lib/data/meta-apps";
 import { clearFinishedJobs } from "@/lib/data/jobs";
 import type { LaunchResult } from "@/types/jobs";
 
@@ -158,8 +163,8 @@ export async function syncStoreAction(
        */
       if (facebook?.accessToken && metaOauth.shouldRenew(facebook.expiresAt ?? null)) {
         // La app de esta tienda: el re-canje tiene que ir contra la que emitió
-        // el token, no contra la del entorno si son distintas.
-        const app = metaOauth.pickAppConfig(facebook);
+        // el token, no contra otra si son distintas.
+        const app = await resolveMetaApp(storeId);
 
         if (app) {
           try {
@@ -259,63 +264,95 @@ export async function setLoginCustomerIdAction(
 }
 
 /**
- * La app de Meta de esta tienda.
+ * Da de alta o edita una app de Meta.
  *
- * Hace falta cuando hay más de un Business Manager: si cuelgan de perfiles de
- * Facebook distintos, Meta obliga a una app por perfil, y la de las variables de
- * entorno solo puede ser una. Con esto cada tienda apunta a la suya.
+ * Están en un sitio y no en cada tienda a propósito: casi siempre hay una y
+ * sirve para todo —lo que decide qué cuentas se ven es el perfil de Facebook que
+ * inicia sesión, no la app—. Pegarla en cada tienda sería repetir el mismo
+ * secreto diez veces y equivocarse en la séptima.
  *
- * **El secreto entra pero no sale.** Se escribe aquí y a la pantalla solo vuelve
- * si está puesto o no; leerlo de vuelta sería enseñarlo en el navegador de quien
- * abra la página.
+ * **El secreto entra y no sale.** Al editar llega vacío cuando no se ha tocado,
+ * y entonces se deja el que había.
  */
-export async function saveMetaAppAction(
-  storeId: string,
-  appId: string,
-  appSecret: string,
-  configId: string,
-): Promise<{ ok: boolean; message: string }> {
+export async function saveMetaAppAction(input: {
+  id?: string;
+  name: string;
+  appId: string;
+  appSecret: string;
+  configId: string;
+  isDefault: boolean;
+}): Promise<{ ok: boolean; message: string }> {
   try {
     await requireCapability("secretos");
 
-    const id = appId.trim();
-    const secret = appSecret.trim();
+    const appId = input.appId.trim();
+    const secret = input.appSecret.trim();
 
-    /*
-     * Vaciar los dos a la vez es volver a la del entorno, y es legítimo.
-     * Vaciar solo uno deja media configuración, que produce un diálogo de
-     * Facebook que falla al canjear el código con un error que no dice cuál de
-     * las dos mitades falta.
-     */
-    if (!id && !secret) {
-      await saveAdCredentials(storeId, "facebook", {
-        clientId: "",
-        clientSecret: "",
-        configId: "",
-      });
+    if (!appId) return { ok: false, message: "Falta el App ID." };
 
-      revalidatePath("/datos/conexiones");
-      return { ok: true, message: "Quitada. Esta tienda vuelve a usar la app por defecto." };
-    }
+    // Al crear hacen falta los dos: media configuración da un diálogo de
+    // Facebook que falla al canjear el código, con un error que no dice cuál de
+    // las dos mitades falta.
+    if (!input.id && !secret) return { ok: false, message: "Falta el App Secret." };
 
-    if (!id || !secret) {
-      return { ok: false, message: "Hacen falta el identificador y el secreto, o ninguno de los dos." };
-    }
-
-    await saveAdCredentials(storeId, "facebook", {
-      clientId: id,
-      clientSecret: secret,
-      configId: configId.trim(),
+    await saveMetaApp({
+      id: input.id,
+      name: input.name.trim() || appId,
+      appId,
+      appSecret: secret,
+      configId: input.configId.trim(),
+      isDefault: input.isDefault,
     });
+
+    revalidatePath("/settings");
+    revalidatePath("/datos/conexiones");
+
+    return { ok: true, message: input.id ? "App guardada." : "App añadida." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo guardar." };
+  }
+}
+
+/**
+ * Borra una app.
+ *
+ * Las tiendas que la tuvieran elegida se quedan sin ella y pasan a la de por
+ * defecto — no pierden su conexión ni su token, que es lo que costaría volver a
+ * hacer.
+ */
+export async function deleteMetaAppAction(id: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireCapability("secretos");
+    await deleteMetaApp(id);
+
+    revalidatePath("/settings");
+    revalidatePath("/datos/conexiones");
+
+    return { ok: true, message: "Borrada. Las tiendas que la usaban pasan a la de por defecto." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo borrar." };
+  }
+}
+
+/** Con qué app se conecta esta tienda. Vacío es «la de por defecto». */
+export async function setStoreMetaAppAction(
+  storeId: string,
+  metaAppId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireCapability("secretos");
+    await setStoreMetaApp(storeId, metaAppId);
 
     revalidatePath("/datos/conexiones");
 
     return {
       ok: true,
-      message: "App guardada. Vuelve a iniciar sesión con Facebook para conectarla con esa app.",
+      message: metaAppId
+        ? "Elegida. Vuelve a iniciar sesión con Facebook para conectarla con esa app."
+        : "Vuelve a la app por defecto.",
     };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : "No se pudo guardar." };
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo cambiar." };
   }
 }
 

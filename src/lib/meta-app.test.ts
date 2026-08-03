@@ -1,65 +1,64 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { peekStore, pickAppConfig, readState, signState } from "./meta-app.ts";
+import { chooseApp, envAppConfig, peekStore, readState, signState } from "./meta-app.ts";
 
 /* ----------------------- Con qué app se conecta cada tienda ---------------- */
 
-/*
- * Lo que motiva todo esto: una app de Meta solo llega a las cuentas del perfil
- * de Facebook con el que se creó. Con un segundo Business Manager en otro
- * perfil hace falta otra app, y en el entorno solo cabía una.
- */
-test("la app de la tienda gana a la del entorno", () => {
-  process.env.META_APP_ID = "del-entorno";
-  process.env.META_APP_SECRET = "secreto-entorno";
-
-  const chosen = pickAppConfig({ appId: "propia", appSecret: "secreto-propio" });
-
-  assert.equal(chosen?.appId, "propia");
-  assert.equal(chosen?.appSecret, "secreto-propio");
-});
-
-test("sin app propia se cae en la del entorno", () => {
-  process.env.META_APP_ID = "del-entorno";
-  process.env.META_APP_SECRET = "secreto-entorno";
-
-  assert.equal(pickAppConfig(null)?.appId, "del-entorno");
-  assert.equal(pickAppConfig({})?.appId, "del-entorno");
-});
+const propia = { appId: "propia", appSecret: "secreto-propio" };
+const defecto = { appId: "por-defecto", appSecret: "secreto-defecto" };
+const entorno = { appId: "del-entorno", appSecret: "secreto-entorno" };
 
 /*
- * Media configuración es peor que ninguna: produce un diálogo de Facebook que
- * falla al canjear el código, y el error de Meta ahí no dice qué mitad falta.
+ * Lo normal es tener **una** app que sirve para todo: lo que decide qué cuentas
+ * se ven es el perfil de Facebook que inicia sesión, no la app. La elección por
+ * tienda existe para el caso raro de un perfil sin rol en la de por defecto.
  */
-test("media configuración propia no se usa a medias", () => {
-  process.env.META_APP_ID = "del-entorno";
-  process.env.META_APP_SECRET = "secreto-entorno";
-
-  assert.equal(pickAppConfig({ appId: "propia" })?.appId, "del-entorno");
-  assert.equal(pickAppConfig({ appSecret: "solo-secreto" })?.appId, "del-entorno");
+test("la de la tienda gana a todas", () => {
+  assert.equal(chooseApp([propia, defecto, entorno])?.appId, "propia");
 });
 
-test("los espacios sueltos no cuentan como configuración", () => {
-  process.env.META_APP_ID = "del-entorno";
-  process.env.META_APP_SECRET = "secreto-entorno";
+test("sin elección propia manda la de por defecto", () => {
+  assert.equal(chooseApp([null, defecto, entorno])?.appId, "por-defecto");
+});
 
-  assert.equal(pickAppConfig({ appId: "  ", appSecret: "  " })?.appId, "del-entorno");
+test("sin ninguna dada de alta queda la del entorno", () => {
+  assert.equal(chooseApp([null, null, entorno])?.appId, "del-entorno");
 });
 
 test("sin nada en ningún sitio no se inventa una app", () => {
-  delete process.env.META_APP_ID;
-  delete process.env.META_APP_SECRET;
-
-  assert.equal(pickAppConfig(null), null);
-  assert.equal(pickAppConfig({ appId: "solo-id" }), null);
+  assert.equal(chooseApp([null, null, null]), null);
+  assert.equal(chooseApp([]), null);
 });
 
-test("la configuración de Login for Business viaja si la hay", () => {
-  const chosen = pickAppConfig({ appId: "a", appSecret: "b", configId: "c" });
+/*
+ * Media configuración es peor que ninguna: da un diálogo de Facebook que falla
+ * al canjear el código, con un error que no dice qué mitad falta.
+ */
+test("una app a medias se salta, no se completa con la siguiente", () => {
+  assert.equal(chooseApp([{ appId: "propia" }, defecto])?.appId, "por-defecto");
+  assert.equal(chooseApp([{ appSecret: "suelto" }, defecto])?.appId, "por-defecto");
 
-  assert.equal(chosen?.configId, "c");
-  assert.equal(pickAppConfig({ appId: "a", appSecret: "b" })?.configId, undefined);
+  // Y no se mezcla: el secreto es el de la que ganó, no el de la incompleta.
+  assert.equal(chooseApp([{ appId: "propia" }, defecto])?.appSecret, "secreto-defecto");
+});
+
+test("los espacios sueltos no cuentan como configuración", () => {
+  assert.equal(chooseApp([{ appId: "  ", appSecret: "  " }, defecto])?.appId, "por-defecto");
+});
+
+test("la configuración de Login for Business viaja con su app", () => {
+  assert.equal(chooseApp([{ ...propia, configId: "c" }])?.configId, "c");
+  assert.equal(chooseApp([propia])?.configId, undefined);
+});
+
+test("el envoltorio del entorno respeta las dos variables", () => {
+  process.env.META_APP_ID = "del-entorno";
+  process.env.META_APP_SECRET = "secreto-entorno";
+  assert.equal(envAppConfig()?.appId, "del-entorno");
+
+  delete process.env.META_APP_SECRET;
+  assert.equal(envAppConfig(), null);
 });
 
 /* ------------------------------- El `state` -------------------------------- */

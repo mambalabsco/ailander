@@ -50,24 +50,32 @@ export function envAppConfig(): MetaAppConfig | null {
 }
 
 /**
- * La app que le toca a esa tienda: la suya si la tiene, y si no la del entorno.
+ * Cuál de las tres gana: la de la tienda, la de por defecto, o la del entorno.
  *
- * Las dos partes tienen que ir juntas —identificador y secreto— o no se usa
- * ninguna. Media configuración propia mezclada con media del entorno daría un
- * diálogo de Facebook que falla al canjear el código, y el error de Meta ahí no
- * dice cuál de las dos mitades sobra.
+ * Ese orden y no otro. Lo normal es tener **una** app que sirve para todo —lo
+ * que decide qué cuentas se ven es el perfil de Facebook que inicia sesión, no
+ * la app— así que la de por defecto cubre todas las tiendas sin tocar ninguna.
+ * La elección por tienda existe solo para el caso raro: un perfil que no puede
+ * tener rol en la app de por defecto.
+ *
+ * Y las dos mitades de una app van juntas o no va ninguna. Media configuración
+ * —identificador de una y secreto de otra— produce un diálogo de Facebook que
+ * falla al canjear el código, con un error de Meta que no dice cuál de las dos
+ * sobra.
  */
-export function pickAppConfig(
-  stored: { appId?: string | null; appSecret?: string | null; configId?: string | null } | null,
+export function chooseApp(
+  candidates: (Partial<MetaAppConfig> | null | undefined)[],
 ): MetaAppConfig | null {
-  const appId = stored?.appId?.trim();
-  const appSecret = stored?.appSecret?.trim();
+  for (const candidate of candidates) {
+    const appId = candidate?.appId?.trim();
+    const appSecret = candidate?.appSecret?.trim();
 
-  if (appId && appSecret) {
-    return { appId, appSecret, configId: stored?.configId?.trim() || undefined };
+    if (appId && appSecret) {
+      return { appId, appSecret, configId: candidate?.configId?.trim() || undefined };
+    }
   }
 
-  return envAppConfig();
+  return null;
 }
 
 export function isConfigured(): boolean {

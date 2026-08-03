@@ -626,6 +626,8 @@ type AdCredentialRow = {
   login_customer_id: string | null;
   /** Meta: la configuración de Facebook Login for Business, cuando la app la usa. */
   config_id: string | null;
+  /** Meta: con qué app dada de alta se conecta esta tienda. */
+  meta_app_id: string | null;
   /** Nulo = no caduca. Es el caso de Google con la app publicada. */
   token_expires_at: string | null;
   scopes: string[];
@@ -831,6 +833,25 @@ type StudioAssetRow = {
   position: number;
   included: boolean;
   created_at: string;
+};
+
+/**
+ * Una app de Meta dada de alta.
+ *
+ * Casi siempre hay una. La segunda hace falta solo cuando entra un perfil de
+ * Facebook que no puede tener rol en la primera.
+ */
+type MetaAppRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  app_id: string;
+  /** Nunca sale de aquí: la pantalla solo sabe si está puesto. */
+  app_secret: string;
+  config_id: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 /**
@@ -1177,6 +1198,10 @@ export type Database = {
         VideoRow,
         Insertable<VideoRow, Exclude<keyof VideoRow, "user_id" | "product_id" | "title">>,
         [Belongs<"product_id", "products">]
+      >;
+      meta_apps: Table<
+        MetaAppRow,
+        Insertable<MetaAppRow, Exclude<keyof MetaAppRow, "user_id" | "app_id" | "app_secret">>
       >;
       video_music: Table<
         VideoMusicRow,

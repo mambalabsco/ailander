@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { requireContext } from "@/lib/supabase/session";
 import { siteOrigin } from "@/lib/site-url";
 import { exchangeCode, META_SCOPES } from "@/lib/meta-oauth";
-import { peekStore, pickAppConfig, readState } from "@/lib/meta-app";
+import { peekStore, readState } from "@/lib/meta-app";
 import { listAccounts } from "@/lib/meta-ads";
-import { readAdCredentials, saveAdAccount, saveAdCredentials } from "@/lib/data/analytics";
+import { saveAdAccount, saveAdCredentials } from "@/lib/data/analytics";
+import { resolveMetaApp } from "@/lib/data/meta-apps";
 import { logError } from "@/lib/data/errors";
 
 /**
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
    * con qué llave comprobar: una tienda inventada carga otro secreto y la firma
    * deja de cuadrar. Ver `peekStore`.
    */
-  const app = pickAppConfig(await readAdCredentials(peekStore(state), "facebook"));
+  const app = await resolveMetaApp(peekStore(state));
   if (!app) return back(origin, "", { meta: "sin-configurar" });
 
   /*

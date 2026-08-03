@@ -1,11 +1,24 @@
 import { SectionCard } from "@/components/section-card";
 import { brandSettings } from "@/lib/mock-data";
 import { ProviderPanel } from "@/app/settings/provider-panel";
+import { MetaAppsPanel } from "@/components/settings/meta-apps-panel";
+import { listMetaApps } from "@/lib/data/meta-apps";
+import { isConfigured } from "@/lib/meta-oauth";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  // Sin secretos: la lista solo trae si están puestos, nunca su valor.
+  const metaApps = await listMetaApps().catch(() => []);
+
   return (
     <div className="space-y-6">
       <ProviderPanel />
+
+      <SectionCard
+        title="Apps de Meta"
+        description="Con una basta para todos tus Business Manager: lo que decide qué cuentas se ven es el perfil de Facebook con el que inicias sesión. Añade una segunda solo si entra un perfil que no puede tener rol en la primera."
+      >
+        <MetaAppsPanel apps={metaApps} envConfigured={isConfigured()} />
+      </SectionCard>
 
       <SectionCard title="Configuración de marca" description="Ajusta la voz, colores y reglas de copy para mantener coherencia">
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">

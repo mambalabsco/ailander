@@ -575,6 +575,8 @@ export interface AdCredentials {
   loginCustomerId?: string;
   /** Meta: la configuración de Facebook Login for Business, si la app la usa. */
   configId?: string;
+  /** Meta: con qué app dada de alta se conecta. Vacío es la de por defecto. */
+  metaAppId?: string;
   /**
    * Cuándo caduca el permiso. `null` significa «no caduca».
    *
@@ -617,6 +619,7 @@ export async function readAdCredentials(
     developerToken: data.developer_token ?? undefined,
     loginCustomerId: data.login_customer_id ?? undefined,
     configId: data.config_id ?? undefined,
+    metaAppId: data.meta_app_id ?? undefined,
     expiresAt: data.token_expires_at ? new Date(data.token_expires_at) : null,
     scopes: data.scopes ?? [],
     accountName: data.account_name ?? undefined,

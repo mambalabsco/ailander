@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { findStore } from "@/lib/store-registry";
-import { readAdCredentials } from "@/lib/data/analytics";
+import { resolveMetaApp } from "@/lib/data/meta-apps";
 import { requireContext } from "@/lib/supabase/session";
 import { siteOrigin } from "@/lib/site-url";
 import { authorizeUrl } from "@/lib/meta-oauth";
-import { pickAppConfig, signState } from "@/lib/meta-app";
+import { signState } from "@/lib/meta-app";
 
 /**
  * Manda al diálogo de Facebook. Se llega desde «Iniciar sesión con Facebook».
@@ -34,13 +34,13 @@ export async function GET(request: Request) {
    * Cada Business Manager en un perfil de Facebook distinto necesita su propia
    * app: la del entorno solo sirve para el primero.
    */
-  const app = pickAppConfig(await readAdCredentials(storeId, "facebook"));
+  const app = await resolveMetaApp(storeId);
 
   if (!app) {
     return NextResponse.json(
       {
         error:
-          "Esta tienda no tiene app de Meta y tampoco hay una por defecto. Ponle la suya en Datos › Conexiones, o define META_APP_ID y META_APP_SECRET en el servidor.",
+          "No hay ninguna app de Meta dada de alta. Añade una en Configuración › Apps de Meta, o define META_APP_ID y META_APP_SECRET en el servidor.",
       },
       { status: 500 },
     );

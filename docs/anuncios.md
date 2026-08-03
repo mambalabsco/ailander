@@ -74,21 +74,40 @@ Después, `sudo systemctl restart plataforma`.
 > Estas son la app **por defecto**: la que usa cualquier tienda que no tenga la
 > suya. Con un solo Business Manager no hace falta nada más.
 
+También se pueden gestionar desde **Configuración → Apps de Meta**, sin tocar el
+servidor. Lo que se dé de alta ahí manda sobre las variables de entorno.
+
 ### Si tienes más de un Business Manager
 
-Una app de Meta solo llega a las cuentas del **perfil de Facebook con el que se
-creó**. Si tu segundo BM cuelga de otro perfil, hace falta otra app —lo obliga
-Meta— y en el entorno solo cabe una.
+**Casi seguro que con una app basta.** Lo que decide qué cuentas publicitarias
+se ven no es la app: es el **perfil de Facebook que inicia sesión**, y ese perfil
+ve las cuentas de todos sus Business Manager a la vez. Una app, un login, todas
+las cuentas.
 
-Para eso cada tienda puede tener la suya: en **Datos y beneficio → Conexiones →
-Meta Ads**, abajo, *«Usar otra app»*. Se pega el App ID, el App Secret y el
-Config ID de esa segunda app, y esa tienda inicia sesión contra ella.
+Si el segundo BM está en otro perfil, tampoco hace falta otra app enseguida: una
+app admite muchos usuarios, y lo único que la limita mientras no está publicada
+es que quien entre tenga un rol en ella. **Añade ese perfil como *tester*** en
+Roles de la app —es gratis, instantáneo y sin revisión— y ya puede iniciar
+sesión con la misma.
 
-El secreto se guarda y no vuelve a salir: la pantalla solo dice si está puesto.
-Vaciando los dos primeros campos, la tienda vuelve a la app por defecto.
+La segunda app hace falta solo cuando ese perfil no puede o no debe tener rol en
+la primera: es de un cliente, de otra empresa, o quieres separar permisos y
+límites de llamadas.
+
+Entonces:
+
+1. **Configuración → Apps de Meta → Añadir una app.** Nombre, App ID, App Secret
+   y Config ID.
+2. **Datos y beneficio → Conexiones → Meta Ads**, en la tienda que la use:
+   elígela en el desplegable *«App de Meta»*. El desplegable solo aparece cuando
+   hay más de una.
+3. Vuelve a iniciar sesión con Facebook en esa tienda.
 
 Acuérdate de dar de alta la misma URL de retorno —`/api/meta/callback`— también
 en la segunda app.
+
+El secreto se guarda y no vuelve a salir: la pantalla solo dice si está puesto, y
+al editar se deja vacío para conservarlo.
 
 ### 4 · Iniciar sesión
 

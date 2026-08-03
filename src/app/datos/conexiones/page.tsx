@@ -15,6 +15,7 @@ import {
   readAdCredentials,
 } from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
+import { listMetaApps } from "@/lib/data/meta-apps";
 import * as googleOauth from "@/lib/google-oauth";
 
 /**
@@ -59,16 +60,17 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
   ]);
 
   /*
-   * El secreto **no** se manda a la pantalla, solo si está puesto.
+   * Las apps sin sus secretos.
    *
-   * Devolverlo lo dejaría en el HTML de cualquiera que abra esta página, y para
-   * decidir si hay app propia basta con saber que existe.
+   * A la pantalla solo va lo que hace falta para elegir: el nombre y cuál es la
+   * de por defecto. Un secreto aquí acabaría en el HTML de cualquiera que abra
+   * esta página.
    */
-  const metaApp = {
-    appId: facebookCreds?.clientId ?? "",
-    hasSecret: Boolean(facebookCreds?.clientSecret),
-    configId: facebookCreds?.configId ?? "",
-  };
+  const metaApps = (await listMetaApps()).map((app) => ({
+    id: app.id,
+    name: app.name,
+    isDefault: app.isDefault,
+  }));
 
   const shopifyConnected = Boolean(store.shopifyAdminToken && store.shopifyShopDomain);
   const googleApp = googleOauth.appConfig();
@@ -133,7 +135,8 @@ export default async function ConexionesPage({ searchParams }: PageProps) {
           storeId={store.id}
           state={status.facebook}
           configured={metaOauth.isConfigured()}
-          app={metaApp}
+          apps={metaApps}
+          chosenApp={facebookCreds?.metaAppId ?? ""}
         />
       </SectionCard>
 

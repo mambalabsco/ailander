@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextField } from "@/components/ui";
+import { Button, SelectField, TextField } from "@/components/ui";
 import {
-  saveMetaAppAction,
   setFiltersAction,
+  setStoreMetaAppAction,
   setLoginCustomerIdAction,
   toggleAccountAction,
 } from "@/app/datos/actions";
@@ -129,16 +129,19 @@ export function MetaConnect({
   storeId,
   state,
   configured,
-  app,
+  apps,
+  chosenApp,
 }: {
   storeId: string;
   state: ProviderState;
   /** Si el servidor tiene META_APP_ID y META_APP_SECRET. */
   configured: boolean;
-  /** La app propia de esta tienda, si la tiene. El secreto no viaja. */
-  app: { appId: string; hasSecret: boolean; configId: string };
+  /** Las apps dadas de alta, sin secretos. */
+  apps: { id: string; name: string; isDefault: boolean }[];
+  /** Cuál eligió esta tienda. Vacío es la de por defecto. */
+  chosenApp: string;
 }) {
-  const usable = configured || (app.appId !== "" && app.hasSecret);
+  const usable = configured || apps.length > 0;
 
   return (
     <div className="space-y-3">
@@ -146,10 +149,10 @@ export function MetaConnect({
         <ConnectionState state={state} provider="facebook" />
       ) : (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <p className="font-medium">Esta tienda no tiene app de Meta</p>
+          <p className="font-medium">No hay ninguna app de Meta</p>
           <p className="mt-1">
-            Ponle la suya abajo, o define <code>META_APP_ID</code> y <code>META_APP_SECRET</code> en
-            el servidor para que valga como la de por defecto.
+            Añade una en <strong>Configuración → Apps de Meta</strong>, o define{" "}
+            <code>META_APP_ID</code> y <code>META_APP_SECRET</code> en el servidor.
           </p>
         </div>
       )}
@@ -174,126 +177,71 @@ export function MetaConnect({
         plataforma no puede crear, pausar ni modificar nada en tus campañas.
       </p>
 
-      <MetaAppForm storeId={storeId} app={app} fallback={configured} />
+      <MetaAppPicker storeId={storeId} apps={apps} chosen={chosenApp} />
     </div>
   );
 }
 
 /**
- * La app de Meta de esta tienda.
+ * Con qué app de Meta se conecta esta tienda.
  *
- * ## Por qué esto existe
- *
- * Una app de Meta sirve para todas las cuentas a las que llegue **el perfil de
- * Facebook con el que se creó**. En cuanto hay un segundo Business Manager en
- * otro perfil, Meta obliga a otra app, y con la configuración en variables de
- * entorno solo cabía una: conectar la segunda tienda significaba cambiar la
- * variable del servidor y dejar la primera apuntando a una app que no es suya.
- *
- * ## El secreto entra y no sale
- *
- * Se escribe aquí y nunca se devuelve: la pantalla solo sabe si está puesto. Un
- * campo que lo reenviara lo dejaría en el navegador de cualquiera que abra esta
- * página.
+ * Un desplegable y no un formulario: las apps se dan de alta una vez en
+ * Configuración, y aquí solo se elige. Lo normal es no tocarlo nunca — la de por
+ * defecto sirve para todos los Business Manager a los que llegue el perfil de
+ * Facebook con el que inicias sesión.
  */
-function MetaAppForm({
+function MetaAppPicker({
   storeId,
-  app,
-  fallback,
+  apps,
+  chosen,
 }: {
   storeId: string;
-  app: { appId: string; hasSecret: boolean; configId: string };
-  /** Si hay una app en el entorno que sirva de respaldo. */
-  fallback: boolean;
+  apps: { id: string; name: string; isDefault: boolean }[];
+  chosen: string;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [appId, setAppId] = useState(app.appId);
-  const [secret, setSecret] = useState("");
-  const [configId, setConfigId] = useState(app.configId);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const own = app.appId !== "" && app.hasSecret;
-
-  if (!open) {
-    return (
-      <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 pt-3 text-xs dark:border-slate-800">
-        <span className="text-slate-500 dark:text-slate-400">
-          {own
-            ? `App propia: ${app.appId}`
-            : fallback
-              ? "Usa la app por defecto del servidor"
-              : "Sin app"}
-        </span>
-        <Button variant="ghost" onClick={() => setOpen(true)}>
-          {own ? "Cambiar la app" : "Usar otra app"}
-        </Button>
-      </div>
-    );
-  }
+  // Con una sola app no hay nada que elegir, y un desplegable de una opción
+  // solo invita a preguntarse qué hace.
+  if (apps.length < 2) return null;
 
   return (
-    <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        Solo hace falta si esta tienda va contra un Business Manager de otro perfil de Facebook.
-        Con uno solo, deja esto vacío.
-      </p>
+    <div className="space-y-1 border-t border-slate-200 pt-3 dark:border-slate-800">
+      <label className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500 dark:text-slate-400">App de Meta</span>
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={appId}
-          onChange={(event) => setAppId(event.target.value)}
-          placeholder="App ID"
-          className="w-48 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-        />
-        <input
-          value={secret}
-          onChange={(event) => setSecret(event.target.value)}
-          type="password"
-          autoComplete="off"
-          placeholder={app.hasSecret ? "Secreto (guardado)" : "App Secret"}
-          className="w-56 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-        />
-        <input
-          value={configId}
-          onChange={(event) => setConfigId(event.target.value)}
-          placeholder="Config ID (opcional)"
-          className="w-52 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
+        <SelectField
+          value={chosen}
           disabled={saving}
-          onClick={() => {
+          onChange={(event) => {
+            const value = event.target.value;
             setSaving(true);
 
-            void saveMetaAppAction(storeId, appId, secret, configId)
+            void setStoreMetaAppAction(storeId, value)
               .then((result) => {
                 setNote(result.message);
-                if (result.ok) {
-                  setSecret("");
-                  setOpen(false);
-                  router.refresh();
-                }
+                router.refresh();
               })
               .finally(() => setSaving(false));
           }}
+          className="min-w-52"
         >
-          {saving ? "Guardando…" : "Guardar"}
-        </Button>
+          <option value="">La de por defecto</option>
+          {apps.map((app) => (
+            <option key={app.id} value={app.id}>
+              {app.name}
+              {app.isDefault ? " (por defecto)" : ""}
+            </option>
+          ))}
+        </SelectField>
+      </label>
 
-        <Button variant="ghost" onClick={() => setOpen(false)}>
-          Cancelar
-        </Button>
-
-        <span className="text-xs text-slate-500 dark:text-slate-400">
-          Vaciando los dos primeros vuelve a la app por defecto.
-        </span>
-      </div>
-
-      {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Solo cámbiala si esta tienda entra con un perfil de Facebook que no tiene rol en la app
+        de por defecto. {note}
+      </p>
     </div>
   );
 }
