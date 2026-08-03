@@ -41,6 +41,8 @@ export interface Video {
   musicUrl: string;
   /** Con qué modelo se anima. Ver `VIDEO_MODELS`. */
   videoModel: string;
+  /** Cuándo se tocó por última vez. Delata un montaje nuevo con la misma URL. */
+  updatedAt: string;
   words: TimedWord[];
   voiceSeconds: number;
   finalUrl: string | null;
@@ -118,6 +120,7 @@ export async function listVideos(productId: string): Promise<Video[]> {
     voiceUrl: row.voice_url,
     musicUrl: row.music_url ?? "",
     videoModel: row.video_model ?? "grok",
+    updatedAt: row.updated_at,
     words: parseWords(row.words),
     voiceSeconds: num(row.voice_seconds),
     finalUrl: row.final_url,

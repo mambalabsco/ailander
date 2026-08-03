@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import {
@@ -66,6 +66,31 @@ export function JobsPanel({
     // `running.length` en las dependencias: al terminar el último, el efecto se
     // vuelve a evaluar, entra por la rama de arriba y el sondeo se para solo.
   }, [running.length, intervalMs, router]);
+
+  /*
+   * Un refresco más al terminar el último trabajo.
+   *
+   * Hay una carrera de la que salía un resultado viejo en pantalla: la vuelta
+   * del sondeo que trae «terminado» puede leer los datos justo antes de que el
+   * trabajo acabe de escribirlos y de invalidar la caché de la página. Entonces
+   * el panel dice que está listo y debajo sigue el vídeo anterior.
+   *
+   * Un refresco cuando el sondeo ya ha parado lo cierra: llega después de que
+   * todo esté escrito.
+   */
+  const wasRunning = useRef(false);
+
+  useEffect(() => {
+    if (running.length > 0) {
+      wasRunning.current = true;
+      return;
+    }
+
+    if (!wasRunning.current) return;
+
+    wasRunning.current = false;
+    router.refresh();
+  }, [running.length, router]);
 
   if (jobs.length === 0) return null;
 

@@ -268,7 +268,27 @@ export function ShotBoard({
 
       {video.finalUrl ? (
         <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/40">
-          <video src={video.finalUrl} controls className="mx-auto max-h-[70vh] rounded-xl" />
+          {/*
+            El reproductor se vuelve a montar en cada versión.
+
+            Cambiarle el `src` a un `<video>` **no lo recarga**: el navegador se
+            queda con el archivo que ya tenía cargado y sigue enseñando el
+            montaje anterior. Con la clave, React tira el elemento y crea otro,
+            que sí pide el archivo nuevo.
+
+            Y la clave lleva la fecha además de la dirección, por si el montaje
+            devuelve la misma: ahí el navegador serviría su copia en caché y
+            volvería a parecer que no pasó nada.
+          */}
+          <video
+            key={`${video.finalUrl}#${video.updatedAt}`}
+            src={`${video.finalUrl}${video.finalUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(video.updatedAt)}`}
+            controls
+            className="mx-auto max-h-[70vh] rounded-xl"
+          />
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            Montado el {new Date(video.updatedAt).toLocaleString("es-ES")}
+          </p>
           <a
             href={video.finalUrl}
             download
