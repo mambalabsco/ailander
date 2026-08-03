@@ -31,7 +31,12 @@ import {
   type ShotRole,
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
-import { buildSrt, captionPieces } from "@/lib/video/captions";
+import {
+  buildSrt,
+  captionPieces,
+  piecesFromWords,
+  wordsWithin,
+} from "@/lib/video/captions";
 import { MUSIC_GAIN, attenuateWav, buildMusicPrompt } from "@/lib/video/wav-gain";
 import {
   animate,
@@ -961,16 +966,36 @@ export async function assembleVideoAction(
       if (video.subtitlePreset) {
         await report("Quemando los subtítulos");
 
+        /*
+         * Los tiempos salen de las palabras del audio, no de repartir el tramo.
+         *
+         * El generador de voz devuelve cuándo empieza y acaba **cada palabra**.
+         * Repartir el tramo de la toma entre sus palabras encaja el principio y
+         * el final, pero se desvía por dentro — y eso es exactamente lo que se
+         * lee como «no está sincronizado».
+         *
+         * Solo se estima cuando lo escrito no coincide con lo hablado: una toma
+         * con `sub` —«MCT» escrito, «eme ce te» hablado— tiene distinto número de
+         * palabras y no hay forma de emparejarlas. Ahí se reparte pesando por
+         * letras, que para un trozo corto llega.
+         */
         const srt = buildSrt(
-          video.shots.flatMap((shot) =>
-            shot.cutStart === null || shot.cutEnd === null
-              ? []
-              : captionPieces({
-                  written: shot.sub?.trim() || shot.guion,
-                  start: shot.cutStart,
-                  end: shot.cutEnd,
-                }),
-          ),
+          video.shots.flatMap((shot) => {
+            if (shot.cutStart === null || shot.cutEnd === null) return [];
+
+            const written = shot.sub?.trim();
+
+            if (!written) {
+              const spoken = wordsWithin(video.words ?? [], shot.cutStart, shot.cutEnd);
+              if (spoken.length > 0) return piecesFromWords(spoken);
+            }
+
+            return captionPieces({
+              written: written || shot.guion,
+              start: shot.cutStart,
+              end: shot.cutEnd,
+            });
+          }),
         );
 
         if (srt.trim()) {

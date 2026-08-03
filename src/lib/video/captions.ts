@@ -69,15 +69,30 @@ export function captionPieces(options: {
   if (words.length === 0 || span <= 0) return [];
 
   const perLine = Math.max(1, options.perLine ?? WORDS_PER_LINE);
+
+  /*
+   * El reparto va por lo larga que es cada palabra, no a partes iguales.
+   *
+   * «De» y «convertirla» no se tardan lo mismo en decir. A partes iguales el
+   * subtítulo se adelanta en los trozos con palabras largas y se atrasa en los
+   * de palabras cortas, y eso se lee como que va desincronizado aunque el tramo
+   * entero encaje.
+   *
+   * Se cuenta una letra de más por palabra: la pausa entre palabras existe.
+   */
+  const weights = words.map((word) => word.length + 1);
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+
   const pieces: CaptionPiece[] = [];
+  let elapsed = 0;
 
   for (let index = 0; index < words.length; index += perLine) {
     const chunk = words.slice(index, index + perLine);
+    const chunkWeight = weights.slice(index, index + perLine).reduce((sum, w) => sum + w, 0);
 
-    // Proporcional a cuántas palabras lleva el trozo, no a partes iguales: el
-    // último puede tener una sola palabra y no debe durar lo mismo que cuatro.
-    const from = options.start + (index / words.length) * span;
-    const to = options.start + ((index + chunk.length) / words.length) * span;
+    const from = options.start + (elapsed / total) * span;
+    elapsed += chunkWeight;
+    const to = options.start + (elapsed / total) * span;
 
     pieces.push({
       text: chunk.join(" "),
@@ -87,6 +102,49 @@ export function captionPieces(options: {
   }
 
   return pieces;
+}
+
+/**
+ * Los trozos con los tiempos **reales** de cada palabra.
+ *
+ * Es la versión exacta, y la que hay que usar siempre que se pueda: el generador
+ * de voz devuelve cuándo empieza y acaba cada palabra, así que no hay nada que
+ * estimar. Repartir el tramo a ojo encaja el principio y el final del trozo pero
+ * se desvía por dentro, y ahí es donde se nota que va desincronizado.
+ *
+ * Solo sirve cuando lo escrito coincide con lo hablado. Una toma con `sub`
+ * —«MCT» escrito, «eme ce te» hablado— tiene distinto número de palabras y no se
+ * pueden emparejar; esas se reparten, que para un trozo corto es suficiente.
+ */
+export function piecesFromWords(words: TimedWord[], perLine = WORDS_PER_LINE): CaptionPiece[] {
+  const usable = words.filter((word) => word.word.trim() && word.end > word.start);
+  const size = Math.max(1, perLine);
+  const pieces: CaptionPiece[] = [];
+
+  for (let index = 0; index < usable.length; index += size) {
+    const chunk = usable.slice(index, index + size);
+
+    pieces.push({
+      text: chunk.map((word) => word.word.trim()).join(" "),
+      start: Number(chunk[0].start.toFixed(3)),
+      end: Number(chunk[chunk.length - 1].end.toFixed(3)),
+    });
+  }
+
+  return pieces;
+}
+
+/**
+ * Las palabras que caen dentro de una toma.
+ *
+ * Se compara contra el tramo de la toma con un margen pequeño: los cortes salen
+ * de esas mismas palabras, así que coinciden — pero redondear a milisegundos
+ * puede dejar la primera o la última justo fuera por una milésima.
+ */
+export function wordsWithin(words: TimedWord[], start: number, end: number): TimedWord[] {
+  const margin = 0.02;
+
+  return words.filter((word) => word.start >= start - margin && word.end <= end + margin);
 }
 
 /**

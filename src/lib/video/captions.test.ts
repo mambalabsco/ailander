@@ -9,7 +9,9 @@ import {
   wrapWords,
   SUBTITLE_PRESETS,
   buildSrt,
+  piecesFromWords,
   srtTime,
+  wordsWithin,
 } from "./captions.ts";
 
 /* -------------------------------- Los trozos ------------------------------- */
@@ -37,8 +39,9 @@ test("los trozos cubren el tramo entero y no se solapan", () => {
 
 test("el último trozo dura a proporción de lo que lleva", () => {
   // A partes iguales, un trozo de una palabra duraría lo mismo que uno de tres y
-  // se quedaría clavado en pantalla.
-  const pieces = captionPieces({ written: "una dos tres cuatro", start: 0, end: 4 });
+  // se quedaría clavado en pantalla. El peso va por letras, así que las cuatro
+  // palabras de cuatro letras reparten justo tres cuartos y un cuarto.
+  const pieces = captionPieces({ written: "unaa doss tres cinc", start: 0, end: 4 });
 
   assert.equal(pieces[0].end, 3, "las tres primeras ocupan tres cuartos");
   assert.equal(pieces[1].start, 3);
@@ -203,4 +206,69 @@ test("los estilos que se ofrecen están explicados", () => {
   for (const preset of SUBTITLE_PRESETS) {
     assert.ok(preset.note.length > 20, `${preset.id} sin explicar`);
   }
+});
+
+/* --------------------------- Con los tiempos reales ------------------------ */
+
+const HABLADAS = [
+  { word: "Duermes", start: 0.2, end: 0.9 },
+  { word: "ocho", start: 0.9, end: 1.2 },
+  { word: "horas", start: 1.2, end: 1.7 },
+  { word: "y", start: 1.9, end: 2.0 },
+  { word: "despiertas", start: 2.0, end: 2.8 },
+  { word: "cansada", start: 2.8, end: 3.4 },
+];
+
+test("con los tiempos reales no se estima nada", () => {
+  /*
+   * Repartir el tramo a ojo encaja el principio y el final del trozo pero se
+   * desvía por dentro, y ahí es donde se lee como desincronizado. El generador
+   * de voz devuelve cuándo empieza y acaba cada palabra: no hay nada que estimar.
+   */
+  const [uno, dos] = piecesFromWords(HABLADAS);
+
+  assert.equal(uno.text, "Duermes ocho horas");
+  assert.equal(uno.start, 0.2, "arranca cuando arranca la primera palabra");
+  assert.equal(uno.end, 1.7, "y acaba cuando acaba la tercera");
+
+  assert.equal(dos.start, 1.9, "el silencio entre frases queda fuera");
+});
+
+test("las palabras vacías no cuentan como palabra", () => {
+  const pieces = piecesFromWords([
+    { word: " ", start: 0, end: 0.1 },
+    { word: "hola", start: 0.1, end: 0.5 },
+  ]);
+
+  assert.equal(pieces.length, 1);
+  assert.equal(pieces[0].text, "hola");
+});
+
+test("las palabras de una toma salen por su tramo", () => {
+  const dentro = wordsWithin(HABLADAS, 1.9, 3.4);
+
+  assert.deepEqual(
+    dentro.map((word) => word.word),
+    ["y", "despiertas", "cansada"],
+  );
+});
+
+test("un redondeo de milésimas no deja fuera la primera palabra", () => {
+  // Los cortes salen de estas mismas palabras, así que coinciden — pero
+  // redondear a milisegundos puede dejar una justo fuera por una milésima.
+  const dentro = wordsWithin(HABLADAS, 0.21, 1.69);
+
+  assert.equal(dentro.length, 3);
+});
+
+test("y el reparto estimado pesa las palabras largas", () => {
+  // Para las tomas con `sub`, donde escrito y hablado no coinciden.
+  const [corto, largo] = captionPieces({
+    written: "de a la convertirla completamente ahora",
+    start: 0,
+    end: 6,
+    perLine: 3,
+  });
+
+  assert.ok(largo.end - largo.start > corto.end - corto.start);
 });
