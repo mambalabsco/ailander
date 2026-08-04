@@ -482,7 +482,15 @@ function renderSection(
     case "crudo":
       return [
         section.css ? `<style>${section.css}</style>` : "",
-        `<div class="copiado">${section.html ?? ""}</div>`,
+        /*
+         * Sin envoltorio cuando no hay marcado.
+         *
+         * La primera sección de una copia es solo el CSS de la página. Un `<div>`
+         * vacío ahí no molesta a la vista, pero sí al maquetado: en una sección
+         * con `display:grid` o `flex` cuenta como una columna más y descoloca
+         * todo lo que venga detrás.
+         */
+        section.html ? `<div class="copiado">${section.html}</div>` : "",
       ].join("");
 
     case "imagen": {
@@ -589,6 +597,23 @@ export function renderLandingHtml(page: LandingPage, options: RenderOptions = {}
 
   // Solo al publicar: en la vista previa de la plataforma no hay tema que ocultar.
   const chrome = options.embedUrls && page.hideThemeChrome ? `${HIDE_CHROME}\n` : "";
+
+  /*
+   * Una página copiada no lleva nuestro marco.
+   *
+   * El armazón de siempre —tipografía, color, y sobre todo un `<article>` con
+   * `max-width`— es lo que da a las landings generadas su ancho de lectura. Pero
+   * una copia trae **sus propios anchos**: hay secciones a pantalla completa,
+   * otras a 800 px, otras con su propio margen. Metidas dentro de nuestro
+   * `max-width` salen todas del mismo ancho, que no es el de ninguna.
+   *
+   * Se reconoce porque sus secciones son `crudo`: ahí el marcado y el CSS son
+   * los de la página original, y lo único que podemos hacer bien es no
+   * estorbarlos.
+   */
+  const isCopy = page.sections.some((section) => section.kind === "crudo");
+
+  if (isCopy) return `${chrome}${header}${body}`;
 
   return `${chrome}<div class="${ROOT_CLASS}" style="font-family:${t.bodyFont};color:${t.ink};background:${t.background}">
 ${header}

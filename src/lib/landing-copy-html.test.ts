@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  buildCopyPrompt,
   absolutize,
+  applyTexts,
+  buildTextPrompt,
   absolutizeCss,
   closeOpenTags,
   cutAtTag,
   dropHidingRules,
+  extractTexts,
   hasSubstance,
   isChrome,
-  keepsShape,
   neutralizeLinks,
   sanitizeCss,
   sanitizeHtml,
@@ -146,75 +147,6 @@ test("los @import se caen: traerían una hoja de otro sitio", () => {
 test("lo que da el aspecto se queda tal cual", () => {
   const css = ".hero { display: grid; grid-template-columns: 1fr 2fr; gap: 24px }";
   assert.equal(sanitizeCss(css), css);
-});
-
-/* ----------------------------- Que siga siendo ella -------------------------- */
-
-const SECCION = '<div class="hero"><h1>Antes</h1><p>Uno</p><p>Dos</p></div>';
-
-test("cambiar solo el texto conserva la forma", () => {
-  const otro = '<div class="hero"><h1>Después</h1><p>Tres</p><p>Cuatro</p></div>';
-  assert.equal(keepsShape(SECCION, otro).ok, true);
-});
-
-/*
- * A veces el modelo devuelve **su** versión del marcado. Eso no da error: da una
- * página que ya no se parece a la que se quería copiar.
- */
-test("una reescritura del marcado se detecta", () => {
-  const suyo = "<section><h2>Después</h2></section>";
-  const verdict = keepsShape(SECCION, suyo);
-
-  assert.equal(verdict.ok, false);
-  assert.match(verdict.why, /marcado cambió/);
-});
-
-test("quitar un br al traducir no cuenta como reescritura", () => {
-  const con = '<div class="hero"><p>Uno<br>Dos<br>Tres<br>Cuatro<br>Cinco</p><p>a</p><p>b</p></div>';
-  const sin = '<div class="hero"><p>Uno<br>Dos<br>Tres<br>Cuatro</p><p>a</p><p>b</p></div>';
-
-  assert.equal(keepsShape(con, sin).ok, true);
-});
-
-test("meter etiquetas que no estaban también se detecta", () => {
-  const inflado = SECCION.replace("</div>", "<p>a</p><p>b</p><p>c</p><p>d</p></div>");
-  assert.equal(keepsShape(SECCION, inflado).ok, false);
-});
-
-test("un fragmento sin etiquetas no se marca como roto", () => {
-  assert.equal(keepsShape("solo texto", "otro texto").ok, true);
-});
-
-/* -------------------------------- El encargo -------------------------------- */
-
-test("se le pide el mismo marcado, no una versión suya", () => {
-  const prompt = buildCopyPrompt({ html: SECCION, context: "Producto: Naturox", language: "español de Chile" });
-
-  assert.match(prompt, /exactamente el mismo HTML/);
-  assert.match(prompt, /mismo número de elementos/);
-  assert.match(prompt, /Producto: Naturox/);
-});
-
-/*
- * Un texto del doble de largo rompe el diseño que se está copiando, que es justo
- * lo que se venía a conservar.
- */
-test("se le pide respetar la longitud de cada texto", () => {
-  assert.match(
-    buildCopyPrompt({ html: SECCION, context: "x", language: "español" }),
-    /longitud aproximada/,
-  );
-});
-
-test("se le dice el idioma y que traduzca con intención", () => {
-  const prompt = buildCopyPrompt({ html: SECCION, context: "x", language: "español de México" });
-
-  assert.match(prompt, /español de México/);
-  assert.match(prompt, /no palabra por palabra/);
-});
-
-test("nada de lo del otro producto se arrastra", () => {
-  assert.match(buildCopyPrompt({ html: SECCION, context: "x", language: "es" }), /ni estudios/);
 });
 
 /* ------------------------------- Los enlaces -------------------------------- */
@@ -553,4 +485,83 @@ test("una regla que esconde sin marca de animación se queda", () => {
 test("una regla con marca que no esconde tampoco se cae", () => {
   const css = ".gps-lazy{transition:opacity .3s}";
   assert.equal(dropHidingRules(css), css);
+});
+
+/* ------------------------ Solo el texto, y en su sitio ---------------------- */
+
+const SECCION_TEXTO = '<div class="hero"><h1>Adelgaza ya</h1><p>Con <b>colágeno</b> real.</p></div>';
+
+/*
+ * Pedirle al modelo el marcado entero no funciona: ciento cincuenta mil
+ * caracteres no caben en la respuesta, y cada vez que lo devuelve hay una
+ * posibilidad de que lo devuelva distinto — y entonces la copia deja de
+ * parecerse. Mandando solo las frases, la maqueta es la misma por construcción.
+ */
+test("se sacan las frases, no el marcado", () => {
+  assert.deepEqual(extractTexts(SECCION_TEXTO), ["Adelgaza ya", "Con", "colágeno", "real."]);
+});
+
+test("los espacios y los símbolos sueltos no se mandan a traducir", () => {
+  assert.deepEqual(extractTexts("<div>  </div><span>·</span><p>Hola</p>"), ["Hola"]);
+});
+
+test("volver a colocarlos deja el marcado idéntico", () => {
+  const nuevos = ["Deshínchate ya", "Con", "magnesio", "de verdad."];
+  const out = applyTexts(SECCION_TEXTO, nuevos);
+
+  assert.match(out, /<div class="hero"><h1>Deshínchate ya<\/h1>/);
+  assert.match(out, /<b>magnesio<\/b>/);
+  assert.deepEqual(extractTexts(out), nuevos);
+});
+
+/* En `<b>hola</b> mundo`, el espacio de antes de «mundo» es parte del marcado. */
+test("los espacios de alrededor se conservan", () => {
+  assert.equal(applyTexts("<p><b>hola</b> mundo</p>", ["adiós", "tierra"]), "<p><b>adiós</b> tierra</p>");
+});
+
+/*
+ * Un hueco a medias es una frase en el idioma equivocado y se ve. Un hueco vacío
+ * es un trozo de página que desaparece, y eso no.
+ */
+test("si vuelven menos textos, los que faltan se quedan como estaban", () => {
+  const out = applyTexts(SECCION_TEXTO, ["Deshínchate ya"]);
+
+  assert.match(out, /Deshínchate ya/);
+  assert.match(out, /colágeno/);
+});
+
+test("sin ningún texto devuelto no se vacía nada", () => {
+  assert.equal(applyTexts(SECCION_TEXTO, []), SECCION_TEXTO);
+});
+
+test("una sección sin texto no da trabajo", () => {
+  assert.deepEqual(extractTexts('<div class="separador"></div>'), []);
+});
+
+test("los textos van numerados, para poder devolverlos a su sitio", () => {
+  const prompt = buildTextPrompt({
+    texts: ["Adelgaza ya", "Con colágeno"],
+    context: "Producto: Naturox",
+    language: "español de Chile",
+  });
+
+  assert.match(prompt, /1\. Adelgaza ya/);
+  assert.match(prompt, /2\. Con colágeno/);
+  assert.match(prompt, /español de Chile/);
+});
+
+test("se pide conservar el enfoque y la longitud", () => {
+  const prompt = buildTextPrompt({ texts: ["x"], context: "y", language: "es" });
+
+  assert.match(prompt, /El enfoque y la idea de cada frase/);
+  assert.match(prompt, /longitud aproximada/);
+});
+
+/* Reescribir lo que ya vale es cambiar por cambiar. */
+test("lo que ya sirve se devuelve tal cual", () => {
+  assert.match(buildTextPrompt({ texts: ["x"], context: "y", language: "es" }), /tal cual/);
+});
+
+test("se pide traducir con intención, no palabra por palabra", () => {
+  assert.match(buildTextPrompt({ texts: ["x"], context: "y", language: "es" }), /no palabra por palabra/);
 });

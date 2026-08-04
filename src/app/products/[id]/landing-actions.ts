@@ -766,16 +766,17 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
       const {
         absolutize,
         absolutizeCss,
-        buildCopyPrompt,
+        applyTexts,
+        buildTextPrompt,
         closeOpenTags,
         cutAtTag,
         dropHidingRules,
+        extractTexts,
         reveal,
         scopeCss,
         unlazy,
         hasSubstance,
         isChrome,
-        keepsShape,
         neutralizeLinks,
         sanitizeCss,
         sanitizeHtml,
@@ -864,21 +865,30 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         if (!hasSubstance(original)) continue;
 
         /*
-         * Una sección sin texto —un separador, una franja de color— no necesita
-         * pasar por el modelo: no hay nada que adaptar y sería pagar por
-         * devolver lo mismo.
+         * Se manda **solo el texto**, numerado.
+         *
+         * Pedirle el marcado entero no funciona: ciento cincuenta mil caracteres
+         * no caben en una respuesta, y cada vez que lo devuelve hay una
+         * posibilidad de que lo devuelva distinto — y entonces la copia deja de
+         * parecerse, que es justo lo que se venía a evitar.
+         *
+         * Con solo las frases, la maqueta no se toca: es la misma **por
+         * construcción**, no por suerte. Y se paga el texto, que es una
+         * centésima parte.
          */
-        const words = original.replace(/<[^>]*>/g, " ").trim();
+        const texts = extractTexts(original);
 
-        if (words.length < 20) {
+        // Una sección sin texto —un separador, una franja de color— no necesita
+        // pasar por el modelo: no hay nada que adaptar.
+        if (texts.length === 0) {
           out.push({ kind: "crudo", html: original });
           continue;
         }
 
         try {
-          const outcome = await generateStructured<{ html: string }>({
-            prompt: buildCopyPrompt({
-              html: original,
+          const outcome = await generateStructured<{ textos: string[] }>({
+            prompt: buildTextPrompt({
+              texts,
               context,
               language: `español de ${product.country || "México"}`,
               role: section.role,
@@ -886,9 +896,13 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
             schema: {
               type: "object",
               additionalProperties: false,
-              required: ["html"],
+              required: ["textos"],
               properties: {
-                html: { type: "string", description: "El mismo HTML con el texto cambiado." },
+                textos: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Los mismos textos, en el mismo orden y con el mismo número.",
+                },
               },
             },
             role: "copy",
@@ -898,42 +912,29 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           inputTokens += outcome.inputTokens;
           outputTokens += outcome.outputTokens;
 
-          const rewritten = closeOpenTags(neutralizeLinks(sanitizeHtml(outcome.data.html)).html);
-          const verdict = keepsShape(original, rewritten);
+          const back = outcome.data.textos ?? [];
 
-          if (!verdict.ok) {
-            /*
-             * Si devolvió otra cosa, se queda el marcado original.
-             *
-             * Con el texto del otro producto dentro, sí — pero visible y
-             * corregible. Meter una sección con otra forma rompe justo lo que se
-             * venía a copiar, y eso no se ve hasta abrir las dos páginas juntas.
-             */
-            warnings.push(`Sección ${index + 1}: ${verdict.why} Se dejó la original.`);
-            out.push({ kind: "crudo", html: original });
-            continue;
+          /*
+           * Si vuelven menos, los que faltan se quedan como estaban.
+           *
+           * Es lo correcto y no una rendición: un hueco a medias es una frase en
+           * el idioma equivocado, y eso se ve al mirar la página. Un hueco vacío
+           * es un trozo que desaparece, y eso no.
+           */
+          if (back.length < texts.length) {
+            warnings.push(
+              `Sección ${index + 1}: volvieron ${back.length} de ${texts.length} textos; el resto se quedó en el idioma original.`,
+            );
           }
 
-          out.push({ kind: "crudo", html: rewritten });
+          out.push({ kind: "crudo", html: applyTexts(original, back) });
         } catch (error) {
           warnings.push(
-            `Sección ${index + 1}: ${error instanceof Error ? error.message : "falló"}. Se dejó la original.`,
+            `Sección ${index + 1}: ${error instanceof Error ? error.message : "falló"}. Se quedó con el texto original.`,
           );
+
           out.push({ kind: "crudo", html: original });
         }
-      }
-
-      /*
-       * Si al limpiar no quedó nada, se dice en vez de guardar una página vacía.
-       *
-       * Pasa con las que pinta entera el navegador: hay secciones en el HTML,
-       * pero dentro solo hay contenedores y scripts. Guardar quince secciones
-       * vacías se lee como que la copia funcionó.
-       */
-      if (out.length === 0) {
-        throw new Error(
-          "De esa página no quedó ninguna sección con contenido al limpiarla. Suele pasar cuando la pinta entera el navegador: no hay marcado que copiar.",
-        );
       }
 
       /*
