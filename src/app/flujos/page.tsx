@@ -7,6 +7,7 @@ import { listFlows, listOutputs, listRuns } from "@/lib/data/flows";
 import { listAvatars } from "@/lib/data/avatars";
 import { listOwnProducts } from "@/lib/store";
 import { listVoices } from "@/lib/video/providers";
+import { listCliModels } from "@/lib/higgsfield-cli";
 import { currentProfile } from "@/lib/data/profiles";
 import { can } from "@/lib/roles";
 
@@ -28,13 +29,15 @@ export default async function FlujosPage(props: {
 
   const { f } = await props.searchParams;
 
-  const [flows, products, avatars, voices] = await Promise.all([
+  const [flows, products, avatars, voices, cliModels] = await Promise.all([
     listFlows().catch(() => []),
     listOwnProducts(),
     listAvatars().catch(() => []),
     // Las voces de la cuenta, para elegirlas en el nodo. Un fallo aquí deja el
     // desplegable vacío, no la página caída: lo demás del lienzo sigue sirviendo.
     listVoices().catch(() => []),
+    // Para poder crear una cara desde el propio lienzo.
+    listCliModels("image").catch(() => []),
   ]);
 
   const current = flows.find((flow) => flow.id === f) ?? flows[0] ?? null;
@@ -97,6 +100,7 @@ export default async function FlujosPage(props: {
             results={results}
             avatars={avatars.map((avatar) => ({ id: avatar.id, name: avatar.name }))}
             voices={voices.map((voice) => ({ id: voice.id, name: voice.name }))}
+            cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
           />
 
           {runs.length > 0 ? (

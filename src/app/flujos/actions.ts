@@ -260,3 +260,71 @@ export async function runFlowAction(input: unknown): Promise<LaunchResult> {
     },
   });
 }
+
+/* -------------------------------- El avance -------------------------------- */
+
+export interface FlowProgress {
+  /** `corriendo`, `hecho`, `error`, `cancelado`, o vacío si nunca se ejecutó. */
+  status: string;
+  note: string;
+  /** Lo que ha producido cada nodo **hasta ahora**. */
+  outputs: Record<string, { url: string; kind: string; error: string }>;
+  /** Las caras, que pueden haber cambiado si se generaron desde el lienzo. */
+  avatars: { id: string; name: string }[];
+}
+
+/**
+ * Lo que ha avanzado, para pintarlo sin recargar.
+ *
+ * ## Por qué esto y no `router.refresh()`
+ *
+ * Refrescar la página vuelve a montar el servidor entero y devuelve el grafo
+ * guardado. El lienzo tiene en pantalla lo que se está editando —cajas movidas,
+ * ajustes a medio poner— y nada de eso está guardado todavía: un refresco lo
+ * pisaría, o peor, no lo pisaría pero tampoco traería los resultados nuevos,
+ * que es lo que pasa cuando el estado del lienzo se inicializa una sola vez.
+ *
+ * Así que se pide **solo lo que cambia** —qué produjo cada nodo— y se mete en
+ * las cajas que ya están. Lo que se está editando no se toca.
+ *
+ * Devuelve también las caras porque se pueden crear desde el propio lienzo, y
+ * sin esto habría que recargar para verlas en el desplegable.
+ */
+export async function flowProgressAction(flowId: unknown): Promise<FlowProgress> {
+  const empty: FlowProgress = { status: "", note: "", outputs: {}, avatars: [] };
+
+  try {
+    await guard();
+
+    const id = readText(flowId);
+    if (!id) return empty;
+
+    const { listRuns, listOutputs } = await import("@/lib/data/flows");
+    const { listAvatars } = await import("@/lib/data/avatars");
+
+    const [runs, avatars] = await Promise.all([
+      listRuns(id),
+      listAvatars().catch(() => []),
+    ]);
+
+    const latest = runs[0];
+
+    return {
+      status: latest?.status ?? "",
+      note: latest?.note ?? "",
+      outputs: latest
+        ? Object.fromEntries(
+            (await listOutputs(latest.id)).map((output) => [
+              output.nodeId,
+              { url: output.url, kind: output.kind, error: output.error },
+            ]),
+          )
+        : {},
+      avatars: avatars.map((avatar) => ({ id: avatar.id, name: avatar.name })),
+    };
+  } catch {
+    // Un fallo del sondeo no puede tumbar el lienzo: se reintenta a la
+    // siguiente vuelta y mientras tanto se ve lo último que llegó.
+    return empty;
+  }
+}

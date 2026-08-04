@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Background,
@@ -21,7 +21,7 @@ import { GenerateButton } from "@/components/generate-button";
 import { FlowNodeBox } from "@/components/flow/flow-node";
 import { NodeSettings } from "@/components/flow/node-settings";
 import { NODE_TYPES, canConnect, findNodeType, removeNode, validate, type Flow } from "@/lib/flow/graph";
-import { runFlowAction, saveFlowAction } from "@/app/flujos/actions";
+import { flowProgressAction, runFlowAction, saveFlowAction } from "@/app/flujos/actions";
 
 /**
  * El lienzo.
@@ -48,6 +48,8 @@ export interface FlowCanvasProps {
   results: Record<string, { url: string; kind: string; error: string }>;
   avatars: { id: string; name: string }[];
   voices: { id: string; name: string }[];
+  /** Los del CLI, para crear una cara sin salir del lienzo. */
+  cliModels: { slug: string; name: string }[];
 }
 
 const nodeTypes = { caja: FlowNodeBox };
@@ -58,12 +60,15 @@ function nextId(nodes: Node[], type: string): string {
   return `${type}-${used + 1}`;
 }
 
-export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanvasProps) {
+export function FlowCanvas({ flowId, graph, results, avatars, voices, cliModels }: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [multiply, setMultiply] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string>("");
+  /** Si hay una ejecución viva: mientras la haya, se sondea. */
+  const [running, setRunning] = useState(false);
+  const [faces, setFaces] = useState(avatars);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(
     graph.nodes.map((node) => ({
@@ -109,6 +114,49 @@ export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanv
 
   const problems = useMemo(() => validate(asFlow), [asFlow]);
   const selectedNode = nodes.find((node) => node.id === selected) ?? null;
+
+  /*
+   * El avance se pinta sin recargar.
+   *
+   * Se pide **solo lo que cambia** —qué produjo cada nodo— y se mete en las
+   * cajas que ya están. Recargar la página devolvería el grafo guardado y
+   * pisaría lo que se esté editando: cajas movidas, ajustes a medio poner.
+   *
+   * El sondeo se para solo cuando la ejecución deja de estar viva, así que una
+   * pestaña abierta toda la tarde no pregunta cada tres segundos para nada.
+   */
+  useEffect(() => {
+    if (!running) return;
+
+    let alive = true;
+
+    const tick = async () => {
+      const progress = await flowProgressAction(flowId);
+      if (!alive) return;
+
+      setFaces(progress.avatars);
+
+      setNodes((current) =>
+        current.map((node) => {
+          const result = progress.outputs[node.id];
+          return result ? { ...node, data: { ...node.data, result } } : node;
+        }),
+      );
+
+      if (progress.status && progress.status !== "corriendo") {
+        setRunning(false);
+        setNote(progress.note || "Ejecución terminada.");
+      }
+    };
+
+    void tick();
+    const timer = setInterval(() => void tick(), 3000);
+
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [running, flowId, setNodes]);
 
   /*
    * La conexión la autoriza el modelo, no el lienzo.
@@ -184,11 +232,20 @@ export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanv
 
         <GenerateButton
           variant="primary"
-          action={() => runFlowAction({ flowId, variants })}
+          action={async () => {
+            // Guardar antes de ejecutar: se ejecuta lo guardado, y lanzar lo que
+            // hay en pantalla sin guardarlo produce un anuncio de otro grafo.
+            await saveFlowAction(flowId, asFlow);
+
+            const launched = await runFlowAction({ flowId, variants });
+            if (launched.started) setRunning(true);
+
+            return launched;
+          }}
           label={variants.length > 1 ? `Ejecutar ${variants.length} veces` : "Ejecutar"}
           disabled={problems.length > 0}
           disabledReason={problems.length > 0 ? problems[0].problem : undefined}
-          hint="Guarda antes: se ejecuta lo guardado, no lo que hay en pantalla. Lo ya hecho no se vuelve a pagar."
+          hint="Guarda solo y va en segundo plano: verás cada nodo llenarse aquí mismo. Lo ya hecho no se vuelve a pagar."
         />
 
         <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -203,14 +260,14 @@ export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanv
         porque cada una lanza sus generaciones y el proveedor limita llamadas por
         minuto: seis a la vez no acaban antes, fallan por cupo.
       */}
-      {avatars.length > 0 ? (
+      {faces.length > 0 ? (
         <div className="rounded-2xl border border-slate-200 p-2 dark:border-slate-800">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Una vuelta por cada cara marcada {multiply.size > 0 ? `· ${multiply.size}` : "· ninguna"}
           </p>
 
           <ul className="mt-1 flex flex-wrap gap-1">
-            {avatars.map((avatar) => {
+            {faces.map((avatar) => {
               const on = multiply.has(avatar.id);
 
               return (
@@ -294,7 +351,9 @@ export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanv
                 ((selectedNode.data as { settings?: Record<string, unknown> }).settings ?? {})
               }
               voices={voices}
-              avatars={avatars}
+              avatars={faces}
+              cliModels={cliModels}
+              onFacesChanged={() => setRunning(true)}
               onChange={(settings) =>
                 setNodes((current) =>
                   current.map((node) =>
@@ -346,9 +405,16 @@ export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanv
         pulsando Supr.
       </p>
 
-      <Button variant="ghost" onClick={() => router.refresh()}>
-        Ver los resultados de la última ejecución
-      </Button>
+      {running ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Ejecutando… los resultados aparecen en cada caja según van saliendo. Puedes cerrar la
+          pestaña: sigue en segundo plano.
+        </p>
+      ) : (
+        <Button variant="ghost" onClick={() => router.refresh()}>
+          Traer la última ejecución
+        </Button>
+      )}
     </div>
   );
 }

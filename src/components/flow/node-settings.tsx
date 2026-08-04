@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button, SelectField } from "@/components/ui";
 import { findNodeType } from "@/lib/flow/graph";
 import { VIDEO_GENERATORS } from "@/lib/video/catalog";
@@ -8,6 +9,8 @@ import { MUSIC_LEVELS } from "@/lib/video/loudness";
 import { VOICE_PRESETS } from "@/lib/video/voice-settings";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
 import { ASPECTS } from "@/lib/video/aspect";
+import { PEOPLE } from "@/lib/avatar-shots";
+import { generateAvatarsAction } from "@/app/avatares/actions";
 
 /**
  * Los ajustes del nodo seleccionado.
@@ -32,8 +35,12 @@ export interface NodeSettingsProps {
   settings: Record<string, unknown>;
   voices: { id: string; name: string }[];
   avatars: { id: string; name: string }[];
+  /** Los modelos del CLI, para poder crear una cara sin salir del lienzo. */
+  cliModels: { slug: string; name: string }[];
   onChange: (settings: Record<string, unknown>) => void;
   onDelete: () => void;
+  /** Se avisa al lanzar caras nuevas, para que el lienzo empiece a sondear. */
+  onFacesChanged: () => void;
 }
 
 const text = (settings: Record<string, unknown>, key: string): string =>
@@ -50,8 +57,10 @@ export function NodeSettings({
   settings,
   voices,
   avatars,
+  cliModels,
   onChange,
   onDelete,
+  onFacesChanged,
 }: NodeSettingsProps) {
   const node = findNodeType(type);
   if (!node) return null;
@@ -132,8 +141,9 @@ export function NodeSettings({
 
       {type === "archivo" ? field("Dirección de la imagen", input("url", "https://…")) : null}
 
-      {type === "avatar"
-        ? field(
+      {type === "avatar" ? (
+        <div className="space-y-2">
+          {field(
             "Qué cara",
             <SelectField
               value={text(settings, "avatarId")}
@@ -150,8 +160,18 @@ export function NodeSettings({
                 </option>
               ))}
             </SelectField>,
-          )
-        : null}
+          )}
+
+          {/*
+            Crear una cara sin salir del lienzo.
+
+            Descubrir a mitad de montar un flujo que falta una cara y tener que
+            irse a otra pantalla es perder el hilo — y al volver, el lienzo se
+            ha recargado y lo no guardado se ha ido.
+          */}
+          <NewFace models={cliModels} onLaunched={onFacesChanged} />
+        </div>
+      ) : null}
 
       {type === "guion" ? (
         <div className="grid grid-cols-2 gap-2">
@@ -303,6 +323,110 @@ export function NodeSettings({
           producto sin tocar ninguna caja.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Una cara nueva desde el propio lienzo.
+ *
+ * Va plegado: lo normal es elegir una que ya está, y un formulario de tres
+ * campos abierto en el panel tapa los ajustes del nodo que sí se usan siempre.
+ */
+function NewFace({
+  models,
+  onLaunched,
+}: {
+  models: { slug: string; name: string }[];
+  onLaunched: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [model, setModel] = useState("");
+  const [count, setCount] = useState(2);
+  const [note, setNote] = useState("");
+
+  // Soul primero: es el que hace personas que parecen personas.
+  const sorted = [...models].sort(
+    (a, b) => (/soul/i.test(a.slug + a.name) ? 0 : 1) - (/soul/i.test(b.slug + b.name) ? 0 : 1),
+  );
+
+  if (!open) {
+    return (
+      <Button variant="ghost" onClick={() => setOpen(true)}>
+        Crear una cara nueva
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-slate-200 p-2 dark:border-slate-800">
+      <SelectField value="" onChange={(event) => setDescription(event.target.value)}>
+        <option value="">Parte de una sugerencia…</option>
+        {PEOPLE.map((person) => (
+          <option key={person.id} value={person.description}>
+            {person.label}
+          </option>
+        ))}
+      </SelectField>
+
+      <textarea
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+        rows={3}
+        placeholder="a woman in her mid 40s, dark hair, tired eyes…"
+        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+
+      <div className="flex gap-2">
+        <SelectField value={model} onChange={(event) => setModel(event.target.value)}>
+          <option value="">Modelo…</option>
+          {sorted.map((item) => (
+            <option key={item.slug} value={item.slug}>
+              {item.name}
+            </option>
+          ))}
+        </SelectField>
+
+        <input
+          type="number"
+          min={1}
+          max={6}
+          value={count}
+          onChange={(event) => setCount(Number(event.target.value))}
+          className="w-16 rounded-xl border border-slate-300 px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={!description.trim() || !model}
+          onClick={() => {
+            void generateAvatarsAction({ description, model, count })
+              .then((result) => {
+                setNote(result.started ? "Lanzado. Las caras aparecerán aquí." : result.message);
+
+                if (result.started) {
+                  // Se sondea desde el lienzo: las caras aparecen en el
+                  // desplegable según se van generando, sin recargar.
+                  onLaunched();
+                  setOpen(false);
+                }
+              })
+              .catch((error: unknown) =>
+                setNote(error instanceof Error ? error.message : "No se pudo lanzar."),
+              );
+          }}
+        >
+          Generar
+        </Button>
+
+        <Button variant="ghost" onClick={() => setOpen(false)}>
+          Cancelar
+        </Button>
+      </div>
+
+      {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
     </div>
   );
 }

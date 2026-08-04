@@ -157,6 +157,37 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
         {result?.url && result.kind === "audio" ? (
           <audio key={result.url} src={result.url} controls className="mt-1 h-8 w-full" />
         ) : null}
+
+        {/*
+          Abrir y descargar, cada pieza por su cuenta.
+
+          La descarga pasa por la plataforma porque desde otro dominio el
+          atributo `download` **no hace nada**: el navegador lo ignora y abre el
+          vídeo en una pestaña. Quien quiere el archivo acaba con un clic derecho
+          y un nombre como `a3f9b2c1-4d5e.mp4`.
+
+          `nodrag` en los dos: sin él, el lienzo se queda el clic para arrastrar
+          la caja y el enlace no llega a abrirse nunca.
+        */}
+        {result?.url ? (
+          <div className="mt-1 flex gap-2 text-[10px]">
+            <a
+              href={result.url}
+              target="_blank"
+              rel="noreferrer"
+              className="nodrag text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+            >
+              Abrir
+            </a>
+
+            <a
+              href={`/api/descargar?url=${encodeURIComponent(result.url)}`}
+              className="nodrag text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+            >
+              Descargar
+            </a>
+          </div>
+        ) : null}
       </div>
     </div>
   );
