@@ -2,10 +2,20 @@ import "server-only";
 
 import { findProductAnywhere } from "@/lib/products";
 import { readPrimaryImage } from "@/lib/image-store";
+import { readProductResearch } from "@/lib/research-store";
+import { buildProductContext } from "@/lib/copy-prompts";
 import { readAvatar } from "@/lib/data/avatars";
 import { generateStructured } from "@/lib/generators";
 import { SCRIPT_SCHEMA } from "@/lib/generation-schemas";
 import { buildScriptPrompt } from "@/lib/video/script-prompt";
+import { directorBrief } from "@/lib/video/director";
+import {
+  FLOW_COPY_SCHEMA,
+  buildFlowCopyPrompt,
+  findCopyFormat,
+  renderCopy,
+  type FlowCopy,
+} from "@/lib/flow/copy";
 import {
   animate,
   burnSubtitles,
@@ -203,6 +213,44 @@ async function runNode(
       return { kind: "guion", url: "", value };
     }
 
+    case "copy": {
+      const product = await findProductAnywhere(ctx.productId);
+      if (!product) throw new Error("El flujo no tiene producto elegido.");
+
+      const format = findCopyFormat(text(node.settings, "format", "anuncio")).id;
+
+      /*
+       * El ángulo puede llegar por el cable o estar escrito en el nodo.
+       *
+       * Lo del cable manda: es lo que permite ejecutar el mismo flujo con cinco
+       * ángulos distintos sin tocar la caja.
+       */
+      const angle = first(inputs, 1)?.value || text(node.settings, "angle");
+
+      await ctx.report("Escribiendo el copy");
+
+      const outcome = await generateStructured<FlowCopy>({
+        prompt: buildFlowCopyPrompt({
+          // El mismo contexto que usa el resto de la plataforma: dos ideas
+          // distintas del mismo producto es cómo salen anuncios que se
+          // contradicen entre sí.
+          context: buildProductContext(product, await readProductResearch(ctx.productId), null),
+          format,
+          angle,
+          language: product.language,
+          seconds: num(node.settings, "seconds", 0),
+        }),
+        schema: FLOW_COPY_SCHEMA as unknown as Record<string, unknown>,
+        role: "copy",
+        maxTokens: 4_000,
+      });
+
+      const value = renderCopy(outcome.data, format);
+      if (!value) throw new Error("El copy salió vacío.");
+
+      return { kind: "guion", url: "", value };
+    }
+
     case "imagen": {
       const prompt = first(inputs, 0);
       if (!prompt) throw new Error("Ese nodo de imagen no tiene prompt.");
@@ -242,20 +290,44 @@ async function runNode(
       if (!script) throw new Error("Ese nodo no tiene guion.");
 
       /*
-       * Seedance acepta un guion de veinte mil caracteres, así que aquí va el
-       * guion **entero** y no una frase. Es lo que lo distingue de encadenar
-       * clips: un solo encargo con toda la historia dentro.
+       * Seedance acepta un guion de veinte mil caracteres, así que aquí va la
+       * **dirección entera** y no una frase: la estructura del anuncio, el
+       * guion literal, cómo se rueda y qué no puede pasar. Es lo que lo
+       * distingue de encadenar clips — un solo encargo con toda la película
+       * dentro—, y mandarle solo el guion es desaprovecharlo: el guion dice lo
+       * que se oye, no lo que se ve.
        */
       const model = findGenerator(text(node.settings, "model", "seedance2"));
+      // Hasta nueve, que es su tope: pasarse rechaza la petición entera.
+      const references = urls(inputs, 1).slice(0, 9);
+      const aspectRatio = text(node.settings, "aspectRatio", "9:16");
+      const seconds = num(node.settings, "seconds", 15);
+
+      // El nombre solo para nombrarlo en el encargo; que falle no impide rodar.
+      const product = await findProductAnywhere(ctx.productId).catch(() => null);
+
+      const brief = directorBrief({
+        script: script.value,
+        templateId: text(node.settings, "director"),
+        productName: product?.name,
+        language: product?.language,
+        seconds,
+        aspectRatio,
+        references: references.length,
+      });
+
+      if (brief.trimmed > 0) {
+        await ctx.report(`El encargo no cabía: se recortaron ${brief.trimmed} caracteres.`);
+      }
+
       await ctx.report(`Generando el anuncio con ${model.label}`);
 
       const url = await animate({
-        prompt: script.value.slice(0, 20_000),
-        // Hasta nueve, que es su tope: pasarse lo rechaza.
-        references: urls(inputs, 1).slice(0, 9),
-        seconds: num(node.settings, "seconds", 15),
+        prompt: brief.prompt,
+        references,
+        seconds,
         model: model.slug,
-        aspectRatio: text(node.settings, "aspectRatio", "9:16"),
+        aspectRatio,
         // Con sonido propio salvo que se diga: es la gracia de este nodo.
         sound: node.settings.sound !== false,
       });

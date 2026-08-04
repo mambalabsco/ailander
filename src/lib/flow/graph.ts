@@ -65,11 +65,11 @@ export const NODE_TYPES: NodeType[] = [
   },
   {
     id: "archivo",
-    label: "Archivo subido",
+    label: "Imagen",
     group: "fuente",
     accepts: [],
     produces: "imagen",
-    note: "Una imagen tuya: un packshot, una captura, una referencia.",
+    note: "Una foto del producto, una tuya subida o una dirección pegada.",
   },
   {
     id: "guion",
@@ -81,6 +81,24 @@ export const NODE_TYPES: NodeType[] = [
     ],
     produces: "guion",
     note: "Escribe el guion por tomas a partir del producto y su investigación.",
+  },
+  {
+    /*
+     * Escribir el copy dentro del lienzo.
+     *
+     * Sin esto, la única forma de meter texto en un flujo era teclearlo en un
+     * nodo de prompt — y entonces el copy no sabe nada del producto: ni de la
+     * oferta, ni del público, ni de los ángulos ya investigados.
+     */
+    id: "copy",
+    label: "Copy",
+    group: "idea",
+    accepts: [
+      { kind: "producto", label: "Producto", required: true },
+      { kind: "texto", label: "Ángulo", required: false },
+    ],
+    produces: "guion",
+    note: "Escribe el texto del anuncio, la locución o solo el gancho.",
   },
   {
     id: "prompt",

@@ -12,6 +12,9 @@ import { ASPECTS } from "@/lib/video/aspect";
 import { PEOPLE } from "@/lib/avatar-shots";
 import { generateAvatarsAction } from "@/app/avatares/actions";
 import { uploadFlowImageAction } from "@/app/flujos/actions";
+import { polishPromptAction } from "@/app/estudio/actions";
+import { COPY_FORMATS } from "@/lib/flow/copy";
+import { DIRECTOR_TEMPLATES } from "@/lib/video/director";
 
 /**
  * Los ajustes del nodo seleccionado.
@@ -42,6 +45,8 @@ export interface NodeSettingsProps {
   cliModels: { slug: string; name: string }[];
   onChange: (settings: Record<string, unknown>) => void;
   onDelete: () => void;
+  /** Varias fotos de golpe: cada una entra como su propio nodo de imagen. */
+  onAddImages: (images: { url: string; name: string }[]) => void;
   /** Se avisa al lanzar caras nuevas, para que el lienzo empiece a sondear. */
   onFacesChanged: () => void;
 }
@@ -64,6 +69,7 @@ export function NodeSettings({
   cliModels,
   onChange,
   onDelete,
+  onAddImages,
   onFacesChanged,
 }: NodeSettingsProps) {
   const node = findNodeType(type);
@@ -130,8 +136,9 @@ export function NodeSettings({
         </Button>
       </div>
 
-      {type === "prompt"
-        ? field(
+      {type === "prompt" ? (
+        <div className="space-y-2">
+          {field(
             "Qué se le pide",
             <textarea
               value={text(settings, "text")}
@@ -140,14 +147,30 @@ export function NodeSettings({
               placeholder="Close-up del envase sobre mármol, luz de mañana…"
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
             />,
-          )
-        : null}
+          )}
+
+          {/*
+            Escribirlo con Claude.
+
+            Un generador de vídeo no entiende intenciones, entiende planos:
+            «que se vea bonito el producto» no le dice nada y «close-up, bottle
+            centred, slow push-in, warm morning light» le dice qué renderizar.
+            La distancia entre esas dos frases es un clip fallido, y cada clip
+            fallido son varios dólares.
+          */}
+          <WriteWithClaude
+            draft={text(settings, "text")}
+            onWritten={(prompt) => set("text", prompt)}
+          />
+        </div>
+      ) : null}
 
       {type === "archivo" ? (
         <ImageSource
           url={text(settings, "url")}
           productImages={productImages}
           onPick={(url, name) => onChange({ ...settings, url, name })}
+          onAddImages={onAddImages}
         />
       ) : null}
 
@@ -165,7 +188,7 @@ export function NodeSettings({
           <div className="grid grid-cols-4 gap-1">
             <button
               type="button"
-              onClick={() => set("avatarId", "")}
+              onClick={() => onChange({ ...settings, avatarId: "", avatarUrl: "" })}
               className={`flex aspect-square items-center justify-center rounded-lg border p-1 text-[9px] leading-tight ${
                 text(settings, "avatarId") === ""
                   ? "border-violet-500 bg-violet-50 dark:bg-violet-950/40"
@@ -184,7 +207,9 @@ export function NodeSettings({
                 key={avatar.id}
                 type="button"
                 title={avatar.name}
-                onClick={() => set("avatarId", avatar.id)}
+                // La dirección se guarda también para poder pintar la cara en la
+                // caja sin tener que ejecutar nada.
+                onClick={() => onChange({ ...settings, avatarId: avatar.id, avatarUrl: avatar.url })}
                 className={`overflow-hidden rounded-lg border ${
                   text(settings, "avatarId") === avatar.id
                     ? "border-violet-500 ring-2 ring-violet-300"
@@ -205,6 +230,51 @@ export function NodeSettings({
             ha recargado y lo no guardado se ha ido.
           */}
           <NewFace models={cliModels} onLaunched={onFacesChanged} />
+        </div>
+      ) : null}
+
+      {type === "copy" ? (
+        <div className="space-y-2">
+          {field(
+            "Qué se escribe",
+            <SelectField
+              value={text(settings, "format") || "anuncio"}
+              onChange={(event) => set("format", event.target.value)}
+            >
+              {COPY_FORMATS.map((format) => (
+                <option key={format.id} value={format.id}>
+                  {format.label}
+                </option>
+              ))}
+            </SelectField>,
+          )}
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {COPY_FORMATS.find((format) => format.id === (text(settings, "format") || "anuncio"))
+              ?.note ?? ""}
+          </p>
+
+          {field(
+            "Por qué ángulo va",
+            <textarea
+              value={text(settings, "angle")}
+              onChange={(event) => set("angle", event.target.value)}
+              rows={2}
+              placeholder="Para quien ya probó colágeno y no notó nada…"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />,
+          )}
+
+          {/*
+            Los segundos solo cuando se va a locutar: en un texto de Meta no
+            significan nada y un campo que no hace nada se rellena igual.
+          */}
+          {text(settings, "format") === "voz" ? seconds("seconds", 30, 180) : null}
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Si le enchufas un prompt al ángulo, manda ese: es lo que permite lanzar el mismo flujo
+            con cinco ángulos sin tocar la caja.
+          </p>
         </div>
       ) : null}
 
@@ -253,6 +323,40 @@ export function NodeSettings({
             {seconds("seconds", type === "anuncio" ? 15 : 6)}
             {aspect()}
           </div>
+
+          {/*
+            La dirección, solo en el nodo de una pieza.
+
+            Un modelo que acepta veinte mil caracteres no necesita una frase:
+            necesita la estructura del anuncio, el guion literal, cómo se rueda
+            y qué no puede pasar. Mandarle solo el guion es desaprovecharlo — el
+            guion dice lo que se oye, no lo que se ve, y sin estructura reparte
+            las frases como quiere.
+          */}
+          {type === "anuncio" ? (
+            <>
+              {field(
+                "Cómo se dirige",
+                <SelectField
+                  value={text(settings, "director")}
+                  onChange={(event) => set("director", event.target.value)}
+                >
+                  <option value="">Solo el guion, sin estructura</option>
+                  {DIRECTOR_TEMPLATES.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.label}
+                    </option>
+                  ))}
+                </SelectField>,
+              )}
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {DIRECTOR_TEMPLATES.find((template) => template.id === text(settings, "director"))
+                  ?.note ??
+                  "Se manda el guion tal cual. Elige una forma y se manda además la estructura del anuncio, cómo se rueda y lo que no puede salir en pantalla."}
+              </p>
+            </>
+          ) : null}
 
           <label className="flex items-center gap-2 text-xs">
             <input
@@ -477,14 +581,18 @@ function ImageSource({
   url,
   productImages,
   onPick,
+  onAddImages,
 }: {
   url: string;
   productImages: { url: string; name: string; primary: boolean }[];
   onPick: (url: string, name: string) => void;
+  onAddImages: (images: { url: string; name: string }[]) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  /** Las marcadas para entrar de golpe, cada una en su propio nodo. */
+  const [marked, setMarked] = useState<Set<string>>(new Set());
 
   return (
     <div className="space-y-2">
@@ -522,28 +630,74 @@ function ImageSource({
 
       {productImages.length > 0 ? (
         <div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">O una del producto</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            O las fotos del producto. Un clic la pone en este nodo; el doble clic la marca para
+            entrar como nodo aparte.
+          </p>
 
           <div className="mt-1 grid grid-cols-4 gap-1">
-            {productImages.map((image) => (
-              <button
-                key={image.url}
-                type="button"
-                title={`${image.name}${image.primary ? " · principal" : ""}`}
-                onClick={() => onPick(image.url, image.name)}
-                className={`overflow-hidden rounded-lg border ${
-                  url === image.url
-                    ? "border-violet-500 ring-2 ring-violet-300"
-                    : image.primary
-                      ? "border-emerald-400"
-                      : "border-slate-300 dark:border-slate-700"
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.url} alt={image.name} className="aspect-square w-full object-cover" />
-              </button>
-            ))}
+            {productImages.map((image) => {
+              const chosen = url === image.url;
+              const queued = marked.has(image.url);
+
+              return (
+                <button
+                  key={image.url}
+                  type="button"
+                  title={`${image.name}${image.primary ? " · principal" : ""}`}
+                  onClick={() => onPick(image.url, image.name)}
+                  onDoubleClick={() =>
+                    setMarked((current) => {
+                      const next = new Set(current);
+                      if (next.has(image.url)) next.delete(image.url);
+                      else next.add(image.url);
+                      return next;
+                    })
+                  }
+                  className={`relative overflow-hidden rounded-lg border ${
+                    chosen
+                      ? "border-violet-500 ring-2 ring-violet-300"
+                      : queued
+                        ? "border-sky-500 ring-2 ring-sky-300"
+                        : image.primary
+                          ? "border-emerald-400"
+                          : "border-slate-300 dark:border-slate-700"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image.url} alt={image.name} className="aspect-square w-full object-cover" />
+
+                  {queued ? (
+                    <span className="absolute right-0.5 top-0.5 rounded bg-sky-600 px-1 text-[8px] text-white">
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
+
+          {/*
+            Varias fotos de golpe.
+
+            Un anuncio de una pieza admite hasta nueve referencias, y ponerlas
+            una a una son nueve nodos creados y nueve paneles abiertos. Marcando
+            y soltando, entran todas y ya conectadas queda a un arrastre.
+          */}
+          {marked.size > 0 ? (
+            <Button
+              onClick={() => {
+                onAddImages(
+                  productImages
+                    .filter((image) => marked.has(image.url))
+                    .map((image) => ({ url: image.url, name: image.name })),
+                );
+                setMarked(new Set());
+              }}
+            >
+              Añadir {marked.size} como nodos
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -556,6 +710,57 @@ function ImageSource({
 
       {busy ? <p className="text-xs text-slate-500">Subiendo…</p> : null}
       {note && !busy ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Escribir el prompt con Claude.
+ *
+ * Va debajo del campo y no lo sustituye: lo que se escribió a mano sigue ahí
+ * hasta que se acepta el reescrito. Un botón que pisa el texto de alguien sin
+ * enseñarle antes lo que va a poner es un botón que se pulsa una vez.
+ */
+function WriteWithClaude({
+  draft,
+  onWritten,
+}: {
+  draft: string;
+  onWritten: (prompt: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  return (
+    <div className="space-y-1">
+      <Button
+        variant="ghost"
+        disabled={busy || !draft.trim()}
+        onClick={() => {
+          setBusy(true);
+          setNote("");
+
+          void polishPromptAction({ draft })
+            .then((result) => {
+              setNote(result.message);
+              if (result.ok && result.prompt) onWritten(result.prompt);
+            })
+            .catch((error: unknown) =>
+              setNote(error instanceof Error ? error.message : "No se pudo escribir."),
+            )
+            .finally(() => setBusy(false));
+        }}
+      >
+        {busy ? "Escribiendo…" : "Escribirlo con Claude"}
+      </Button>
+
+      {!draft.trim() ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Escribe la idea aunque sea floja —«que se vea bien el frasco»— y la reescribe como plano.
+        </p>
+      ) : null}
+
+      {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
     </div>
   );
 }

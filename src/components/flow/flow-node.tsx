@@ -40,6 +40,16 @@ export interface FlowNodeData extends Record<string, unknown> {
   type: string;
   /** Qué hay dentro: el modelo elegido, el texto, lo que sea. */
   summary: string;
+  /**
+   * Lo que ya está puesto, antes de ejecutar nada.
+   *
+   * La imagen que se elige en el panel se ve **en el momento**, no cuando se
+   * ejecuta el flujo. Antes solo se pintaba el resultado de la última vuelta, y
+   * elegir una foto del producto no cambiaba nada en pantalla: parecía que el
+   * clic no había hecho nada, y la forma de comprobarlo era ejecutar. Eso son
+   * varios minutos y varias generaciones para saber si acertaste con la foto.
+   */
+  preview?: { url: string; text: string };
   /** Lo que produjo la última ejecución, si la hubo. */
   result?: { url: string; kind: string; error: string };
 }
@@ -122,6 +132,29 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
         {value.summary ? (
           <p className="mt-1 truncate text-[11px] text-slate-600 dark:text-slate-300">
             {value.summary}
+          </p>
+        ) : null}
+
+        {/*
+          Lo que ya está puesto, en cuanto se pone.
+
+          Va **antes** que el resultado y solo cuando no hay resultado: en cuanto
+          la vuelta produce algo, lo que manda es lo que salió. Sin recortar, por
+          lo mismo que el resultado: una miniatura recortada de un vertical
+          enseña la franja del medio, justo donde no está ni la cara ni el envase.
+        */}
+        {!result?.url && value.preview?.url ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={value.preview.url}
+            alt=""
+            className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-800"
+          />
+        ) : null}
+
+        {!result?.url && value.preview?.text ? (
+          <p className="mt-1 line-clamp-4 rounded-lg bg-slate-50 px-1.5 py-1 text-[10px] leading-snug text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+            {value.preview.text}
           </p>
         ) : null}
 

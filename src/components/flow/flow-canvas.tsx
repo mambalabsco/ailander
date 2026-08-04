@@ -21,7 +21,7 @@ import { GenerateButton } from "@/components/generate-button";
 import { FlowNodeBox } from "@/components/flow/flow-node";
 import { NodeSettings } from "@/components/flow/node-settings";
 import { NODE_TYPES, canConnect, findNodeType, removeNode, validate, type Flow } from "@/lib/flow/graph";
-import { flowProgressAction, runFlowAction, saveFlowAction } from "@/app/flujos/actions";
+import { buildFlowAction, flowProgressAction, runFlowAction, saveFlowAction } from "@/app/flujos/actions";
 
 /**
  * El lienzo.
@@ -88,6 +88,7 @@ export function FlowCanvas({
       data: {
         type: node.type,
         summary: summaryOf(node.type, node.settings),
+        preview: previewOf(node.type, node.settings),
         settings: node.settings,
         result: results[node.id],
       },
@@ -207,6 +208,61 @@ export function FlowCanvas({
     ]);
   };
 
+  /**
+   * Varias imágenes de golpe, cada una en su nodo.
+   *
+   * Un anuncio de una pieza admite hasta nueve referencias: ponerlas de una en
+   * una son nueve nodos creados a mano y nueve paneles abiertos.
+   */
+  const addImages = (images: { url: string; name: string }[]) => {
+    setNodes((current) => {
+      const base = current.filter((node) => node.id.startsWith("archivo-")).length;
+
+      return [
+        ...current,
+        ...images.map((image, index) => ({
+          id: `archivo-${base + index + 1}`,
+          type: "caja",
+          position: { x: 60, y: 60 + (current.length + index) * 120 },
+          data: {
+            type: "archivo",
+            summary: image.name,
+            preview: { url: image.url, text: "" },
+            settings: { url: image.url, name: image.name },
+          },
+        })),
+      ];
+    });
+  };
+
+  /** Pinta un grafo entero encima del actual. */
+  const applyGraph = (graph: Flow) => {
+    setNodes(
+      graph.nodes.map((node) => ({
+        id: node.id,
+        type: "caja",
+        position: { x: node.x, y: node.y },
+        data: {
+          type: node.type,
+          summary: summaryOf(node.type, node.settings),
+          preview: previewOf(node.type, node.settings),
+          settings: node.settings,
+        },
+      })),
+    );
+
+    setEdges(
+      graph.edges.map((edge) => ({
+        id: `${edge.from}-${edge.to}-${edge.port}`,
+        source: edge.from,
+        target: edge.to,
+        targetHandle: String(edge.port),
+      })),
+    );
+
+    setSelected("");
+  };
+
   const save = () => {
     setSaving(true);
 
@@ -307,6 +363,25 @@ export function FlowCanvas({
         </div>
       ) : null}
 
+      <AutoBuild
+        flowId={flowId}
+        // Sustituir lo que hay es destructivo y no se puede deshacer: si ya hay
+        // trabajo en el lienzo, se pregunta.
+        busy={running}
+        onBuilt={(graph, message) => {
+          if (
+            nodes.length > 0 &&
+            !window.confirm(`Esto sustituye los ${nodes.length} nodos que ya hay. ¿Sigo?`)
+          ) {
+            return false;
+          }
+
+          applyGraph(graph);
+          setNote(message);
+          return true;
+        }}
+      />
+
       {note ? (
         <p className="rounded-2xl border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           {note}
@@ -365,6 +440,7 @@ export function FlowCanvas({
               cliModels={cliModels}
               productImages={productImages}
               onFacesChanged={() => setRunning(true)}
+              onAddImages={addImages}
               onChange={(settings) =>
                 setNodes((current) =>
                   current.map((node) =>
@@ -375,6 +451,13 @@ export function FlowCanvas({
                             ...node.data,
                             settings,
                             summary: summaryOf(
+                              String((node.data as { type?: string }).type ?? ""),
+                              settings,
+                            ),
+                            // Lo elegido se ve **ya**, no al ejecutar: sin esto,
+                            // elegir una foto no cambiaba nada en pantalla y la
+                            // única forma de comprobarlo era ejecutar el flujo.
+                            preview: previewOf(
                               String((node.data as { type?: string }).type ?? ""),
                               settings,
                             ),
@@ -443,7 +526,172 @@ function summaryOf(type: string, settings: Record<string, unknown>): string {
       ? [get("name") || (get("url") ? "imagen puesta" : "")]
       : type === "avatar"
         ? [get("avatarId") ? "cara fijada" : "la de cada vuelta"]
-        : [get("text").slice(0, 40), get("model")];
+        : type === "copy"
+          ? [get("format") || "anuncio"]
+          : type === "anuncio"
+            ? [get("model") || "seedance2", get("director")]
+            : [get("text").slice(0, 40), get("model")];
 
   return pieces.filter(Boolean).join(" · ");
+}
+
+/**
+ * Lo que ya está puesto en el nodo, para verlo sin ejecutar nada.
+ *
+ * Es la mitad visible de un fallo que costaba caro: elegir una foto del
+ * producto en el panel no cambiaba nada en el lienzo, así que parecía que el
+ * clic no había hecho nada — y la única forma de comprobar si estaba bien
+ * elegida era ejecutar el flujo entero.
+ */
+function previewOf(
+  type: string,
+  settings: Record<string, unknown>,
+): { url: string; text: string } | undefined {
+  const get = (key: string) => (typeof settings[key] === "string" ? (settings[key] as string) : "");
+
+  if (type === "archivo" && get("url")) return { url: get("url"), text: "" };
+  if (type === "avatar" && get("avatarUrl")) return { url: get("avatarUrl"), text: "" };
+  if (type === "prompt" && get("text")) return { url: "", text: get("text") };
+  if (type === "copy" && get("angle")) return { url: "", text: get("angle") };
+  if (type === "musica" && get("prompt")) return { url: "", text: get("prompt") };
+
+  return undefined;
+}
+
+/**
+ * Que lo monte la IA y luego lo edites tú.
+ *
+ * ## Por qué devuelve el plano y no el anuncio
+ *
+ * Porque el punto de edición tiene que estar **antes** de pagar. Un botón de
+ * «hazme un anuncio» devuelve un vídeo terminado: si el ángulo no era ese, no
+ * hay nada que corregir, solo que volver a lanzarlo entero. Esto llena el
+ * lienzo —tomas, prompts, generadores, voz, montaje— sin generar un fotograma.
+ * Se mira, se cambia lo que no encaja, y se ejecuta cuando convence.
+ *
+ * ## Y por qué se cuenta lo que se cayó
+ *
+ * El plan pasa por la misma regla que si lo hubiera dibujado una persona: una
+ * conexión imposible se cae. Callárselo dejaría un flujo que no se parece a lo
+ * que se pidió sin que nadie sepa por qué.
+ */
+function AutoBuild({
+  flowId,
+  busy,
+  onBuilt,
+}: {
+  flowId: string;
+  busy: boolean;
+  /** Devuelve si se aplicó: puede rechazarse para no pisar lo que ya hay. */
+  onBuilt: (graph: Flow, message: string) => boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [idea, setIdea] = useState("");
+  const [shape, setShape] = useState("elige-tu");
+  const [seconds, setSeconds] = useState(30);
+  const [working, setWorking] = useState(false);
+  const [note, setNote] = useState("");
+  const [dropped, setDropped] = useState<string[]>([]);
+
+  if (!open) {
+    return (
+      <Button variant="ghost" onClick={() => setOpen(true)}>
+        Que lo monte la IA
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-2xl border border-violet-300 p-3 dark:border-violet-900">
+      <p className="text-sm font-medium">Montar el flujo desde la idea</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Lee la investigación del producto y sus ángulos y deja el lienzo montado: tomas, prompts,
+        generadores, voz y montaje. No genera nada — lo revisas y lo ejecutas tú.
+      </p>
+
+      <textarea
+        value={idea}
+        onChange={(event) => setIdea(event.target.value)}
+        rows={3}
+        placeholder="Una madre a las 6 de la mañana que ya no puede con el dolor de rodillas… (o déjalo vacío y que proponga el ángulo)"
+        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500 dark:text-slate-400">Cómo se hace</span>
+
+          <SelectField value={shape} onChange={(event) => setShape(event.target.value)}>
+            <option value="elige-tu">Que decida ella</option>
+            <option value="una-pieza">De una pieza (Seedance)</option>
+            <option value="planos">Plano a plano, con montaje</option>
+          </SelectField>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
+
+          <input
+            type="number"
+            min={10}
+            max={120}
+            value={seconds}
+            onChange={(event) => setSeconds(Number(event.target.value))}
+            className="w-20 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
+        </label>
+
+        <Button
+          variant="primary"
+          disabled={working || busy}
+          onClick={() => {
+            setWorking(true);
+            setNote("");
+            setDropped([]);
+
+            void buildFlowAction({ flowId, idea, shape, seconds })
+              .then((result) => {
+                if (!result.ok || !result.graph) {
+                  setNote(result.message);
+                  return;
+                }
+
+                setDropped(result.dropped ?? []);
+
+                if (onBuilt(result.graph, result.message)) {
+                  setNote("Montado. Revísalo y guárdalo si te sirve.");
+                  setOpen(false);
+                } else {
+                  setNote("No se tocó nada.");
+                }
+              })
+              .catch((error: unknown) =>
+                setNote(error instanceof Error ? error.message : "No se pudo montar."),
+              )
+              .finally(() => setWorking(false));
+          }}
+        >
+          {working ? "Montando…" : "Montar"}
+        </Button>
+
+        <Button variant="ghost" onClick={() => setOpen(false)}>
+          Cerrar
+        </Button>
+      </div>
+
+      {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
+
+      {dropped.length > 0 ? (
+        <div className="text-xs text-amber-800 dark:text-amber-300">
+          <p>Del plan se cayeron {dropped.length} cosa(s):</p>
+
+          <ul className="mt-1 space-y-0.5">
+            {dropped.map((reason, index) => (
+              <li key={index}>· {reason}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
 }

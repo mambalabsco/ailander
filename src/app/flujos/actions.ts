@@ -17,6 +17,7 @@ import {
   saveGraph,
   startRun,
 } from "@/lib/data/flows";
+import type { FlowPlan } from "@/lib/flow/build";
 import type { LaunchResult } from "@/types/jobs";
 
 /**
@@ -411,5 +412,129 @@ export async function productImagesAction(
       .filter((image) => image.url);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Que la IA monte el flujo entero, para editarlo después.
+ *
+ * ## Por qué monta el plano y no el anuncio
+ *
+ * Porque el punto de edición tiene que estar **antes** de pagar. Un botón de
+ * «hazme un anuncio» devuelve un vídeo terminado: si el ángulo no era ese, no
+ * hay nada que corregir, solo que volver a lanzarlo entero. Aquí lo que devuelve
+ * es el lienzo lleno —tomas, prompts, generadores, voz, montaje— sin haber
+ * generado un solo fotograma. Se mira, se cambia lo que no encaja y se ejecuta.
+ *
+ * ## Va en directo
+ *
+ * Son diez o quince segundos y la persona está mirando el lienzo esperando a que
+ * se llene. Mandarlo a la cola obligaría a cambiar de pantalla para ver si ya
+ * está, y al volver el lienzo habría perdido lo que no estuviera guardado.
+ *
+ * ## Lo que se cae, se dice
+ *
+ * El plan pasa por la misma regla que si lo hubiera dibujado una persona. Un
+ * plan recortado en silencio es un plan que no se parece a lo que se pidió y
+ * nadie sabe por qué.
+ */
+export async function buildFlowAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+  graph?: Flow;
+  dropped?: string[];
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    if (!(await hasActiveProviderKey())) {
+      return { ok: false, message: "Falta la clave del proveedor de texto en los ajustes." };
+    }
+
+    const flowId = readText(raw.flowId);
+    const flow = flowId ? await readFlow(flowId) : null;
+    const productId = readText(raw.productId) || flow?.productId || "";
+
+    if (!productId) {
+      return { ok: false, message: "Este flujo no tiene producto: elígelo arriba primero." };
+    }
+
+    const { findProductAnywhere } = await import("@/lib/products");
+    const product = await findProductAnywhere(productId);
+
+    if (!product) return { ok: false, message: "Ese producto ya no existe." };
+
+    const [{ readProductResearch }, { readAngles }, { buildProductContext }] = await Promise.all([
+      import("@/lib/research-store"),
+      import("@/lib/copy-store"),
+      import("@/lib/copy-prompts"),
+    ]);
+
+    const [research, angles] = await Promise.all([
+      readProductResearch(productId),
+      readAngles(productId).catch(() => []),
+    ]);
+
+    const { generateStructured } = await import("@/lib/generators");
+    const { buildFlowPrompt, flowFromPlan, FLOW_PLAN_SCHEMA } = await import("@/lib/flow/build");
+    const { VIDEO_GENERATORS } = await import("@/lib/video/catalog");
+    const { SUBTITLE_PRESETS } = await import("@/lib/video/captions");
+
+    const shape = readText(raw.shape);
+
+    const outcome = await generateStructured<FlowPlan>({
+      prompt: buildFlowPrompt({
+        context: buildProductContext(product, research, null),
+        idea: readText(raw.idea),
+        angles: angles.map(
+          (angle) => `${angle.name} — ${angle.desire}. Para ${angle.targetAudience}.`,
+        ),
+        videoModels: VIDEO_GENERATORS.map((model) => ({
+          id: model.id,
+          label: model.label,
+          note: model.note,
+        })),
+        subtitleStyles: SUBTITLE_PRESETS.map((preset) => preset.id),
+        seconds: Number(raw.seconds) || 0,
+        aspectRatio: readText(raw.aspectRatio) || "9:16",
+        shape: shape === "una-pieza" || shape === "planos" ? shape : "elige-tu",
+      }),
+      schema: FLOW_PLAN_SCHEMA as unknown as Record<string, unknown>,
+      role: "copy",
+      maxTokens: 16_000,
+    });
+
+    const built = flowFromPlan(outcome.data);
+
+    if (built.flow.nodes.length === 0) {
+      return { ok: false, message: "El plan volvió vacío. Prueba a describir la idea con más detalle." };
+    }
+
+    /*
+     * No se guarda: se devuelve para pintarlo.
+     *
+     * Guardarlo aquí pisaría el flujo que ya hubiera, y lo pedido es «monta uno
+     * que yo iré editando» — quien decide si eso sustituye a lo anterior es
+     * quien lo está mirando, con el botón de guardar.
+     */
+    const problems = validate(built.flow);
+
+    return {
+      ok: true,
+      graph: built.flow,
+      dropped: built.dropped,
+      message: [
+        outcome.data.explicacion?.trim(),
+        problems.length > 0
+          ? `Quedan ${problems.length} hueco(s) por rellenar antes de ejecutar.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo montar." };
   }
 }
