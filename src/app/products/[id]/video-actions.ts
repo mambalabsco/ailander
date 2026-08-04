@@ -32,6 +32,7 @@ import {
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
 import { inBatches } from "@/lib/batch";
+import { anchorNote, anchorWaves, planAnchors } from "@/lib/video/anchors";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { buildMusicPrompt, findMusicGenerator, musicCostLabel } from "@/lib/video/music";
 import { belowVoice, findMusicLevel } from "@/lib/video/loudness";
@@ -467,8 +468,56 @@ export async function generateKeyframesAction(
        */
       const CANCELLED = "__cancelado__";
 
-      const outcomes = await inBatches(
-        pending,
+      /*
+       * Las anclas: qué toma se parece a cuál.
+       *
+       * Cada fotograma se generaba por su cuenta, así que salían doce imágenes
+       * bonitas y **doce mundos distintos**: la misma mujer rubia en la dos,
+       * morena en la cinco, con otra cara en la nueve. Cada una está bien; no
+       * son del mismo anuncio, y eso solo se ve con las doce montadas.
+       *
+       * Ahora la toma que repite persona recibe la imagen de la primera en la
+       * que salió. Se planifica sobre **todas** las tomas y no solo sobre las
+       * pendientes: rehaciendo la nueve, su ancla sigue siendo la dos aunque la
+       * dos no se esté regenerando.
+       */
+      const plan = planAnchors(
+        video.shots.map((item) => ({
+          n: item.n,
+          role: item.role,
+          scene: item.scene,
+          motion: item.motion,
+          guion: item.guion,
+        })),
+      );
+
+      const anchorOf = new Map(plan.map((item) => [item.n, item]));
+
+      /** La imagen de cada toma, para poder mandarla como ancla a las que la citen. */
+      const frames = new Map(
+        video.shots
+          .filter((item) => item.keyframeUrl)
+          .map((item) => [item.n, item.keyframeUrl] as [string, string]),
+      );
+
+      /*
+       * Y en dos oleadas: las que mandan antes que las que heredan.
+       *
+       * Una toma no puede recibir una imagen que todavía no existe. Dentro de
+       * cada oleada siguen yendo en paralelo, que es de donde sale la rapidez.
+       */
+      const waves = anchorWaves(plan.filter((item) => pending.some((shot) => shot.n === item.n)));
+
+      const outcomes: Awaited<ReturnType<typeof inBatches>> = [];
+      const orden: typeof pending = [];
+
+      for (const wave of waves) {
+        const grupo = pending.filter((shot) => wave.includes(shot.n));
+        if (grupo.length === 0) continue;
+
+        orden.push(...grupo);
+        outcomes.push(...(await inBatches(
+        grupo,
         async (shot) => {
           /*
            * Se mira **antes de empezar cada una**, no en medio.
@@ -482,13 +531,37 @@ export async function generateKeyframesAction(
             throw new Error(CANCELLED);
           }
 
+          /*
+           * El ancla va **después** del envase en la lista de referencias.
+           *
+           * En los generadores por referencias la primera manda, y la que tiene
+           * que mandar es la del producto: es la que evita el frasco inventado.
+           * La del ancla dice a quién copiar la cara, que es lo segundo.
+           */
+          const anchor = anchorOf.get(shot.n);
+          const anchorUrl = anchor?.from ? (frames.get(anchor.from) ?? "") : "";
+
+          const productUrl =
+            (forceProduct || showsProduct(shot, product?.name)) && productShot
+              ? productShot.url
+              : "";
+
+          const references = [productUrl, anchorUrl].filter(Boolean);
+
           const url = await keyframe({
-            prompt: keyframePrompt(
-              shot,
-              { render: video.styleRender, accent: video.styleAccent },
-              { name: product?.name ?? "", hasReference: Boolean(productShot) },
-              forceProduct,
-            ),
+            prompt: [
+              keyframePrompt(
+                shot,
+                { render: video.styleRender, accent: video.styleAccent },
+                { name: product?.name ?? "", hasReference: Boolean(productShot) },
+                forceProduct,
+              ),
+              // Qué mirar del ancla y qué no copiar de ella: sin la segunda
+              // mitad, el generador copia también el encuadre.
+              anchorUrl ? anchorNote(anchor!, references.indexOf(anchorUrl) + 1) : "",
+            ]
+              .filter(Boolean)
+              .join(", "),
             /*
              * La foto real va a **toda** toma donde salga el envase.
              *
@@ -501,28 +574,30 @@ export async function generateKeyframesAction(
              * Donde no sale el envase no se manda: una referencia de más lo
              * cuela en una escena donde no pinta nada.
              */
-            references:
-              (forceProduct || showsProduct(shot, product?.name)) && productShot
-                ? [productShot.url]
-                : [],
+            references,
           });
 
           await updateShot(shot.id, { keyframeUrl: url, error: null });
+
+          // Para que las de la segunda oleada puedan anclarse a esta.
+          frames.set(shot.n, url);
+
           return shot.n;
         },
         {
           onDone: (finished, total) => {
-            void report(`${finished} de ${total} imágenes`);
+            void report(`${finished} de ${total} imágenes de esta tanda`);
           },
         },
-      );
+      )));
+      }
 
       done = outcomes.filter((item) => item.ok).length;
 
-      for (const outcome of outcomes) {
+      for (const [index, outcome] of outcomes.entries()) {
         if (outcome.ok || outcome.error === CANCELLED) continue;
 
-        const shot = pending[outcome.index];
+        const shot = orden[index];
         const reason = outcome.error ?? "falló";
 
         await updateShot(shot.id, { error: reason });
