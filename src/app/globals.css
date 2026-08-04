@@ -27,6 +27,17 @@ body {
    del primer pintado, así que una sola regla cubre el toggle y la preferencia
    del sistema.
 --------------------------------------------------------------------------- */
+/*
+ * Ojo: estos tokens solo existen **dentro** de `.viz`.
+ *
+ * Un `var(--viz-ramp-3)` fuera de esa clase no resuelve a nada, y un
+ * `background-color` inválido no da error: deja el elemento transparente. Es
+ * decir, la barra se pinta, mide lo que tiene que medir y no se ve — que es
+ * exactamente lo que pasó con el desglose de costos del panel.
+ *
+ * Si un bloque usa colores de datos y no está dentro de un `ChartFrame`, hay que
+ * ponerle `viz` a mano.
+ */
 .viz {
   --viz-surface: #ffffff;
   --viz-grid: #e1e0d9;

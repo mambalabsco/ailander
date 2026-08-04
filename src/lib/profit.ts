@@ -72,7 +72,14 @@ export interface SpendInput {
   provider: "facebook" | "google";
   day: string;
   campaignName: string;
+  /** Ya en la moneda del panel, si se pidió convertir. */
   spend: number;
+  /** En cuál está `spend`. */
+  currency?: string;
+  /** Lo que no se pudo cambiar, en su moneda: se cuenta pero no se suma. */
+  unconverted?: { amount: number; currency: string };
+  /** Si el cambio usado no era el de ese día. */
+  approxRate?: boolean;
   impressions: number;
   clicks: number;
   reportedPurchases: number;
@@ -156,6 +163,16 @@ export interface DayRow {
   transactionFees: number;
   adSpend: number;
   adSpendByProvider: Record<string, number>;
+  /**
+   * Gasto que no se pudo pasar a la moneda del panel, **sin sumar**.
+   *
+   * Se cuenta aparte porque sumarlo sin cambiar es el fallo que esto venía a
+   * arreglar, y esconderlo daría un total que parece completo y no lo está: el
+   * beneficio saldría más alto del real, que es la dirección peligrosa.
+   */
+  adSpendUnconverted: number;
+  /** Si algún día usó un cambio que no era el suyo. */
+  adSpendApprox: boolean;
   customCosts: number;
   /** Costos propios marcados como de adquisición, para la relación LTV:CAC. */
   acquisitionCosts: number;
@@ -408,6 +425,8 @@ function emptyCounters(): Omit<DayRow, "day"> {
     transactionFees: 0,
     adSpend: 0,
     adSpendByProvider: {},
+    adSpendUnconverted: 0,
+    adSpendApprox: false,
     customCosts: 0,
     acquisitionCosts: 0,
     reportedPurchases: 0,
@@ -485,6 +504,9 @@ export function dailyRows(input: {
     row.adSpend += item.spend;
     row.adSpendByProvider[item.provider] =
       (row.adSpendByProvider[item.provider] ?? 0) + item.spend;
+
+    if (item.unconverted) row.adSpendUnconverted += 1;
+    if (item.approxRate) row.adSpendApprox = true;
     row.impressions += item.impressions;
     row.clicks += item.clicks;
     row.reportedPurchases += item.reportedPurchases;
@@ -565,6 +587,9 @@ export function sumRows(rows: DayRow[]): Totals {
     total.reportedValue += row.reportedValue;
     total.impressions += row.impressions;
     total.clicks += row.clicks;
+
+    total.adSpendUnconverted += row.adSpendUnconverted;
+    if (row.adSpendApprox) total.adSpendApprox = true;
 
     for (const [provider, amount] of Object.entries(row.adSpendByProvider)) {
       total.adSpendByProvider[provider] = (total.adSpendByProvider[provider] ?? 0) + amount;
@@ -687,6 +712,10 @@ export interface Kpis {
   grossSales: number;
   totalCosts: number;
   adSpend: number;
+  /** Días de gasto que no se pudieron cambiar de moneda: **no están sumados**. */
+  adSpendUnconverted: number;
+  /** Si algún día usó un cambio que no era el suyo. */
+  adSpendApprox: boolean;
   orders: number;
   unitsSold: number;
   aov: number | null;
@@ -713,6 +742,8 @@ export function kpis(totals: Totals): Kpis {
     grossSales: totals.grossSales,
     totalCosts: totals.totalCosts,
     adSpend: totals.adSpend,
+    adSpendUnconverted: totals.adSpendUnconverted,
+    adSpendApprox: totals.adSpendApprox,
     orders: totals.orders,
     unitsSold: totals.unitsSold,
     aov: ratio(totals.revenue, totals.orders),

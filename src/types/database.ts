@@ -780,6 +780,23 @@ type VideoReferenceRow = {
   created_at: string;
 };
 
+/**
+ * El cambio de divisa de un día.
+ *
+ * No cuelga del usuario: un cambio es el mismo para todo el mundo. Se lee con
+ * sesión y solo lo escribe el servidor.
+ */
+type FxRateRow = {
+  day: string;
+  base: string;
+  quote: string;
+  /** `numeric`: llega como cadena desde PostgREST. */
+  rate: number;
+  /** Falso cuando es el de hoy puesto sobre un día para el que no había. */
+  exact: boolean;
+  created_at: string;
+};
+
 type ThemeSectionDraftRow = {
   id: string;
   user_id: string;
@@ -1168,6 +1185,7 @@ export type Database = {
         ErrorLogRow,
         Insertable<ErrorLogRow, Exclude<keyof ErrorLogRow, "context" | "message">>
       >;
+      fx_rates: Table<FxRateRow, Insertable<FxRateRow, "created_at">>;
       landing_pages: Table<
         LandingPageRow,
         Insertable<

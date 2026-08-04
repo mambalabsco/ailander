@@ -49,6 +49,8 @@ function row(values: Partial<DayRow> = {}): DayRow {
     transactionFees: 0,
     adSpend: 0,
     adSpendByProvider: {},
+    adSpendUnconverted: 0,
+    adSpendApprox: false,
     customCosts: 0,
     acquisitionCosts: 0,
     reportedPurchases: 0,
@@ -538,4 +540,35 @@ test("el agrupado mensual usa la clave año-mes", () => {
     months.map((bucket) => bucket.label),
     ["2026-06", "2026-07"],
   );
+});
+
+/* ------------------------------ Monedas mezcladas --------------------------- */
+
+/*
+ * El fallo que se veía en el panel: un gasto de 23,77 USD escrito «23,77 CLP».
+ * Lo que no se puede cambiar se cuenta, pero **no se suma**: sumarlo sin cambiar
+ * es el fallo, y esconderlo da un total que parece completo y deja el beneficio
+ * más alto del real.
+ */
+test("el gasto sin convertir se cuenta aparte y no se suma", () => {
+  const totals = sumRows([
+    row({ adSpend: 20_000, adSpendUnconverted: 0 }),
+    row({ day: "2026-07-30", adSpend: 0, adSpendUnconverted: 2 }),
+  ]);
+
+  assert.equal(totals.adSpend, 20_000);
+  assert.equal(totals.adSpendUnconverted, 2);
+});
+
+test("un cambio aproximado en un día marca el total entero", () => {
+  const totals = sumRows([
+    row({ adSpendApprox: false }),
+    row({ day: "2026-07-30", adSpendApprox: true }),
+  ]);
+
+  assert.equal(totals.adSpendApprox, true);
+});
+
+test("sin nada raro el total no se marca", () => {
+  assert.equal(sumRows([row({ adSpend: 10 })]).adSpendApprox, false);
 });

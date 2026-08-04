@@ -125,7 +125,9 @@ export const loadReport = cache(
 
     const [orders, spend, accounts] = await Promise.all([
       readOrdersForRange(storeId, from, to),
-      readSpendForRange(storeId, from, to),
+      // A la moneda del panel: sin esto se sumaban dólares y pesos como si
+      // fueran lo mismo, y el beneficio salía disparado.
+      readSpendForRange(storeId, from, to, shop.currency),
       listAdAccounts(storeId),
     ]);
 

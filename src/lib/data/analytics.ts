@@ -1,6 +1,8 @@
 import "server-only";
 
 import { requireContext } from "@/lib/supabase/session";
+import { code, convert } from "@/lib/fx";
+import { ensureRates } from "@/lib/data/fx-rates";
 import { coverage, type Coverage } from "@/lib/spend-coverage";
 import type {
   CostSettings,
@@ -434,6 +436,14 @@ export async function readSpendForRange(
   storeId: string,
   from: string,
   to: string,
+  /**
+   * A qué moneda se convierte. Vacío deja los importes como vienen.
+   *
+   * Sin esto se sumaban dólares y pesos como si fueran lo mismo: un gasto de
+   * 23,77 USD salía escrito «23,77 CLP» y el beneficio salía disparado porque se
+   * restaba un gasto veinte mil veces más pequeño del real.
+   */
+  targetCurrency = "",
 ): Promise<SpendInput[]> {
   const { supabase } = await requireContext();
 
@@ -454,20 +464,64 @@ export async function readSpendForRange(
   if (error) throw new Error(`No se pudo leer el gasto: ${error.message}`);
 
   const byId = new Map(active.map((account) => [account.id, account]));
+
+  const raw = (data ?? [])
+    .map((row) => ({ row, account: byId.get(row.account_id) }))
+    .filter(
+      (item) =>
+        item.account &&
+        matchesFilters(
+          item.row.campaign_name,
+          item.account.includeFilters,
+          item.account.excludeFilters,
+        ),
+    );
+
+  /*
+   * Los cambios de divisa, solo de los días y monedas que hacen falta.
+   *
+   * Se piden **una vez para todo el rango**, no por fila: un mes con dos cuentas
+   * en dólares son sesenta filas y sesenta peticiones al servicio de cambios.
+   */
+  const target = code(targetCurrency);
+
+  const rates = target
+    ? await ensureRates(
+        raw.map((item) => ({
+          day: item.row.day,
+          from: item.row.currency || item.account!.currency,
+          to: target,
+        })),
+      ).catch(() => [])
+    : [];
+
   const rows: SpendInput[] = [];
 
-  for (const row of data ?? []) {
-    const account = byId.get(row.account_id);
-    if (!account) continue;
-    if (!matchesFilters(row.campaign_name, account.includeFilters, account.excludeFilters)) {
-      continue;
-    }
+  for (const { row, account } of raw) {
+    const currency = code(row.currency || account!.currency);
+    const spend = num(row.spend);
+
+    /*
+     * Lo que no se puede cambiar **no se cuela sin cambiar**.
+     *
+     * Dejarlo pasar es exactamente lo que hacía antes, con la ventaja de
+     * parecer que funciona: un dólar sumado como si fuera un peso. Se marca a
+     * cero y se cuenta aparte en `spendUnconverted`, para que el aviso lo dé
+     * quien pinta el panel.
+     */
+    const done = target
+      ? convert(spend, row.day, currency, target, rates)
+      : { amount: spend, problem: "", exact: true };
 
     rows.push({
-      provider: account.provider,
+      provider: account!.provider,
       day: row.day,
       campaignName: row.campaign_name,
-      spend: num(row.spend),
+      spend: done.amount,
+      currency: target || currency,
+      /** Lo que no se pudo cambiar, en su moneda, para poder decirlo. */
+      unconverted: done.problem ? { amount: spend, currency } : undefined,
+      approxRate: !done.exact && !done.problem,
       impressions: row.impressions,
       clicks: row.clicks,
       reportedPurchases: row.reported_purchases,

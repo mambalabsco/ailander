@@ -59,6 +59,15 @@ export default async function DatosPage({ searchParams }: PageProps) {
   const missingFees = gateways.filter((gateway) => !gateway.configured);
   const noZones = report.settings.shippingZones.length === 0 && now.orders > 0;
 
+  /*
+   * Gasto que no se pudo pasar a la moneda del panel.
+   *
+   * Va en el mismo aviso que lo demás y por la misma razón: todo lo que hace que
+   * el beneficio salga **más alto** del real está junto. Un gasto que no se suma
+   * es un gasto que no se resta.
+   */
+  const unconverted = now.adSpendUnconverted;
+
   const grain = grainFrom(undefined, daysIn(range));
   const points = bucketRows(report.rows, grain).map((bucket) => {
     const totals = sumRows(bucket.rows);
@@ -79,7 +88,7 @@ export default async function DatosPage({ searchParams }: PageProps) {
       ) : null}
 
       {/* Los avisos van antes de las cifras. Después de ellas ya se han leído. */}
-      {missingCogs.length > 0 || missingFees.length > 0 || noZones ? (
+      {missingCogs.length > 0 || missingFees.length > 0 || noZones || unconverted > 0 ? (
         <DataWarning title="El beneficio que sale aquí es más alto que el real">
           <ul className="mt-1 list-disc space-y-1 pl-5">
             {missingCogs.length > 0 ? (
@@ -99,6 +108,12 @@ export default async function DatosPage({ searchParams }: PageProps) {
               </li>
             ) : null}
             {noZones ? <li>No hay ninguna zona de envío, así que el envío cuenta cero.</li> : null}
+            {unconverted > 0 ? (
+              <li>
+                {unconverted} día(s) de gasto en otra moneda que no se pudo cambiar a {currency}, y
+                por eso no está sumado. Vuelve a abrir el panel en un rato: el cambio se pide solo.
+              </li>
+            ) : null}
           </ul>
           <Link
             href={`/datos/costos?tienda=${store.id}`}
@@ -147,10 +162,19 @@ export default async function DatosPage({ searchParams }: PageProps) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/*
+          Ya convertido a la moneda del panel. Antes se sumaban dólares y pesos
+          como si fueran lo mismo: 23,77 USD salía escrito «23,77 CLP».
+        */}
         <MetricCard
           label="Gasto publicitario"
           value={money(now.adSpend, currency)}
           change={change(now.adSpend, previous.adSpend)}
+          hint={
+            now.adSpendApprox
+              ? `Alguna cuenta factura en otra moneda y se ha cambiado a ${currency}. Para alguna divisa se usa el cambio de hoy: la fuente gratuita no da histórico.`
+              : undefined
+          }
           invert
         />
         <MetricCard
@@ -234,7 +258,14 @@ export default async function DatosPage({ searchParams }: PageProps) {
 
       {/* --- El desglose de costos, en la misma pantalla --- */}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+      {/*
+        La clase `viz` no es decoración: los colores de datos son variables
+        definidas **dentro** de `.viz`, así que fuera de ella `var(--viz-ramp-3)`
+        no resuelve a nada. Y un `background-color` inválido no da error — deja
+        la barra transparente, que es lo que pasaba aquí: las barras existían,
+        medían lo que tenían que medir y no se veían.
+      */}
+      <section className="viz rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-sm font-semibold">En qué se fue el dinero</h2>
 
         <ul className="mt-4 space-y-2">
