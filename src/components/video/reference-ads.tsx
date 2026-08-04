@@ -4,7 +4,9 @@ import { useRef, useState, useTransition } from "react";
 import { framePlan } from "@/lib/video/analysis";
 import { grabAudio, grabFrames, probeInBrowser } from "@/lib/video/browser-frames";
 import { Button } from "@/components/ui";
+import Link from "next/link";
 import { GenerateButton } from "@/components/generate-button";
+import { flowFromReferenceAction } from "@/app/flujos/actions";
 import {
   analyzeVideoAction,
   analyzeVideoUrlAction,
@@ -281,13 +283,25 @@ export function ReferenceAds({
                 ))}
               </ol>
 
-              <button
-                type="button"
-                onClick={() => setExpanded((id) => (id === reference.id ? null : reference.id))}
-                className="mt-2 text-xs font-medium text-violet-700 dark:text-violet-300"
-              >
-                {expanded === reference.id ? "Menos" : "Por qué funciona"}
-              </button>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setExpanded((id) => (id === reference.id ? null : reference.id))}
+                  className="text-xs font-medium text-violet-700 dark:text-violet-300"
+                >
+                  {expanded === reference.id ? "Menos" : "Por qué funciona"}
+                </button>
+
+                {/*
+                  De aquí al flujo montado, sin dar la vuelta.
+
+                  Antes había que irse a Flujos, crear uno, elegir el producto,
+                  abrir «que lo monte la IA», cambiar a la pestaña de clonar y
+                  buscar este anuncio en la lista. Seis pasos, y en el medio hay
+                  que acordarse de cómo se llamaba.
+                */}
+                <BuildFlow productId={productId} reference={reference} />
+              </div>
 
               {expanded === reference.id ? (
                 <div className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
@@ -328,5 +342,59 @@ export function ReferenceAds({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Montar el flujo de este anuncio y saltar a él.
+ *
+ * Clona exactamente igual que desde el lienzo —el mismo grafo—, solo que
+ * creando el flujo por el camino. El enlace se enseña después y no se navega
+ * solo: al terminar puede que se quieran clonar dos o tres seguidos, y llevarse
+ * la pantalla en el primero obliga a volver.
+ */
+function BuildFlow({
+  productId,
+  reference,
+}: {
+  productId: string;
+  reference: { id: string; name: string; durationSeconds: number };
+}) {
+  const [flowId, setFlowId] = useState("");
+  const [note, setNote] = useState("");
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <GenerateButton
+        action={async () => {
+          const result = await flowFromReferenceAction({
+            productId,
+            referenceId: reference.id,
+            name: `Clon · ${reference.name}`,
+            seconds: Math.round(reference.durationSeconds),
+          });
+
+          setNote(result.message);
+          if (result.flowId) setFlowId(result.flowId);
+
+          return result.ok
+            ? { started: false as const, message: result.message }
+            : { started: false as const, message: result.message };
+        }}
+        label="Montar el flujo"
+        hint="Crea un flujo con su construcción y tu producto dentro. No genera nada: se revisa antes."
+      />
+
+      {flowId ? (
+        <Link
+          href={`/flujos?f=${flowId}`}
+          className="text-xs font-medium text-violet-700 underline dark:text-violet-300"
+        >
+          Abrirlo en Flujos
+        </Link>
+      ) : null}
+
+      {note ? <span className="text-xs text-slate-500 dark:text-slate-400">{note}</span> : null}
+    </span>
   );
 }

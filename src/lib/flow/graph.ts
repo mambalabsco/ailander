@@ -504,3 +504,67 @@ export function progressOf(states: Map<string, NodeState>): {
     total: values.length,
   };
 }
+
+/* ------------------------------- Rehacer un paso ---------------------------- */
+
+/**
+ * Todo lo que cuelga de un nodo, incluido él.
+ *
+ * Es lo que hay que rehacer al rehacer uno: si se vuelve a generar la imagen, el
+ * clip que salió de ella y el montaje que lo usaba **ya no le corresponden**.
+ * Dejarlos no da error — da un vídeo con la imagen nueva en el nodo y la vieja
+ * dentro del montaje, y eso no se ve hasta reproducirlo.
+ */
+export function withDescendants(flow: Flow, nodeId: string): Set<string> {
+  const out = new Set<string>([nodeId]);
+  const pending = [nodeId];
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+
+    for (const edge of flow.edges) {
+      if (edge.from !== current || out.has(edge.to)) continue;
+
+      out.add(edge.to);
+      pending.push(edge.to);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Qué resultados de la vuelta anterior se pueden reutilizar.
+ *
+ * Sin nada que rehacer se reutiliza todo lo que salió bien: es el «continuar»
+ * normal, y lo que ya está pagado no se vuelve a pagar.
+ *
+ * Con nodos marcados, se caen ellos y todo lo que cuelga de ellos. Los que no
+ * dependen de lo marcado se quedan: rehacer una toma de seis no es motivo para
+ * volver a pagar las otras cinco.
+ */
+export function reusable(
+  flow: Flow,
+  outputs: Record<string, { error?: string } | undefined>,
+  redo: string[] = [],
+): Set<string> {
+  const stale = new Set<string>();
+
+  for (const nodeId of redo) {
+    for (const id of withDescendants(flow, nodeId)) stale.add(id);
+  }
+
+  const keep = new Set<string>();
+
+  for (const node of flow.nodes) {
+    const output = outputs[node.id];
+
+    // Lo que falló no se reutiliza: reutilizar un error es no reintentarlo nunca.
+    if (!output || output.error) continue;
+    if (stale.has(node.id)) continue;
+
+    keep.add(node.id);
+  }
+
+  return keep;
+}

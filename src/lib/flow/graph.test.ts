@@ -10,8 +10,10 @@ import {
   progressOf,
   readyNow,
   removeNode,
+  reusable,
   runStates,
   validate,
+  withDescendants,
   type Flow,
 } from "./graph.ts";
 
@@ -368,4 +370,91 @@ test("un círculo no deja el avance en blanco", () => {
   };
 
   assert.equal(runStates(flow, {}, true).size, 2);
+});
+
+/* ------------------------------ Rehacer un paso ----------------------------- */
+
+const rama = (): Flow => ({
+  nodes: [
+    { id: "prompt-1", type: "prompt", x: 0, y: 0, settings: {} },
+    { id: "imagen-1", type: "imagen", x: 0, y: 0, settings: {} },
+    { id: "clip-1", type: "clip", x: 0, y: 0, settings: {} },
+    { id: "musica-1", type: "musica", x: 0, y: 0, settings: {} },
+    { id: "montaje-1", type: "montaje", x: 0, y: 0, settings: {} },
+  ],
+  edges: [
+    { from: "prompt-1", to: "imagen-1", port: 0 },
+    { from: "imagen-1", to: "clip-1", port: 1 },
+    { from: "clip-1", to: "montaje-1", port: 0 },
+    { from: "musica-1", to: "montaje-1", port: 1 },
+  ],
+});
+
+const hechos = {
+  "prompt-1": {},
+  "imagen-1": {},
+  "clip-1": {},
+  "musica-1": {},
+  "montaje-1": {},
+};
+
+test("lo que cuelga de un nodo se arrastra con él", () => {
+  const afectados = withDescendants(rama(), "imagen-1");
+
+  assert.deepEqual([...afectados].sort(), ["clip-1", "imagen-1", "montaje-1"]);
+});
+
+test("una hoja se arrastra sola", () => {
+  assert.deepEqual([...withDescendants(rama(), "montaje-1")], ["montaje-1"]);
+});
+
+/* Un círculo no debería existir, pero recorrerlo sin salir sí sería un cuelgue. */
+test("un círculo no cuelga el recorrido", () => {
+  const flow: Flow = {
+    nodes: [
+      { id: "a", type: "prompt", x: 0, y: 0, settings: {} },
+      { id: "b", type: "prompt", x: 0, y: 0, settings: {} },
+    ],
+    edges: [
+      { from: "a", to: "b", port: 0 },
+      { from: "b", to: "a", port: 0 },
+    ],
+  };
+
+  assert.equal(withDescendants(flow, "a").size, 2);
+});
+
+test("sin nada que rehacer se reutiliza todo lo que salió", () => {
+  assert.equal(reusable(rama(), hechos).size, 5);
+});
+
+/*
+ * Rehacer la imagen tiene que tirar el clip que salió de ella: dejarlo da un
+ * vídeo con la imagen nueva en el nodo y la vieja dentro del montaje.
+ */
+test("rehacer un nodo tira lo que colgaba de él", () => {
+  const keep = reusable(rama(), hechos, ["imagen-1"]);
+
+  assert.deepEqual([...keep].sort(), ["musica-1", "prompt-1"]);
+});
+
+/* Rehacer una toma de seis no es motivo para volver a pagar las otras cinco. */
+test("lo que no depende de lo marcado se queda", () => {
+  assert.ok(reusable(rama(), hechos, ["imagen-1"]).has("musica-1"));
+});
+
+/* Reutilizar un error es no reintentarlo nunca. */
+test("lo que falló no se reutiliza", () => {
+  const keep = reusable(rama(), { ...hechos, "clip-1": { error: "sin cupo" } });
+
+  assert.ok(!keep.has("clip-1"));
+  assert.ok(keep.has("imagen-1"));
+});
+
+test("lo que no se ejecutó tampoco se da por hecho", () => {
+  assert.ok(!reusable(rama(), { "prompt-1": {} }).has("imagen-1"));
+});
+
+test("empezar de cero es no reutilizar nada", () => {
+  assert.equal(reusable(rama(), {}).size, 0);
 });

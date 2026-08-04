@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { Button, SelectField } from "@/components/ui";
+import { GenerateButton } from "@/components/generate-button";
+import type { LaunchResult } from "@/types/jobs";
 import { findNodeType } from "@/lib/flow/graph";
 import { VIDEO_GENERATORS, durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
 import { MUSIC_GENERATORS } from "@/lib/video/music";
@@ -51,6 +53,11 @@ export interface NodeSettingsProps {
   onAddImages: (images: { url: string; name: string }[]) => void;
   /** Se avisa al lanzar caras nuevas, para que el lienzo empiece a sondear. */
   onFacesChanged: () => void;
+  /**
+   * Rehacer solo este paso. Sin definir cuando el nodo no ha producido nada:
+   * rehacer lo que no se ha hecho es ejecutar, y para eso está el otro botón.
+   */
+  onRedo?: () => Promise<LaunchResult>;
 }
 
 const text = (settings: Record<string, unknown>, key: string): string =>
@@ -74,6 +81,7 @@ export function NodeSettings({
   onDelete,
   onAddImages,
   onFacesChanged,
+  onRedo,
 }: NodeSettingsProps) {
   const node = findNodeType(type);
   if (!node) return null;
@@ -138,6 +146,21 @@ export function NodeSettings({
           Quitar
         </Button>
       </div>
+
+      {/*
+        Rehacer este paso y lo que colgaba de él.
+
+        Volver a generar la imagen sin tirar el clip que salió de ella daría un
+        montaje con la imagen nueva en la caja y la vieja dentro del vídeo, y eso
+        no se ve hasta reproducirlo entero.
+      */}
+      {onRedo ? (
+        <GenerateButton
+          action={onRedo}
+          label="Rehacer este paso"
+          hint="Se vuelve a generar este nodo y lo que dependía de él. Lo demás se reutiliza."
+        />
+      ) : null}
 
       {type === "prompt" ? (
         <div className="space-y-2">

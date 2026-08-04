@@ -5,13 +5,14 @@ import { requireCapability } from "@/lib/permissions";
 import { runInBackground } from "@/lib/background";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { hasActiveProviderKey } from "@/lib/provider-config";
-import { validate, type Flow } from "@/lib/flow/graph";
+import { reusable, validate, type Flow } from "@/lib/flow/graph";
 import { runFlow, type NodeResult } from "@/lib/flow/run";
 import {
   createFlow,
   deleteFlow,
   finishRun,
   listOutputs,
+  listRuns,
   readFlow,
   renameFlow,
   saveGraph,
@@ -188,31 +189,63 @@ export async function runFlowAction(input: unknown): Promise<LaunchResult> {
   const rounds = variants.length > 0 ? variants : [{}];
 
   /*
-   * Reanudar: lo que ya salió en una ejecución anterior no se vuelve a pagar.
+   * Continuar: lo que ya salió en una ejecución anterior no se vuelve a pagar.
    *
    * Solo con una vuelta, y a propósito: con varias, cada una es un anuncio
    * distinto y reutilizar lo de otra mezclaría dos.
+   *
+   * `fresh` lo apaga entero — es el «empezar de cero», para cuando lo que hay no
+   * sirve y no se quiere heredar nada.
+   *
+   * `redo` marca nodos concretos: se caen ellos **y todo lo que colgaba de
+   * ellos**. Rehacer una imagen sin tirar el clip que salió de ella daría un
+   * montaje con la imagen vieja dentro, y eso no se ve hasta reproducirlo.
    */
-  const resumeFrom = readText(raw.resumeFrom);
-  const previous = new Map<string, NodeResult>();
+  const fresh = raw.fresh === true;
+  const redo = Array.isArray(raw.redo) ? raw.redo.map((item) => readText(item)).filter(Boolean) : [];
 
-  if (resumeFrom && rounds.length === 1) {
-    for (const output of await listOutputs(resumeFrom)) {
-      if (output.error) continue;
-      previous.set(output.nodeId, {
-        kind: output.kind,
-        url: output.url,
-        value: output.value,
-      });
+  const previous = new Map<string, NodeResult>();
+  let resumeFrom = "";
+
+  if (!fresh && rounds.length === 1) {
+    const runs = await listRuns(flowId).catch(() => []);
+    resumeFrom = readText(raw.resumeFrom) || runs[0]?.id || "";
+
+    if (resumeFrom) {
+      const outputs = await listOutputs(resumeFrom);
+
+      const keep = reusable(
+        flow.graph,
+        Object.fromEntries(outputs.map((output) => [output.nodeId, { error: output.error }])),
+        redo,
+      );
+
+      for (const output of outputs) {
+        if (!keep.has(output.nodeId)) continue;
+
+        previous.set(output.nodeId, {
+          kind: output.kind,
+          url: output.url,
+          value: output.value,
+        });
+      }
     }
   }
 
   return runInBackground({
     productId: flow.productId || undefined,
     kind: "imagenes",
-    label: `Flujo · ${flow.name}${rounds.length > 1 ? ` · ${rounds.length} vueltas` : ""}`,
+    label: `Flujo · ${flow.name}${
+      redo.length > 0
+        ? ` · rehacer ${redo.join(", ")}`
+        : rounds.length > 1
+          ? ` · ${rounds.length} vueltas`
+          : previous.size > 0
+            ? ` · continuar desde ${previous.size} hechos`
+            : ""
+    }`,
     revalidate: "/flujos",
-    resume: { flowId, variants, resumeFrom },
+    resume: { flowId, variants, resumeFrom, redo, fresh },
     work: async (report) => {
       const summaries: string[] = [];
 
@@ -255,6 +288,7 @@ export async function runFlowAction(input: unknown): Promise<LaunchResult> {
       return {
         summary: [
           summaries.join(" "),
+          previous.size > 0 ? ` Se reutilizaron ${previous.size} pasos ya hechos.` : "",
           " Lo hecho queda guardado: al volver a lanzarlo no se vuelve a pagar.",
         ].join(""),
       };
@@ -743,5 +777,72 @@ export async function cloneFlowAction(input: unknown): Promise<{
     };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo clonar." };
+  }
+}
+
+/**
+ * De un anuncio analizado a un flujo montado, en un clic.
+ *
+ * ## Por qué hace falta si ya se puede clonar desde el lienzo
+ *
+ * Porque el camino de antes era: analizar el anuncio en la ficha del producto,
+ * irse a Flujos, crear un flujo, elegir el producto, abrir «que lo monte la IA»,
+ * cambiar a la pestaña de clonar y buscar ese anuncio en la lista. Seis pasos
+ * entre tener el análisis y tener el flujo, y en el medio hay que acordarse de
+ * cómo se llamaba.
+ *
+ * Aquí se crea el flujo, se clona dentro y se devuelve a dónde ir. El resultado
+ * es el mismo grafo —esto no clona distinto, solo llega antes.
+ */
+export async function flowFromReferenceAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+  flowId?: string;
+  dropped?: string[];
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    const productId = readText(raw.productId);
+    const referenceId = readText(raw.referenceId);
+
+    if (!productId) return { ok: false, message: "Ese análisis no está atado a ningún producto." };
+    if (!referenceId) return { ok: false, message: "Falta el anuncio que clonar." };
+
+    const flowId = await createFlow(readText(raw.name) || "Clon de un anuncio", productId);
+
+    const built = await cloneFlowAction({
+      flowId,
+      productId,
+      referenceId,
+      shape: readText(raw.shape) || "planos",
+      voice: readText(raw.voice) || "auto",
+      seconds: Number(raw.seconds) || 0,
+    });
+
+    if (!built.ok || !built.graph) {
+      /*
+       * El flujo vacío se queda, no se borra.
+       *
+       * Si el clon falló, borrarlo dejaría la sensación de que no pasó nada; y
+       * si lo que falló fue el modelo, el flujo ya está creado con su producto y
+       * se puede volver a intentar desde el lienzo sin repetir el papeleo.
+       */
+      return { ok: false, flowId, message: `Se creó el flujo pero no se pudo clonar: ${built.message}` };
+    }
+
+    await saveGraph(flowId, built.graph);
+    revalidatePath("/flujos");
+
+    return {
+      ok: true,
+      flowId,
+      dropped: built.dropped,
+      message: `Flujo montado con ${built.graph.nodes.length} nodos. ${built.message}`.trim(),
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo montar." };
   }
 }

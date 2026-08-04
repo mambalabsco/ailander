@@ -164,6 +164,8 @@ export function FlowCanvas({
   );
 
   const problems = useMemo(() => validate(asFlow), [asFlow]);
+  /** Cuántos pasos hay hechos de la última vuelta, para saber qué ofrecer. */
+  const done = Object.values(outputs).filter((output) => output && !output.error).length;
   const selectedNode = nodes.find((node) => node.id === selected) ?? null;
 
   /*
@@ -356,6 +358,14 @@ export function FlowCanvas({
           {saving ? "Guardando…" : "Guardar el flujo"}
         </Button>
 
+        {/*
+          Continuar y empezar de cero son dos botones.
+
+          Antes solo había uno y siempre lo hacía todo desde el principio: con
+          nueve nodos hechos y el décimo caído, arreglarlo costaba volver a pagar
+          los nueve. Ahora lo normal es continuar —se reutiliza lo que salió— y
+          empezar de cero es una decisión que se toma a propósito.
+        */}
         <GenerateButton
           variant="primary"
           action={async () => {
@@ -373,11 +383,41 @@ export function FlowCanvas({
 
             return launched;
           }}
-          label={variants.length > 1 ? `Ejecutar ${variants.length} veces` : "Ejecutar"}
+          label={
+            variants.length > 1
+              ? `Ejecutar ${variants.length} veces`
+              : done > 0
+                ? `Continuar (${done} hechos)`
+                : "Ejecutar"
+          }
           disabled={problems.length > 0}
           disabledReason={problems.length > 0 ? problems[0].problem : undefined}
-          hint="Guarda solo y va en segundo plano: verás cada nodo llenarse aquí mismo. Lo ya hecho no se vuelve a pagar."
+          hint="Reutiliza lo que ya salió de la última vuelta y solo paga lo que falta. Va en segundo plano: verás cada nodo llenarse aquí mismo."
         />
+
+        {done > 0 ? (
+          <GenerateButton
+            action={async () => {
+              if (!window.confirm(`Esto vuelve a generar los ${done} pasos ya hechos. ¿Sigo?`)) {
+                return { started: false as const, message: "No se lanzó nada." };
+              }
+
+              await saveFlowAction(flowId, asFlow);
+              const launched = await runFlowAction({ flowId, variants, fresh: true });
+
+              if (launched.started) {
+                setOutputs({});
+                setRanGraph(asFlow);
+                setRunning(true);
+              }
+
+              return launched;
+            }}
+            label="Empezar de cero"
+            disabled={problems.length > 0}
+            hint="No hereda nada de la vuelta anterior. Se paga todo otra vez."
+          />
+        ) : null}
 
         <span className="text-xs text-slate-500 dark:text-slate-400">
           {nodes.length} nodo(s) · {edges.length} conexión(es)
@@ -589,6 +629,28 @@ export function FlowCanvas({
               copyReferences={copyReferences}
               onFacesChanged={() => setRunning(true)}
               onAddImages={addImages}
+              /*
+                Rehacer **este** paso.
+
+                Se arrastra lo que colgaba de él: volver a generar la imagen sin
+                tirar el clip que salió de ella daría un montaje con la imagen
+                vieja dentro, y eso no se ve hasta reproducirlo.
+              */
+              onRedo={
+                outputs[selected]
+                  ? async () => {
+                      await saveFlowAction(flowId, asFlow);
+                      const launched = await runFlowAction({ flowId, redo: [selected] });
+
+                      if (launched.started) {
+                        setRanGraph(asFlow);
+                        setRunning(true);
+                      }
+
+                      return launched;
+                    }
+                  : undefined
+              }
               onChange={(settings) =>
                 setNodes((current) =>
                   current.map((node) =>
