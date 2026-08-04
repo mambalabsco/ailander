@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Field, SelectField, TextAreaField, TextField } from "@/components/ui";
 import {
   deleteSwipeCopyAction,
+  importLandingAction,
   saveSwipeCopyAction,
   setSwipeStatusAction,
 } from "@/app/products/[id]/swipe-actions";
@@ -29,6 +30,8 @@ export function SwipeFile({ productId, copies }: { productId: string; copies: Sw
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const [link, setLink] = useState("");
+  const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -72,6 +75,50 @@ export function SwipeFile({ productId, copies }: { productId: string; copies: Sw
           {open ? "Cancelar" : "Añadir copy"}
         </Button>
       </div>
+
+      {/*
+        Traerse una landing entera por su enlace.
+
+        Va arriba y con su propio campo porque es la vía rápida: pegar la
+        dirección de la página de un competidor y tenerla como referencia sin
+        copiar y pegar a mano media pantalla de texto.
+
+        Se guarda el **texto**, no el código: el CSS de una página está atado al
+        armazón de su tema y pegarlo en otro sitio da un diseño roto, no uno
+        idéntico.
+      */}
+      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            O pega el enlace de una landing y se trae sola
+          </span>
+          <TextField
+            value={link}
+            onChange={(event) => setLink(event.target.value)}
+            placeholder="trysculptique.com/pages/oferta"
+          />
+        </label>
+
+        <Button
+          disabled={isPending || !link.trim()}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await importLandingAction(link, productId);
+              setNote(result.message);
+              if (result.ok) setLink("");
+              router.refresh();
+            })
+          }
+        >
+          {isPending ? "Trayendo…" : "Traer la página"}
+        </Button>
+      </div>
+
+      {note ? (
+        <p className="mb-3 rounded-2xl border border-slate-200 p-2 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-300">
+          {note}
+        </p>
+      ) : null}
 
       {open ? (
         <div className="mb-4 space-y-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
