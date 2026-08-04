@@ -4,6 +4,7 @@ import { SectionCard } from "@/components/section-card";
 import { FlowCanvas } from "@/components/flow/flow-canvas";
 import { FlowList } from "@/components/flow/flow-list";
 import { listFlows, listOutputs, listRuns } from "@/lib/data/flows";
+import { listVideoReferences } from "@/lib/data/video-references";
 import { listAvatars } from "@/lib/data/avatars";
 import { readProductImages } from "@/lib/image-store";
 import { listOwnProducts } from "@/lib/store";
@@ -30,7 +31,7 @@ export default async function FlujosPage(props: {
 
   const { f } = await props.searchParams;
 
-  const [flows, products, avatars, voices, cliModels] = await Promise.all([
+  const [flows, products, avatars, voices, cliModels, references] = await Promise.all([
     listFlows().catch(() => []),
     listOwnProducts(),
     listAvatars().catch(() => []),
@@ -39,6 +40,8 @@ export default async function FlujosPage(props: {
     listVoices().catch(() => []),
     // Para poder crear una cara desde el propio lienzo.
     listCliModels("image").catch(() => []),
+    // Los anuncios ya analizados: se clona su construcción, no su vídeo.
+    listVideoReferences().catch(() => []),
   ]);
 
   const current = flows.find((flow) => flow.id === f) ?? flows[0] ?? null;
@@ -128,6 +131,13 @@ export default async function FlujosPage(props: {
             voices={voices.map((voice) => ({ id: voice.id, name: voice.name }))}
             cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
             productImages={productImages}
+            references={references.map((item) => ({
+              id: item.id,
+              name: item.name,
+              seconds: item.durationSeconds,
+              beats: item.analysis.beats.length,
+              hadAudio: item.hadAudio,
+            }))}
           />
 
           {runs.length > 0 ? (

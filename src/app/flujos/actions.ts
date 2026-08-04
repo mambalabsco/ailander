@@ -538,3 +538,166 @@ export async function buildFlowAction(input: unknown): Promise<{
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo montar." };
   }
 }
+
+/**
+ * Clonar un anuncio que ya funciona, con mi producto dentro.
+ *
+ * ## Qué se clona
+ *
+ * La construcción: cuántas tomas, qué hace cada una, cada cuánto corta, dónde
+ * entra el producto, cómo cierra. Es lo que el análisis ya guarda y es lo que
+ * hace que un anuncio funcione.
+ *
+ * El vídeo ajeno y su texto no se guardan —está decidido así en la migración de
+ * `video_references`—, así que cada toma se **rehace** desde su descripción con
+ * mi producto y mi gente. Copiar la estructura de un anuncio y republicar el de
+ * otro son dos cosas distintas.
+ *
+ * ## La voz se decide antes de pedir el flujo
+ *
+ * Y no se le pregunta al modelo. Un generador de vídeo pone una voz distinta en
+ * cada llamada: con seis planos son seis llamadas y la persona cambia de voz a
+ * mitad del anuncio, cosa que no se descubre hasta reproducirlo entero con los
+ * seis clips pagados. Ver `voicePlan`.
+ */
+export async function cloneFlowAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+  graph?: Flow;
+  dropped?: string[];
+  voice?: { source: string; why: string; warning: string };
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    if (!(await hasActiveProviderKey())) {
+      return { ok: false, message: "Falta la clave del proveedor de texto en los ajustes." };
+    }
+
+    const flowId = readText(raw.flowId);
+    const flow = flowId ? await readFlow(flowId) : null;
+    const productId = readText(raw.productId) || flow?.productId || "";
+
+    if (!productId) {
+      return { ok: false, message: "Este flujo no tiene producto: elígelo arriba primero." };
+    }
+
+    const referenceId = readText(raw.referenceId);
+    if (!referenceId) return { ok: false, message: "Elige qué anuncio analizado clonar." };
+
+    const { listVideoReferences } = await import("@/lib/data/video-references");
+    const reference = (await listVideoReferences()).find((item) => item.id === referenceId);
+
+    if (!reference) return { ok: false, message: "Ese análisis ya no existe." };
+
+    if (reference.analysis.beats.length === 0) {
+      return {
+        ok: false,
+        message: "Ese análisis no guardó ningún momento, así que no hay estructura que copiar.",
+      };
+    }
+
+    const { findProductAnywhere } = await import("@/lib/products");
+    const product = await findProductAnywhere(productId);
+
+    if (!product) return { ok: false, message: "Ese producto ya no existe." };
+
+    const [{ readProductResearch }, { buildProductContext }, { listAvatars }] = await Promise.all([
+      import("@/lib/research-store"),
+      import("@/lib/copy-prompts"),
+      import("@/lib/data/avatars"),
+    ]);
+
+    const [research, avatars] = await Promise.all([
+      readProductResearch(productId),
+      listAvatars().catch(() => []),
+    ]);
+
+    const { generateStructured } = await import("@/lib/generators");
+    const { flowFromPlan, FLOW_PLAN_SCHEMA, describeNodeMenu } = await import("@/lib/flow/build");
+    const { buildClonePrompt, voicePlan, voiceProblems } = await import("@/lib/flow/clone");
+    const { VIDEO_GENERATORS } = await import("@/lib/video/catalog");
+    const { SUBTITLE_PRESETS } = await import("@/lib/video/captions");
+
+    const shape = readText(raw.shape) === "una-pieza" ? "una-pieza" : "planos";
+
+    /*
+     * La duración por defecto es la del original.
+     *
+     * Clonar la estructura y cambiarle el largo es clonar otra cosa: el mismo
+     * anuncio en la mitad de tiempo tiene que cortar el doble de rápido, y
+     * entonces ya no es el mismo anuncio.
+     */
+    const seconds = Number(raw.seconds) || Math.round(reference.durationSeconds) || 30;
+
+    const preference = readText(raw.voice);
+    const voice = voicePlan({
+      shape,
+      hadAudio: reference.hadAudio,
+      voiceNote: reference.analysis.voice,
+      preference:
+        preference === "elevenlabs" ||
+        preference === "seedance" ||
+        preference === "sin-voz" ||
+        preference === "auto"
+          ? preference
+          : "auto",
+    });
+
+    const outcome = await generateStructured<FlowPlan>({
+      prompt: buildClonePrompt({
+        analysis: reference.analysis,
+        referenceName: reference.name,
+        context: buildProductContext(product, research, null),
+        nodeMenu: describeNodeMenu(),
+        voice,
+        videoModels: VIDEO_GENERATORS.map((model) => ({
+          id: model.id,
+          label: model.label,
+          note: model.note,
+        })),
+        subtitleStyles: SUBTITLE_PRESETS.map((preset) => preset.id),
+        shape,
+        seconds,
+        aspectRatio: readText(raw.aspectRatio) || "9:16",
+        avatars: avatars.length,
+      }),
+      schema: FLOW_PLAN_SCHEMA as unknown as Record<string, unknown>,
+      role: "copy",
+      maxTokens: 24_000,
+    });
+
+    const built = flowFromPlan(outcome.data);
+
+    if (built.flow.nodes.length === 0) {
+      return { ok: false, message: "El plan volvió vacío. Vuelve a intentarlo." };
+    }
+
+    /*
+     * Y se repasa que el flujo haga lo que se decidió de la voz.
+     *
+     * Lo que se le pide a un modelo no siempre es lo que devuelve, y un flujo
+     * mudo se descubre al reproducirlo con todo generado y pagado.
+     */
+    const problems = validate(built.flow);
+
+    return {
+      ok: true,
+      graph: built.flow,
+      dropped: [...built.dropped, ...voiceProblems(built.flow, voice)],
+      voice,
+      message: [
+        outcome.data.explicacion?.trim(),
+        problems.length > 0
+          ? `Quedan ${problems.length} hueco(s) por rellenar antes de ejecutar.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo clonar." };
+  }
+}

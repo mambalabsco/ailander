@@ -30,7 +30,14 @@ import {
   validate,
   type Flow,
 } from "@/lib/flow/graph";
-import { buildFlowAction, flowProgressAction, runFlowAction, saveFlowAction } from "@/app/flujos/actions";
+import {
+  buildFlowAction,
+  cloneFlowAction,
+  flowProgressAction,
+  runFlowAction,
+  saveFlowAction,
+} from "@/app/flujos/actions";
+import { VOICE_CHOICES } from "@/lib/flow/clone";
 
 /**
  * El lienzo.
@@ -61,6 +68,8 @@ export interface FlowCanvasProps {
   cliModels: { slug: string; name: string }[];
   /** Las del producto del flujo, para usarlas de referencia sin subirlas otra vez. */
   productImages: { url: string; name: string; primary: boolean }[];
+  /** Los anuncios ya analizados, para poder clonar su construcción. */
+  references: { id: string; name: string; seconds: number; beats: number; hadAudio: boolean }[];
 }
 
 const nodeTypes = { caja: FlowNodeBox };
@@ -79,6 +88,7 @@ export function FlowCanvas({
   voices,
   cliModels,
   productImages,
+  references,
 }: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
@@ -409,6 +419,7 @@ export function FlowCanvas({
 
       <AutoBuild
         flowId={flowId}
+        references={references}
         // Sustituir lo que hay es destructivo y no se puede deshacer: si ya hay
         // trabajo en el lienzo, se pregunta.
         busy={running}
@@ -701,10 +712,12 @@ function previewOf(
  */
 function AutoBuild({
   flowId,
+  references,
   busy,
   onBuilt,
 }: {
   flowId: string;
+  references: { id: string; name: string; seconds: number; beats: number; hadAudio: boolean }[];
   busy: boolean;
   /** Devuelve si se aplicó: puede rechazarse para no pisar lo que ya hay. */
   onBuilt: (graph: Flow, message: string) => boolean;
@@ -716,6 +729,14 @@ function AutoBuild({
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState("");
   const [dropped, setDropped] = useState<string[]>([]);
+  /** De qué parte: de una idea escrita o de un anuncio ya analizado. */
+  const [source, setSource] = useState("idea");
+  const [referenceId, setReferenceId] = useState("");
+  const [voice, setVoice] = useState("auto");
+  const [voiceNote, setVoiceNote] = useState("");
+
+  const reference = references.find((item) => item.id === referenceId) ?? null;
+  const cloning = source === "clon";
 
   if (!open) {
     return (
@@ -727,30 +748,107 @@ function AutoBuild({
 
   return (
     <div className="space-y-2 rounded-2xl border border-violet-300 p-3 dark:border-violet-900">
-      <p className="text-sm font-medium">Montar el flujo desde la idea</p>
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        Lee la investigación del producto y sus ángulos y deja el lienzo montado: tomas, prompts,
-        generadores, voz y montaje. No genera nada — lo revisas y lo ejecutas tú.
+      <p className="text-sm font-medium">
+        {cloning ? "Clonar un anuncio que funciona" : "Montar el flujo desde la idea"}
       </p>
 
-      <textarea
-        value={idea}
-        onChange={(event) => setIdea(event.target.value)}
-        rows={3}
-        placeholder="Una madre a las 6 de la mañana que ya no puede con el dolor de rodillas… (o déjalo vacío y que proponga el ángulo)"
-        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-      />
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {cloning
+          ? "Copia la construcción del anuncio analizado —cuántas tomas, qué hace cada una, cada cuánto corta, dónde entra el producto— y rehace cada escena con el tuyo. No copia su texto ni sus imágenes: el vídeo ajeno no se guarda, solo cómo está hecho."
+          : "Lee la investigación del producto y sus ángulos y deja el lienzo montado: tomas, prompts, generadores, voz y montaje. No genera nada — lo revisas y lo ejecutas tú."}
+      </p>
+
+      <div className="flex flex-wrap gap-1">
+        {[
+          { id: "idea", label: "Desde una idea" },
+          { id: "clon", label: `Clonando un anuncio${references.length > 0 ? ` (${references.length})` : ""}` },
+        ].map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setSource(option.id)}
+            className={`rounded-lg border px-2 py-1 text-xs ${
+              source === option.id
+                ? "border-violet-500 bg-violet-50 dark:bg-violet-950/40"
+                : "border-slate-300 dark:border-slate-700"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {cloning ? (
+        references.length === 0 ? (
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            Todavía no has analizado ningún anuncio. Se hace en la ficha del producto, en «anuncios
+            de referencia»: se sube el vídeo, se analiza y aquí aparece su construcción.
+          </p>
+        ) : (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Cuál se clona</span>
+
+            <SelectField
+              value={referenceId}
+              onChange={(event) => setReferenceId(event.target.value)}
+            >
+              <option value="">Elige uno…</option>
+              {references.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {Math.round(item.seconds)} s · {item.beats} momento(s)
+                  {item.hadAudio ? "" : " · sin voz"}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+        )
+      ) : (
+        <textarea
+          value={idea}
+          onChange={(event) => setIdea(event.target.value)}
+          rows={3}
+          placeholder="Una madre a las 6 de la mañana que ya no puede con el dolor de rodillas… (o déjalo vacío y que proponga el ángulo)"
+          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+      )}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-xs text-slate-500 dark:text-slate-400">Cómo se hace</span>
 
           <SelectField value={shape} onChange={(event) => setShape(event.target.value)}>
-            <option value="elige-tu">Que decida ella</option>
+            {/*
+              Clonando no hay «que decida ella»: la forma cambia de dónde sale la
+              voz, y esa decisión se toma aquí y se le impone al modelo.
+            */}
+            {cloning ? null : <option value="elige-tu">Que decida ella</option>}
             <option value="una-pieza">De una pieza (Seedance)</option>
             <option value="planos">Plano a plano, con montaje</option>
           </SelectField>
         </label>
+
+        {/*
+          De dónde sale la voz.
+
+          Un generador de vídeo pone una voz **distinta en cada llamada**. Con el
+          anuncio en una pieza da igual —una llamada, una voz—, pero con seis
+          planos son seis llamadas y la persona cambia de voz a mitad de frase.
+          No da error y no se descubre hasta reproducirlo entero, con los seis
+          clips pagados.
+        */}
+        {cloning ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-slate-500 dark:text-slate-400">La voz</span>
+
+            <SelectField value={voice} onChange={(event) => setVoice(event.target.value)}>
+              {VOICE_CHOICES.map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+        ) : null}
 
         <label className="flex flex-col gap-1">
           <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
@@ -767,13 +865,17 @@ function AutoBuild({
 
         <Button
           variant="primary"
-          disabled={working || busy}
+          disabled={working || busy || (cloning && !referenceId)}
           onClick={() => {
             setWorking(true);
             setNote("");
             setDropped([]);
 
-            void buildFlowAction({ flowId, idea, shape, seconds })
+            const work = cloning
+              ? cloneFlowAction({ flowId, referenceId, shape, seconds, voice })
+              : buildFlowAction({ flowId, idea, shape, seconds });
+
+            void work
               .then((result) => {
                 if (!result.ok || !result.graph) {
                   setNote(result.message);
@@ -781,6 +883,17 @@ function AutoBuild({
                 }
 
                 setDropped(result.dropped ?? []);
+
+                // Por qué la voz salió de donde salió: es la decisión menos
+                // obvia de todas y la que más cara sale si sorprende.
+                const decision =
+                  "voice" in result
+                    ? (result.voice as { why: string; warning: string } | undefined)
+                    : null;
+
+                setVoiceNote(
+                  decision ? [decision.why, decision.warning].filter(Boolean).join(" ") : "",
+                );
 
                 if (onBuilt(result.graph, result.message)) {
                   setNote("Montado. Revísalo y guárdalo si te sirve.");
@@ -795,7 +908,7 @@ function AutoBuild({
               .finally(() => setWorking(false));
           }}
         >
-          {working ? "Montando…" : "Montar"}
+          {working ? (cloning ? "Clonando…" : "Montando…") : cloning ? "Clonar" : "Montar"}
         </Button>
 
         <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -804,6 +917,20 @@ function AutoBuild({
       </div>
 
       {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
+
+      {voiceNote ? (
+        <p className="rounded-xl bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+          <span className="font-medium">La voz:</span> {voiceNote}
+        </p>
+      ) : null}
+
+      {reference && cloning ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {Math.round(reference.seconds)} segundos y {reference.beats} momentos. Por defecto el
+          clon dura lo mismo: el mismo anuncio en la mitad de tiempo tendría que cortar el doble
+          de rápido, y entonces ya no es el mismo anuncio.
+        </p>
+      ) : null}
 
       {dropped.length > 0 ? (
         <div className="text-xs text-amber-800 dark:text-amber-300">
