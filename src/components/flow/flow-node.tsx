@@ -138,19 +138,30 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
           </p>
         ) : null}
 
+        {/*
+          Sin recortar.
+
+          Estaba con `object-cover` y una altura fija, que de un vertical enseña
+          la franja del medio: justo donde no está ni la cara ni el envase. Una
+          miniatura recortada no sirve para decidir si la toma vale, que es para
+          lo que se mira.
+
+          Ahora la caja se estira a lo que ocupe la imagen. Un flujo con veinte
+          nodos se hace más alto y se compensa con el zoom, que para eso está.
+        */}
         {result?.url && result.kind === "imagen" ? (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={result.url} alt="" className="mt-1 h-16 w-full rounded-lg object-cover" />
+          <img src={result.url} alt="" className="mt-1 w-full rounded-lg" />
         ) : null}
 
         {result?.url && result.kind === "video" ? (
           <video
             key={result.url}
             src={result.url}
-            muted
+            controls
             playsInline
             preload="metadata"
-            className="mt-1 h-16 w-full rounded-lg bg-slate-100 object-cover dark:bg-slate-800"
+            className="nodrag mt-1 w-full rounded-lg bg-slate-100 dark:bg-slate-800"
           />
         ) : null}
 

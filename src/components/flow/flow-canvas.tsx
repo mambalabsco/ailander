@@ -46,10 +46,12 @@ export interface FlowCanvasProps {
   graph: Flow;
   /** Lo que produjo la última ejecución, por nodo. */
   results: Record<string, { url: string; kind: string; error: string }>;
-  avatars: { id: string; name: string }[];
+  avatars: { id: string; name: string; url: string }[];
   voices: { id: string; name: string }[];
   /** Los del CLI, para crear una cara sin salir del lienzo. */
   cliModels: { slug: string; name: string }[];
+  /** Las del producto del flujo, para usarlas de referencia sin subirlas otra vez. */
+  productImages: { url: string; name: string; primary: boolean }[];
 }
 
 const nodeTypes = { caja: FlowNodeBox };
@@ -60,7 +62,15 @@ function nextId(nodes: Node[], type: string): string {
   return `${type}-${used + 1}`;
 }
 
-export function FlowCanvas({ flowId, graph, results, avatars, voices, cliModels }: FlowCanvasProps) {
+export function FlowCanvas({
+  flowId,
+  graph,
+  results,
+  avatars,
+  voices,
+  cliModels,
+  productImages,
+}: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -353,6 +363,7 @@ export function FlowCanvas({ flowId, graph, results, avatars, voices, cliModels 
               voices={voices}
               avatars={faces}
               cliModels={cliModels}
+              productImages={productImages}
               onFacesChanged={() => setRunning(true)}
               onChange={(settings) =>
                 setNodes((current) =>
@@ -424,8 +435,15 @@ function summaryOf(type: string, settings: Record<string, unknown>): string {
   const node = findNodeType(type);
   if (!node) return "";
 
-  const text = typeof settings.text === "string" ? settings.text : "";
-  const model = typeof settings.model === "string" ? settings.model : "";
+  const get = (key: string) => (typeof settings[key] === "string" ? (settings[key] as string) : "");
 
-  return [text.slice(0, 40), model].filter(Boolean).join(" · ");
+  // Lo que identifica ese nodo de un vistazo, que no es lo mismo en todos.
+  const pieces =
+    type === "archivo"
+      ? [get("name") || (get("url") ? "imagen puesta" : "")]
+      : type === "avatar"
+        ? [get("avatarId") ? "cara fijada" : "la de cada vuelta"]
+        : [get("text").slice(0, 40), get("model")];
+
+  return pieces.filter(Boolean).join(" · ");
 }

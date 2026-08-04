@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button, SelectField } from "@/components/ui";
 import { findNodeType } from "@/lib/flow/graph";
 import { VIDEO_GENERATORS } from "@/lib/video/catalog";
@@ -11,6 +11,7 @@ import { SUBTITLE_PRESETS } from "@/lib/video/captions";
 import { ASPECTS } from "@/lib/video/aspect";
 import { PEOPLE } from "@/lib/avatar-shots";
 import { generateAvatarsAction } from "@/app/avatares/actions";
+import { uploadFlowImageAction } from "@/app/flujos/actions";
 
 /**
  * Los ajustes del nodo seleccionado.
@@ -34,7 +35,9 @@ export interface NodeSettingsProps {
   type: string;
   settings: Record<string, unknown>;
   voices: { id: string; name: string }[];
-  avatars: { id: string; name: string }[];
+  avatars: { id: string; name: string; url: string }[];
+  /** Las del producto del flujo, para usarlas de referencia. */
+  productImages: { url: string; name: string; primary: boolean }[];
   /** Los modelos del CLI, para poder crear una cara sin salir del lienzo. */
   cliModels: { slug: string; name: string }[];
   onChange: (settings: Record<string, unknown>) => void;
@@ -57,6 +60,7 @@ export function NodeSettings({
   settings,
   voices,
   avatars,
+  productImages,
   cliModels,
   onChange,
   onDelete,
@@ -139,28 +143,59 @@ export function NodeSettings({
           )
         : null}
 
-      {type === "archivo" ? field("Dirección de la imagen", input("url", "https://…")) : null}
+      {type === "archivo" ? (
+        <ImageSource
+          url={text(settings, "url")}
+          productImages={productImages}
+          onPick={(url, name) => onChange({ ...settings, url, name })}
+        />
+      ) : null}
 
       {type === "avatar" ? (
         <div className="space-y-2">
-          {field(
-            "Qué cara",
-            <SelectField
-              value={text(settings, "avatarId")}
-              onChange={(event) => set("avatarId", event.target.value)}
+          {/*
+            Miniaturas y no un desplegable de nombres.
+
+            Una cara se elige mirándola. Con nombres como «mujer de 45 cansada
+            2» hay que abrir otra pantalla para saber cuál es cuál, y al volver
+            el lienzo ha perdido lo que no estaba guardado.
+          */}
+          <p className="text-xs text-slate-500 dark:text-slate-400">Qué cara</p>
+
+          <div className="grid grid-cols-4 gap-1">
+            <button
+              type="button"
+              onClick={() => set("avatarId", "")}
+              className={`flex aspect-square items-center justify-center rounded-lg border p-1 text-[9px] leading-tight ${
+                text(settings, "avatarId") === ""
+                  ? "border-violet-500 bg-violet-50 dark:bg-violet-950/40"
+                  : "border-slate-300 dark:border-slate-700"
+              }`}
             >
               {/*
                 Vacío no es un descuido: es «la que diga la vuelta». Es lo que
                 permite ejecutar el mismo flujo con seis caras distintas.
               */}
-              <option value="">La de cada vuelta</option>
-              {avatars.map((avatar) => (
-                <option key={avatar.id} value={avatar.id}>
-                  {avatar.name}
-                </option>
-              ))}
-            </SelectField>,
-          )}
+              La de cada vuelta
+            </button>
+
+            {avatars.map((avatar) => (
+              <button
+                key={avatar.id}
+                type="button"
+                title={avatar.name}
+                onClick={() => set("avatarId", avatar.id)}
+                className={`overflow-hidden rounded-lg border ${
+                  text(settings, "avatarId") === avatar.id
+                    ? "border-violet-500 ring-2 ring-violet-300"
+                    : "border-slate-300 dark:border-slate-700"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={avatar.url} alt={avatar.name} className="aspect-square w-full object-cover" />
+              </button>
+            ))}
+          </div>
 
           {/*
             Crear una cara sin salir del lienzo.
@@ -427,6 +462,100 @@ function NewFace({
       </div>
 
       {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * De dónde sale la imagen de un nodo de archivo: subida, del producto, o pegada.
+ *
+ * Las tres a la vez y no un desplegable de «origen»: son tres gestos distintos
+ * y quien abre el panel ya sabe cuál quiere. Un paso previo para elegir entre
+ * tres cosas que caben en la misma pantalla es un paso de más.
+ */
+function ImageSource({
+  url,
+  productImages,
+  onPick,
+}: {
+  url: string;
+  productImages: { url: string; name: string; primary: boolean }[];
+  onPick: (url: string, name: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  return (
+    <div className="space-y-2">
+      {url ? (
+        <div>
+          {/* Sin recortar: se mira para saber si es la que se quería. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="" className="w-full rounded-lg border border-slate-200 dark:border-slate-800" />
+        </div>
+      ) : null}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+
+          setBusy(true);
+
+          const payload = new FormData();
+          payload.set("file", file);
+
+          void uploadFlowImageAction(payload)
+            .then((result) => {
+              setNote(result.message);
+              if (result.ok && result.url) onPick(result.url, file.name);
+              if (fileRef.current) fileRef.current.value = "";
+            })
+            .finally(() => setBusy(false));
+        }}
+        className="w-full text-xs file:mr-2 file:rounded-full file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs dark:file:bg-slate-800"
+      />
+
+      {productImages.length > 0 ? (
+        <div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">O una del producto</p>
+
+          <div className="mt-1 grid grid-cols-4 gap-1">
+            {productImages.map((image) => (
+              <button
+                key={image.url}
+                type="button"
+                title={`${image.name}${image.primary ? " · principal" : ""}`}
+                onClick={() => onPick(image.url, image.name)}
+                className={`overflow-hidden rounded-lg border ${
+                  url === image.url
+                    ? "border-violet-500 ring-2 ring-violet-300"
+                    : image.primary
+                      ? "border-emerald-400"
+                      : "border-slate-300 dark:border-slate-700"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image.url} alt={image.name} className="aspect-square w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <input
+        value={url}
+        onChange={(event) => onPick(event.target.value, "")}
+        placeholder="O pega una dirección"
+        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+      />
+
+      {busy ? <p className="text-xs text-slate-500">Subiendo…</p> : null}
+      {note && !busy ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
     </div>
   );
 }

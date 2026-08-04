@@ -5,6 +5,7 @@ import { FlowCanvas } from "@/components/flow/flow-canvas";
 import { FlowList } from "@/components/flow/flow-list";
 import { listFlows, listOutputs, listRuns } from "@/lib/data/flows";
 import { listAvatars } from "@/lib/data/avatars";
+import { readProductImages } from "@/lib/image-store";
 import { listOwnProducts } from "@/lib/store";
 import { listVoices } from "@/lib/video/providers";
 import { listCliModels } from "@/lib/higgsfield-cli";
@@ -49,6 +50,27 @@ export default async function FlujosPage(props: {
    * el nodo que lo tuvo, en vez de leer un resumen al final que dice que algo
    * falló.
    */
+  /*
+   * Las imágenes del producto, para poder elegirlas de referencia en el lienzo.
+   *
+   * Se prefiere la del CDN de Shopify: **no caduca**. La otra sí, y un flujo
+   * guardado hoy que se ejecute la semana que viene se quedaría con una
+   * referencia muerta — y el generador seguiría inventándose el envase.
+   */
+  const productImages = current?.productId
+    ? await readProductImages(current.productId)
+        .then((images) =>
+          images
+            .map((image) => ({
+              url: image.shopifyUrl || image.url,
+              name: image.name || "Imagen",
+              primary: image.isPrimary,
+            }))
+            .filter((image) => image.url),
+        )
+        .catch(() => [])
+    : [];
+
   const runs = current ? await listRuns(current.id).catch(() => []) : [];
   const outputs = runs[0] ? await listOutputs(runs[0].id).catch(() => []) : [];
 
@@ -98,9 +120,14 @@ export default async function FlujosPage(props: {
             flowId={current.id}
             graph={current.graph}
             results={results}
-            avatars={avatars.map((avatar) => ({ id: avatar.id, name: avatar.name }))}
+            avatars={avatars.map((avatar) => ({
+              id: avatar.id,
+              name: avatar.name,
+              url: avatar.url,
+            }))}
             voices={voices.map((voice) => ({ id: voice.id, name: voice.name }))}
             cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
+            productImages={productImages}
           />
 
           {runs.length > 0 ? (

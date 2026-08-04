@@ -270,7 +270,7 @@ export interface FlowProgress {
   /** Lo que ha producido cada nodo **hasta ahora**. */
   outputs: Record<string, { url: string; kind: string; error: string }>;
   /** Las caras, que pueden haber cambiado si se generaron desde el lienzo. */
-  avatars: { id: string; name: string }[];
+  avatars: { id: string; name: string; url: string }[];
 }
 
 /**
@@ -320,11 +320,96 @@ export async function flowProgressAction(flowId: unknown): Promise<FlowProgress>
             ]),
           )
         : {},
-      avatars: avatars.map((avatar) => ({ id: avatar.id, name: avatar.name })),
+      avatars: avatars.map((avatar) => ({
+        id: avatar.id,
+        name: avatar.name,
+        url: avatar.url,
+      })),
     };
   } catch {
     // Un fallo del sondeo no puede tumbar el lienzo: se reintenta a la
     // siguiente vuelta y mientras tanto se ve lo último que llegó.
     return empty;
+  }
+}
+
+/* ------------------------- Imágenes para los nodos ------------------------- */
+
+/**
+ * Sube una imagen para usarla como referencia en el lienzo.
+ *
+ * Al bucket del estudio, que ya existe y ya acepta imágenes. Un bucket nuevo por
+ * pantalla serían cuatro juegos de políticas que dicen lo mismo.
+ *
+ * El nombre lo pone el servidor: el del archivo original puede traer barras y
+ * acabar siendo una ruta dentro del bucket, o sea escribir fuera de su carpeta.
+ */
+export async function uploadFlowImageAction(
+  form: FormData,
+): Promise<{ ok: boolean; message: string; url?: string }> {
+  try {
+    await guard();
+
+    const file = form.get("file");
+    if (!(file instanceof File)) return { ok: false, message: "No llegó ningún archivo." };
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      return { ok: false, message: `«${file.type || "sin tipo"}» no es una imagen que valga.` };
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      return { ok: false, message: "Pesa más de 15 MB." };
+    }
+
+    const { requireContext } = await import("@/lib/supabase/session");
+    const { supabase, userId } = await requireContext();
+
+    const extension = file.type.split("/")[1] ?? "png";
+    const path = `${userId}/flujos/${crypto.randomUUID()}.${extension}`;
+
+    const { error } = await supabase.storage
+      .from("studio")
+      .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type });
+
+    if (error) return { ok: false, message: `No se pudo subir: ${error.message}` };
+
+    return {
+      ok: true,
+      message: "Subida.",
+      url: supabase.storage.from("studio").getPublicUrl(path).data.publicUrl,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo subir." };
+  }
+}
+
+/**
+ * Las imágenes de un producto, para elegirlas como referencia.
+ *
+ * Se prefiere la dirección del CDN de Shopify cuando la hay: **no caduca**. La
+ * otra sí, y un flujo guardado hoy que se ejecuta la semana que viene se
+ * quedaría con una referencia muerta — y el generador seguiría adelante
+ * inventándose el envase.
+ */
+export async function productImagesAction(
+  productId: unknown,
+): Promise<{ url: string; name: string; primary: boolean }[]> {
+  try {
+    await guard();
+
+    const id = readText(productId);
+    if (!id) return [];
+
+    const { readProductImages } = await import("@/lib/image-store");
+
+    return (await readProductImages(id))
+      .map((image) => ({
+        url: image.shopifyUrl || image.url,
+        name: image.name || "Imagen",
+        primary: image.isPrimary,
+      }))
+      .filter((image) => image.url);
+  } catch {
+    return [];
   }
 }
