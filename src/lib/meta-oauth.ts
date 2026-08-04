@@ -237,3 +237,112 @@ export function isExpired(expiresAt: Date | null, now: Date = new Date()): boole
   const left = daysLeft(expiresAt, now);
   return left !== null && left < 0;
 }
+
+/* -------------------------------- Diagnóstico ------------------------------- */
+
+export interface AppCheck {
+  ok: boolean;
+  /** Cómo se llama la app según Meta, cuando responde. */
+  name: string;
+  /** Quién tiene rol en ella, que es lo que decide quién puede entrar. */
+  roles: { name: string; role: string }[];
+  /** Lo que hay que hacer, en una frase. */
+  message: string;
+}
+
+/**
+ * Preguntarle a Meta qué le pasa a la app, sin iniciar sesión.
+ *
+ * ## Por qué hace falta
+ *
+ * Porque «App not active» no dice nada. Es el mismo mensaje para una app en
+ * modo desarrollo cuyo perfil no tiene rol, para una que Meta ha desactivado por
+ * verificación de negocio pendiente, y para una que se apagó sola. Tres causas
+ * con tres arreglos distintos y una sola frase para las tres — y la frase habla
+ * del «desarrollador de la app», que eres tú.
+ *
+ * Con el token de aplicación —`id|secreto`, sin sesión de nadie— se le puede
+ * preguntar directamente. Si Meta contesta, la app está viva y el problema es de
+ * roles; si no contesta, su error dice por qué, y ese sí es específico.
+ *
+ * ## Y los roles, que es la causa más común
+ *
+ * En modo desarrollo solo entra quien tiene rol. Listarlos convierte «no puedo
+ * entrar» en «tu perfil no está en esta lista», que ya se puede arreglar.
+ */
+export async function checkMetaApp(appId: string, appSecret: string): Promise<AppCheck> {
+  const token = `${appId}|${appSecret}`;
+
+  const ask = async (path: string) => {
+    const url = new URL(`https://graph.facebook.com/${version()}/${path}`);
+    url.searchParams.set("access_token", token);
+
+    const response = await fetch(url, { cache: "no-store" });
+    const data = (await response.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: number };
+      name?: string;
+      data?: { name?: string; role?: string }[];
+    };
+
+    return { ok: response.ok, data };
+  };
+
+  try {
+    const app = await ask(appId);
+
+    if (!app.ok || app.data.error) {
+      const detail = app.data.error?.message ?? "Meta no dio detalle.";
+
+      return {
+        ok: false,
+        name: "",
+        roles: [],
+        message: [
+          `Meta no responde por esa app: ${detail}`,
+          "",
+          "Cuando el error viene del propio token de aplicación, la app está",
+          "desactivada o restringida — no es cosa de permisos ni de roles. Abre su",
+          "panel en developers.facebook.com: el motivo sale arriba del todo, en",
+          "rojo, y suele ser la verificación del negocio o un aviso de política sin",
+          "atender.",
+        ].join("\n"),
+      };
+    }
+
+    /*
+     * Los roles pueden fallar aunque la app conteste: hay tipos de app que no
+     * exponen esa lista al token de aplicación. Eso no es un problema — solo
+     * significa que hay que mirarlos a mano.
+     */
+    const roles = await ask(`${appId}/roles`).catch(() => null);
+
+    const people = (roles?.ok ? (roles.data.data ?? []) : [])
+      .map((item) => ({ name: item.name ?? "", role: item.role ?? "" }))
+      .filter((item) => item.name || item.role);
+
+    return {
+      ok: true,
+      name: app.data.name ?? "",
+      roles: people,
+      message: [
+        `La app responde, así que está activa y el secreto es correcto.`,
+        people.length > 0
+          ? `Tiene ${people.length} persona(s) con rol. En modo desarrollo, **solo esas** pueden iniciar sesión: si el perfil con el que entras no está en la lista, sale «App not active» aunque sea tuyo.`
+          : "No se pudo leer la lista de roles con el token de aplicación; míralos en el panel, en «Roles».",
+        "",
+        "Si tu perfil sí está y aun así falla, mira que el navegador tenga abierta",
+        "esa cuenta de Facebook y no otra, y que la invitación de rol esté",
+        "aceptada en facebook.com/settings?tab=developer.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      name: "",
+      roles: [],
+      message: `No se pudo preguntar a Meta: ${error instanceof Error ? error.message : "falló"}`,
+    };
+  }
+}

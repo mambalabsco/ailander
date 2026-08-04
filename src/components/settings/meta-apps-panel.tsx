@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { deleteMetaAppAction, saveMetaAppAction } from "@/app/datos/actions";
+import { checkMetaAppAction, deleteMetaAppAction, saveMetaAppAction } from "@/app/datos/actions";
 
 /**
  * Las apps de Meta, en un sitio.
@@ -47,6 +47,9 @@ export function MetaAppsPanel({
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
+  /** Qué app se está comprobando, y lo que contestó Meta. */
+  const [checking, setChecking] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
   const [saving, setSaving] = useState(false);
 
   const edit = (app: MetaAppView) => {
@@ -117,6 +120,42 @@ export function MetaAppsPanel({
                 </p>
               </div>
 
+              {/*
+                Preguntarle a Meta qué le pasa.
+
+                «App not active» es el mismo mensaje para tres causas con tres
+                arreglos distintos, y encima habla del «desarrollador de la app»,
+                que eres tú. Su respuesta al token de aplicación sí distingue.
+              */}
+              <Button
+                variant="ghost"
+                disabled={checking === app.id || !app.hasSecret}
+                onClick={() => {
+                  setChecking(app.id);
+                  setDiagnosis("");
+
+                  void checkMetaAppAction(app.id)
+                    .then((result) => {
+                      setDiagnosis(
+                        [
+                          result.name ? `«${result.name}».` : "",
+                          result.message,
+                          result.roles.length > 0
+                            ? `\n\nCon rol: ${result.roles
+                                .map((person) => `${person.name} (${person.role})`)
+                                .join(", ")}.`
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" "),
+                      );
+                    })
+                    .finally(() => setChecking(""));
+                }}
+              >
+                {checking === app.id ? "Preguntando…" : "Comprobar"}
+              </Button>
+
               <Button variant="ghost" onClick={() => edit(app)}>
                 Editar
               </Button>
@@ -140,6 +179,12 @@ export function MetaAppsPanel({
           ))}
         </ul>
       )}
+
+      {diagnosis ? (
+        <p className="whitespace-pre-line rounded-2xl border border-slate-200 p-3 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-300">
+          {diagnosis}
+        </p>
+      ) : null}
 
       {editing ? (
         <div className="space-y-2 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">

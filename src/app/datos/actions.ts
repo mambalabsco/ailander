@@ -768,3 +768,54 @@ export async function readShopProfileAction(
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo consultar." };
   }
 }
+
+/**
+ * Preguntarle a Meta qué le pasa a una app.
+ *
+ * ## Por qué existe
+ *
+ * Porque «App not active» no dice nada. Es el mismo mensaje para tres cosas
+ * distintas: una app en modo desarrollo cuyo perfil no tiene rol, una que Meta
+ * ha desactivado por verificación pendiente, y una que se apagó sola. Tres
+ * arreglos distintos, una sola frase, y encima habla del «desarrollador de la
+ * app» — que eres tú.
+ *
+ * Con el token de aplicación se le pregunta directamente y su respuesta sí
+ * distingue: si contesta, la app está viva y el problema son los roles; si no,
+ * su error dice por qué.
+ *
+ * No devuelve el secreto ni el token en ningún caso: solo lo que se puede leer.
+ */
+export async function checkMetaAppAction(
+  id: unknown,
+): Promise<{ ok: boolean; name: string; roles: { name: string; role: string }[]; message: string }> {
+  try {
+    await requireCapability("ajustes");
+
+    const appId = typeof id === "string" ? id.trim() : "";
+    if (!appId) return { ok: false, name: "", roles: [], message: "Falta la app." };
+
+    const { readMetaAppSecret } = await import("@/lib/data/meta-apps");
+    const app = await readMetaAppSecret(appId);
+
+    if (!app?.appId || !app.appSecret) {
+      return {
+        ok: false,
+        name: "",
+        roles: [],
+        message: "Esa app no tiene guardado su secreto, así que no se le puede preguntar a Meta.",
+      };
+    }
+
+    const { checkMetaApp } = await import("@/lib/meta-oauth");
+
+    return await checkMetaApp(app.appId, app.appSecret);
+  } catch (error) {
+    return {
+      ok: false,
+      name: "",
+      roles: [],
+      message: error instanceof Error ? error.message : "No se pudo comprobar.",
+    };
+  }
+}
