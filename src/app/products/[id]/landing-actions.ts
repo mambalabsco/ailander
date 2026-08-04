@@ -13,6 +13,8 @@ import { buildLandingPrompt } from "@/lib/landing-prompt";
 import { findModelPage } from "@/lib/store-blueprint";
 import { AVATAR_POOL_SIZE, avatarSlot, buildAvatarPrompt } from "@/lib/avatar-prompts";
 import { saveLanding, deleteLanding } from "@/lib/data/landings";
+import { lookOf } from "@/lib/landing-look";
+import type { LandingTheme } from "@/lib/landing-theme";
 import { runInBackground } from "@/lib/background";
 import { recordRun } from "@/lib/data/runs";
 import { estimateCost, copyModel } from "@/lib/claude";
@@ -82,6 +84,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
    */
   const referenceId = readText(raw.referenceId);
   let reference: { label: string; body: string } | undefined;
+  let theme: LandingTheme | undefined;
 
   if (referenceId.startsWith("plano:")) {
     const { listBlueprints } = await import("@/lib/data/blueprints");
@@ -104,6 +107,22 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
       label: [found.title, found.source].filter(Boolean).join(" · "),
       body: found.body,
     };
+
+    /*
+     * El aspecto sale de la página de verdad, no del texto guardado.
+     *
+     * Al traerla se guardó la dirección en `note`, así que se vuelve a
+     * descargar para leer sus colores y su letra. Es una petición por
+     * generación y evita el problema que había: todas las landings salían
+     * iguales porque el aire estaba escrito a fuego, y el aire es la mitad que
+     * hace que parezca un artículo y no un anuncio.
+     *
+     * Si la página ya no está o no se deja leer, se sigue con el de siempre: es
+     * peor no generar nada que generar con el aspecto por defecto.
+     */
+    if (found.format === "landing" && found.note) {
+      theme = await lookOf(found.note).catch(() => undefined);
+    }
   }
 
   const fidelity = readText(raw.fidelity) === "inspirado" ? "inspirado" : "calcado";
@@ -149,6 +168,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
 
       const page = await saveLanding({
         productId,
+        theme,
         copyId: copyId || undefined,
         title: data.title,
         slug: data.slug,

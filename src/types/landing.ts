@@ -1,3 +1,5 @@
+import type { LandingTheme } from "@/lib/landing-theme";
+
 /**
  * Un publirreportaje como página web completa.
  *
@@ -141,6 +143,14 @@ export interface LandingPage {
    * artículo. Se decide por página: algunas piezas sí quieren el menú.
    */
   hideThemeChrome: boolean;
+  /**
+   * Colores, letra y ancho, sacados de la página que se calcó.
+   *
+   * Se guarda con la página y no se recalcula al dibujar: la referencia puede
+   * rediseñarse, y una página publicada no puede cambiar de aspecto sola.
+   * Vacío es el de siempre.
+   */
+  theme?: LandingTheme;
   /** La campaña con la que se etiqueta el tráfico hacia esta página. */
   utmCampaign?: string;
   /** El id de la página en Shopify, cuando ya se publicó. */

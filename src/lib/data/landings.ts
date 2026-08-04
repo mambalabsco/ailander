@@ -1,6 +1,7 @@
 import "server-only";
 
 import { requireContext } from "@/lib/supabase/session";
+import type { LandingTheme } from "@/lib/landing-theme";
 import type {
   LandingAuthor,
   LandingComment,
@@ -29,12 +30,22 @@ function toLanding(row: {
   shopify_page_id: string | null;
   shopify_url: string | null;
   published_at: string | null;
+  theme: unknown;
   created_at: string;
 }): LandingPage {
   return {
     id: row.id,
     productId: row.product_id,
     copyId: row.copy_id ?? undefined,
+    /*
+     * El aspecto viene de una columna `jsonb`, así que puede ser cualquier
+     * cosa. Se comprueba que al menos trae los colores: medio tema deja reglas
+     * de CSS sin valor, y con ellas se cae el resto de la hoja.
+     */
+    theme:
+      typeof row.theme === "object" && row.theme !== null && "ink" in row.theme
+        ? (row.theme as LandingPage["theme"])
+        : undefined,
     title: row.title,
     slug: row.slug,
     methodId: row.method_id ?? undefined,
@@ -63,6 +74,7 @@ export async function saveLanding(input: {
   sections: LandingSection[];
   imageSlots: LandingImageSlot[];
   comments: LandingComment[];
+  theme?: LandingTheme;
 }): Promise<LandingPage> {
   const { supabase, userId } = await requireContext();
 
@@ -80,6 +92,7 @@ export async function saveLanding(input: {
       sections: input.sections as never,
       image_slots: input.imageSlots as never,
       comments: input.comments as never,
+      theme: (input.theme ?? null) as never,
     })
     .select("*")
     .single();

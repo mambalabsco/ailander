@@ -484,6 +484,8 @@ type LandingPageRow = {
   sections: unknown;
   image_slots: unknown;
   comments: unknown;
+  /** Colores, letra y ancho. `null` es el aspecto de siempre. */
+  theme: unknown;
   created_at: string;
 };
 

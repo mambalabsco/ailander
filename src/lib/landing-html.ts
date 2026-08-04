@@ -1,4 +1,5 @@
 import { assignAvatars } from "@/lib/avatar-prompts";
+import { DEFAULT_THEME, type LandingTheme } from "@/lib/landing-theme";
 import type {
   LandingComment,
   LandingHeader,
@@ -23,10 +24,17 @@ import type {
 
 /* ------------------------------- Paleta -------------------------------------- */
 
-const INK = "#1c1e21";
-const MUTED = "#65676b";
-const LINE = "#e4e6eb";
-const SURFACE = "#f7f8fa";
+/*
+ * Los colores ya no viven aquí: vienen del tema.
+ *
+ * Estaban escritos a fuego y por eso **todas las landings salían iguales**. El
+ * generador elegía qué secciones poner y qué decir, pero el aire —los colores,
+ * la letra, el ancho— era el mismo calcara lo que calcara, y el aire es la mitad
+ * que hace que un publirreportaje parezca un artículo y no un anuncio.
+ *
+ * Se pasan por parámetro y no por variable de módulo: dos páginas se pueden
+ * dibujar a la vez y una global las mezclaría.
+ */
 
 /** Los de Facebook, para que el bloque de comentarios se reconozca al instante. */
 const FB = {
@@ -69,6 +77,13 @@ function inline(value: string): string {
  * llenos sigue siendo legible, y se ve exactamente qué queda por generar.
  */
 export interface RenderOptions {
+  /**
+   * El aspecto: colores, letra y ancho.
+   *
+   * Sale de la página que se está calcando. Sin él se usa el de siempre, para
+   * que una landing sin referencia salga exactamente como salía antes.
+   */
+  theme?: LandingTheme;
   /** Hueco → URL de la imagen ya generada. */
   urls?: Record<string, string>;
   /**
@@ -92,6 +107,7 @@ export interface RenderOptions {
 
 /** Un hueco de imagen: la imagen si existe, o un recuadro que dice qué falta. */
 function imageSlot(
+  t: LandingTheme,
   slot: string,
   purpose: string,
   alt: string,
@@ -119,11 +135,11 @@ function imageSlot(
 
 /* ------------------------------- Cabecera ------------------------------------- */
 
-function renderHeader(header: LandingHeader, urls: Record<string, string>): string {
+function renderHeader(t: LandingTheme, header: LandingHeader, urls: Record<string, string>): string {
   if (!header.enabled) return "";
 
   const announcement = header.announcement
-    ? `<div style="background:${INK};color:#fff;text-align:center;padding:9px 14px;font-size:13px;font-weight:600;letter-spacing:.02em">${inline(header.announcement)}</div>`
+    ? `<div style="background:${t.ink};color:#fff;text-align:center;padding:9px 14px;font-size:13px;font-weight:600;letter-spacing:.02em">${inline(header.announcement)}</div>`
     : "";
 
   // El logo es texto salvo que se haya generado uno: así la página funciona
@@ -143,15 +159,15 @@ function renderHeader(header: LandingHeader, urls: Record<string, string>): stri
     : header.logoSlot
       ? `<!-- LOGO ${escape(header.logoSlot)} — sustituye por la imagen del logo -->
        <div style="border:2px dashed #c7c7c7;border-radius:8px;padding:8px 18px;color:#8a8d91;font-size:12px">LOGO · ${escape(header.logoSlot)}</div>`
-      : `<div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:${INK}">${escape(header.logoText)}</div>`;
+      : `<div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:${t.ink}">${escape(header.logoText)}</div>`;
 
   return `${announcement}
-  <header style="border-bottom:1px solid ${LINE};background:#fff">
+  <header style="border-bottom:1px solid ${t.line};background:#fff">
     <div style="max-width:680px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px">
       ${logo}
       ${
         header.kicker
-          ? `<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:${MUTED}">${escape(header.kicker)}</div>`
+          ? `<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:${t.muted}">${escape(header.kicker)}</div>`
           : ""
       }
     </div>
@@ -168,25 +184,25 @@ function renderHeader(header: LandingHeader, urls: Record<string, string>): stri
  * credenciales en gris: es lo que da la sensación de estar leyendo a alguien y
  * no a una marca.
  */
-function renderAuthor(author: LandingAuthor, urls: Record<string, string>): string {
+function renderAuthor(t: LandingTheme, author: LandingAuthor, urls: Record<string, string>): string {
   const photo = author.photoSlot
-    ? imageSlot(
+    ? imageSlot(t, 
         author.photoSlot,
         "Retrato del autor",
         `Foto de ${author.name}`,
         true,
         urls[author.photoSlot],
       )
-    : `<div style="width:72px;height:72px;border-radius:50%;background:${LINE};color:${MUTED};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0">${escape(
+    : `<div style="width:72px;height:72px;border-radius:50%;background:${t.line};color:${t.muted};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0">${escape(
         author.name.trim().charAt(0).toUpperCase() || "?",
       )}</div>`;
 
   return `
-  <div style="display:flex;align-items:center;gap:16px;margin:24px 0;padding:18px;border:1px solid ${LINE};border-radius:14px;background:${SURFACE}">
+  <div style="display:flex;align-items:center;gap:16px;margin:24px 0;padding:18px;border:1px solid ${t.line};border-radius:14px;background:${t.surface}">
     ${photo}
     <div style="min-width:0">
-      <div style="font-size:19px;font-weight:700;color:${INK};line-height:1.3">${escape(author.name)}</div>
-      <div style="font-size:14px;color:${MUTED};margin-top:3px;line-height:1.45">${escape(author.credentials)}</div>
+      <div style="font-size:19px;font-weight:700;color:${t.ink};line-height:1.3">${escape(author.name)}</div>
+      <div style="font-size:14px;color:${t.muted};margin-top:3px;line-height:1.45">${escape(author.credentials)}</div>
       ${
         author.updatedAt
           ? `<div style="font-size:12px;color:#8a8d91;margin-top:6px">Actualizado el ${escape(author.updatedAt)}</div>`
@@ -207,12 +223,12 @@ const HEART = `<span style="display:inline-flex;width:18px;height:18px;border-ra
   <svg width="10" height="10" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 21s-8-4.9-8-10.4C4 7.4 6.2 5 9 5c1.7 0 3 .9 3 .9S13.3 5 15 5c2.8 0 5 2.4 5 5.6C20 16.1 12 21 12 21z"/></svg>
 </span>`;
 
-function renderComment(comment: LandingComment, faces: Map<string, string>): string {
+function renderComment(t: LandingTheme, comment: LandingComment, faces: Map<string, string>): string {
   const replies = (comment.replies ?? [])
     .map(
       (reply) => `
         <div style="display:flex;gap:8px;margin-top:8px">
-          ${face(reply.name, faces, 28)}
+          ${face(t, reply.name, faces, 28)}
           <div>
             <div style="background:${FB.bubble};border-radius:16px;padding:8px 12px;display:inline-block">
               <div style="font-weight:600;font-size:13px;color:${FB.name}">${escape(reply.name)}</div>
@@ -229,7 +245,7 @@ function renderComment(comment: LandingComment, faces: Map<string, string>): str
   return `
       <div style="padding:10px 0">
         <div style="display:flex;gap:8px;align-items:flex-start">
-          ${face(comment.name, faces, 40)}
+          ${face(t, comment.name, faces, 40)}
           <div style="flex:1;min-width:0">
             <div style="background:${FB.bubble};border-radius:18px;padding:9px 13px;display:inline-block;max-width:100%">
               <div style="font-weight:600;font-size:13px;color:${FB.name};line-height:1.3">${escape(comment.name)}</div>
@@ -262,19 +278,19 @@ function renderComment(comment: LandingComment, faces: Map<string, string>): str
  * quien no tiene foto—. La misma función para comentarios y respuestas: tenerlas
  * separadas fue justo lo que dejó a las respuestas sin foto.
  */
-function face(name: string, faces: Map<string, string>, size: number): string {
+function face(t: LandingTheme, name: string, faces: Map<string, string>, size: number): string {
   const url = faces.get(name.trim());
 
   if (url) {
     return `<img src="${escape(url)}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block" />`;
   }
 
-  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${LINE};color:${FB.meta};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size * 0.4)}px;flex-shrink:0">${escape(
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${t.line};color:${FB.meta};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size * 0.4)}px;flex-shrink:0">${escape(
     name.trim().charAt(0).toUpperCase() || "?",
   )}</div>`;
 }
 
-function renderComments(page: LandingPage, title: string, avatars: string[]): string {
+function renderComments(t: LandingTheme, page: LandingPage, title: string, avatars: string[]): string {
   const total = page.comments.reduce(
     (count, comment) => count + 1 + (comment.replies?.length ?? 0),
     0,
@@ -304,25 +320,26 @@ function renderComments(page: LandingPage, title: string, avatars: string[]): st
 
   return `
   <section style="margin:40px 0 0">
-    <h2 style="font-size:22px;margin:0 0 4px;font-weight:700;color:${INK}">${inline(title || "Comentarios")}</h2>
+    <h2 style="font-size:22px;margin:0 0 4px;font-weight:700;color:${t.ink}">${inline(title || "Comentarios")}</h2>
     <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid ${FB.line};padding-bottom:8px;margin-bottom:6px">
       <span style="font-size:14px;color:${FB.meta}">${total} comentarios</span>
       <span style="font-size:14px;color:${FB.meta};font-weight:600">Más relevantes ▾</span>
     </div>
     <div style="${FONT}">
-      ${page.comments.map((comment) => renderComment(comment, faces)).join("")}
+      ${page.comments.map((comment) => renderComment(t, comment, faces)).join("")}
     </div>
   </section>`;
 }
 
 /* -------------------------------- Secciones ----------------------------------- */
 
-function stars(rating: number): string {
+function stars(t: LandingTheme, rating: number): string {
   const full = Math.max(0, Math.min(5, Math.round(rating)));
   return `<span style="color:#f5a623;letter-spacing:2px;font-size:17px">${"★".repeat(full)}${"☆".repeat(5 - full)}</span>`;
 }
 
 function renderSection(
+  t: LandingTheme,
   section: LandingSection,
   page: LandingPage,
   urls: Record<string, string>,
@@ -332,23 +349,23 @@ function renderSection(
 
   switch (section.kind) {
     case "titular":
-      return `<h1 style="font-size:32px;line-height:1.22;margin:0 0 14px;font-weight:800;letter-spacing:-.02em;color:${INK}">${inline(text)}</h1>`;
+      return `<h1 style="font-family:${t.headingFont};font-size:32px;line-height:1.22;margin:0 0 14px;font-weight:800;letter-spacing:-.02em;color:${t.ink}">${inline(text)}</h1>`;
 
     case "entradilla":
       return `<p style="font-size:19px;line-height:1.6;color:#3a3b3c;margin:0 0 18px">${inline(text)}</p>`;
 
     case "autor":
-      return page.author ? renderAuthor(page.author, urls) : "";
+      return page.author ? renderAuthor(t, page.author, urls) : "";
 
     case "valoracion":
-      return `<div style="display:flex;align-items:center;gap:9px;margin:0 0 18px;font-size:14px;color:${MUTED}">
-      ${stars(section.rating ?? 5)}
-      <span><strong style="color:${INK}">${(section.rating ?? 5).toFixed(1)}</strong> de 5</span>
+      return `<div style="display:flex;align-items:center;gap:9px;margin:0 0 18px;font-size:14px;color:${t.muted}">
+      ${stars(t, section.rating ?? 5)}
+      <span><strong style="color:${t.ink}">${(section.rating ?? 5).toFixed(1)}</strong> de 5</span>
       ${section.reviews ? `<span>· ${section.reviews.toLocaleString("es-ES")} reseñas</span>` : ""}
     </div>`;
 
     case "medios":
-      return `<div style="margin:22px 0;padding:14px 0;border-top:1px solid ${LINE};border-bottom:1px solid ${LINE};text-align:center">
+      return `<div style="margin:22px 0;padding:14px 0;border-top:1px solid ${t.line};border-bottom:1px solid ${t.line};text-align:center">
       <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9a9da1;margin-bottom:8px">${escape(text || "Visto en")}</div>
       <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;color:#8a8d91;font-weight:800;font-size:15px;letter-spacing:.04em">
         ${(section.items ?? []).map((item) => `<span>${escape(item)}</span>`).join("")}
@@ -356,10 +373,10 @@ function renderSection(
     </div>`;
 
     case "subtitulo":
-      return `<h2 style="font-size:24px;line-height:1.3;margin:34px 0 12px;font-weight:700;letter-spacing:-.01em;color:${INK}">${inline(text)}</h2>`;
+      return `<h2 style="font-family:${t.headingFont};font-size:24px;line-height:1.3;margin:34px 0 12px;font-weight:700;letter-spacing:-.01em;color:${t.ink}">${inline(text)}</h2>`;
 
     case "parrafo":
-      return `<p style="font-size:17px;line-height:1.72;margin:0 0 16px;color:${INK}">${inline(text)}</p>`;
+      return `<p style="font-size:17px;line-height:1.72;margin:0 0 16px;color:${t.ink}">${inline(text)}</p>`;
 
     case "lista":
       return `<ul style="font-size:17px;line-height:1.72;margin:0 0 18px;padding-left:0;list-style:none">${(
@@ -372,15 +389,15 @@ function renderSection(
         .join("")}</ul>`;
 
     case "cita":
-      return `<blockquote style="margin:22px 0;padding:16px 20px;border-left:4px solid ${FB.blue};background:${SURFACE};font-size:18px;line-height:1.6;font-style:italic;color:${INK}">${inline(text)}</blockquote>`;
+      return `<blockquote style="margin:22px 0;padding:16px 20px;border-left:4px solid ${FB.blue};background:${t.surface};font-size:18px;line-height:1.6;font-style:italic;color:${t.ink}">${inline(text)}</blockquote>`;
 
     case "destacado":
       return `<div style="margin:22px 0;padding:18px 20px;background:#fff8e1;border:1px solid #ffe082;border-radius:12px;font-size:17px;line-height:1.65;color:#4a3b00">${inline(text)}</div>`;
 
     case "dato":
-      return `<div style="margin:24px 0;padding:22px;background:${SURFACE};border-radius:14px;text-align:center">
+      return `<div style="margin:24px 0;padding:22px;background:${t.surface};border-radius:14px;text-align:center">
       <div style="font-size:44px;font-weight:800;color:${FB.blue};line-height:1">${escape(section.value ?? "")}</div>
-      <div style="font-size:16px;color:${MUTED};margin-top:8px;line-height:1.5">${inline(text)}</div>
+      <div style="font-size:16px;color:${t.muted};margin-top:8px;line-height:1.5">${inline(text)}</div>
     </div>`;
 
     case "mecanismo":
@@ -428,7 +445,7 @@ function renderSection(
       ${(section.items ?? [])
         .map(
           (item, index) => `
-        <div style="flex:1;min-width:150px;border:${index === 1 ? `2px solid ${INK}` : `1px solid ${LINE}`};border-radius:12px;padding:16px;text-align:center;background:#fff">
+        <div style="flex:1;min-width:150px;border:${index === 1 ? `2px solid ${t.ink}` : `1px solid ${t.line}`};border-radius:12px;padding:16px;text-align:center;background:#fff">
           <div style="font-size:16px;line-height:1.5">${inline(item)}</div>
         </div>`,
         )
@@ -439,19 +456,19 @@ function renderSection(
       return `<div style="margin:26px 0">${(section.pairs ?? [])
         .map(
           (pair) => `
-        <div style="border-bottom:1px solid ${LINE};padding:14px 0">
-          <div style="font-size:17px;font-weight:700;color:${INK};margin-bottom:6px">${escape(pair.question)}</div>
+        <div style="border-bottom:1px solid ${t.line};padding:14px 0">
+          <div style="font-size:17px;font-weight:700;color:${t.ink};margin-bottom:6px">${escape(pair.question)}</div>
           <div style="font-size:16px;line-height:1.65;color:#3a3b3c">${inline(pair.answer)}</div>
         </div>`,
         )
         .join("")}</div>`;
 
     case "separador":
-      return `<hr style="border:0;border-top:1px solid ${LINE};margin:32px 0" />`;
+      return `<hr style="border:0;border-top:1px solid ${t.line};margin:32px 0" />`;
 
     case "imagen": {
       const slot = page.imageSlots.find((item) => item.slot === section.slot);
-      return imageSlot(
+      return imageSlot(t, 
         section.slot ?? "",
         slot?.purpose ?? "",
         slot?.alt ?? "",
@@ -466,7 +483,7 @@ function renderSection(
     </div>`;
 
     case "comentarios":
-      return renderComments(page, text, avatars);
+      return renderComments(t, page, text, avatars);
 
     case "aviso-legal":
       return `<p style="font-size:11px;color:#9a9da1;line-height:1.6;margin:38px 0 0;text-transform:uppercase;letter-spacing:.03em">${escape(text)}</p>`;
@@ -533,22 +550,30 @@ const HIDE_CHROME = `<style>
 </style>`;
 
 export function renderLandingHtml(page: LandingPage, options: RenderOptions = {}): string {
+  /*
+   * El aspecto sale de la referencia, y si no hay, del de siempre.
+   *
+   * Sin esto todas las landings salían iguales: se elegía qué secciones poner y
+   * qué decir, pero los colores, la letra y el ancho estaban escritos a fuego.
+   */
+  const t = page.theme ?? options.theme ?? DEFAULT_THEME;
+
   // Sin `embedUrls` no se incrusta nada aunque haya imágenes: es lo que separa
   // la vista previa del HTML que se pega en Shopify.
   const urls = options.embedUrls ? (options.urls ?? {}) : {};
 
   const avatars = options.embedUrls ? (options.avatars ?? []) : [];
   const body = page.sections
-    .map((section) => renderSection(section, page, urls, avatars))
+    .map((section) => renderSection(t, section, page, urls, avatars))
     .join("\n");
-  const header = page.header ? renderHeader(page.header, urls) : "";
+  const header = page.header ? renderHeader(t, page.header, urls) : "";
 
   // Solo al publicar: en la vista previa de la plataforma no hay tema que ocultar.
   const chrome = options.embedUrls && page.hideThemeChrome ? `${HIDE_CHROME}\n` : "";
 
-  return `${chrome}<div class="${ROOT_CLASS}" style="${FONT};color:${INK};background:#fff">
+  return `${chrome}<div class="${ROOT_CLASS}" style="font-family:${t.bodyFont};color:${t.ink};background:${t.background}">
 ${header}
-<article style="max-width:680px;margin:0 auto;padding:26px 18px 48px">
+<article style="max-width:${t.width}px;margin:0 auto;padding:26px 18px 48px">
 ${body}
 </article>
 </div>`;
