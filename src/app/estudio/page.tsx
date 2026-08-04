@@ -37,6 +37,8 @@ export default async function EstudioPage(props: {
       installed: false,
       authenticated: false,
       reason: error instanceof Error ? error.message : "No se pudo ejecutar el CLI.",
+      credentialsPath: "",
+      hasCredentials: false,
     })),
     /*
      * El motivo no se traga.
@@ -105,6 +107,8 @@ export default async function EstudioPage(props: {
             ("reason" in higgs ? (higgs.reason ?? "") : "") ||
             cliVideoModels.error ||
             cliModels.error,
+          credentialsPath: "credentialsPath" in higgs ? (higgs.credentialsPath ?? "") : "",
+          hasCredentials: "hasCredentials" in higgs ? (higgs.hasCredentials ?? false) : false,
         }}
       />
     </div>

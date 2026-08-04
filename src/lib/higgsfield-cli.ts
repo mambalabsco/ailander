@@ -86,6 +86,31 @@ export interface CliStatus {
   authenticated: boolean;
   version?: string;
   reason?: string;
+  /** Dónde está buscando la sesión, y de quién es esa carpeta. */
+  home?: string;
+  credentialsPath?: string;
+  hasCredentials?: boolean;
+}
+
+/**
+ * Dónde guarda el CLI la sesión, y si está ahí.
+ *
+ * ## Por qué esto hace falta
+ *
+ * «Sin sesión» no dice **de quién**. El CLI guarda las credenciales en el
+ * `~/.config/higgsfield` de quien ejecuta el comando, y la plataforma corre como
+ * su propio usuario de sistema. Iniciar sesión por SSH como otro —o con `sudo`,
+ * que cambia el `HOME`— deja el archivo en una carpeta que la plataforma no mira
+ * nunca: el login sale bien, y aquí sigue diciendo que no hay sesión.
+ *
+ * Es el mismo síntoma con dos causas muy distintas, y sin decir la ruta no hay
+ * forma de saber cuál.
+ */
+function credentialsFile(): { home: string; path: string; exists: boolean } {
+  const home = process.env.HOME?.trim() || "";
+  const path = home ? `${home}/.config/higgsfield/credentials.json` : "";
+
+  return { home, path, exists: Boolean(path) && existsSync(path) };
 }
 
 async function exec(
@@ -188,6 +213,14 @@ async function ensureWorkspace(): Promise<void> {
 }
 
 export async function cliStatus(): Promise<CliStatus> {
+  const file = credentialsFile();
+
+  const where = {
+    home: file.home,
+    credentialsPath: file.path,
+    hasCredentials: file.exists,
+  };
+
   let version: string | undefined;
 
   try {
@@ -195,6 +228,7 @@ export async function cliStatus(): Promise<CliStatus> {
     version = stdout.trim().split("\n")[0];
   } catch (error) {
     return {
+      ...where,
       installed: false,
       authenticated: false,
       reason: error instanceof Error ? error.message : "No se pudo ejecutar el CLI.",
@@ -205,16 +239,23 @@ export async function cliStatus(): Promise<CliStatus> {
   const combined = `${stdout}\n${stderr}`;
 
   if (looksUnauthenticated(combined)) {
+    /*
+     * El archivo existiendo y el CLI diciendo que no hay sesión son dos cosas
+     * distintas, y se arreglan distinto: si no está, hay que iniciar sesión
+     * **como este usuario**; si está, la sesión caducó y hay que renovarla.
+     */
     return {
+      ...where,
       installed: true,
       authenticated: false,
       version,
-      reason:
-        "El CLI está instalado pero sin sesión. Ejecuta «higgsfield auth login» una vez en el servidor: la sesión se renueva sola después.",
+      reason: file.exists
+        ? `La sesión guardada en ${file.path} ya no vale. Vuelve a iniciarla con ese mismo usuario.`
+        : `No hay sesión en ${file.path || "el HOME del servicio"}. El CLI la guarda en el HOME de quien ejecuta el comando, así que hay que iniciarla **con el usuario que corre la plataforma** — con «sudo» o con otro usuario, el archivo acaba en otra carpeta y aquí no se ve.`,
     };
   }
 
-  return { installed: true, authenticated: true, version };
+  return { ...where, installed: true, authenticated: true, version };
 }
 
 /**

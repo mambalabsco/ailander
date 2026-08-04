@@ -34,6 +34,8 @@ export default async function AvataresPage(props: {
       installed: false,
       authenticated: false,
       reason: error instanceof Error ? error.message : "No se pudo ejecutar el CLI.",
+      credentialsPath: "",
+      hasCredentials: false,
     })),
     listCliModels("image").then(
       (models) => ({ models, error: "" }),
@@ -80,6 +82,7 @@ export default async function AvataresPage(props: {
           higgsfield={{
             ok: higgs.authenticated === true,
             reason: ("reason" in higgs ? (higgs.reason ?? "") : "") || cliModels.error,
+            credentialsPath: "credentialsPath" in higgs ? (higgs.credentialsPath ?? "") : "",
           }}
         />
       </SectionCard>

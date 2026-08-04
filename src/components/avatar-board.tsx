@@ -63,7 +63,7 @@ export function AvatarBoard({
   contexts: { id: string; label: string; note: string }[];
   people: { id: string; label: string; description: string }[];
   cliModels: { slug: string; name: string }[];
-  higgsfield: { ok: boolean; reason: string };
+  higgsfield: { ok: boolean; reason: string; credentialsPath?: string };
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -174,10 +174,22 @@ export function AvatarBoard({
           <p className="text-sm font-medium">O generar personas nuevas</p>
 
           {higgsfield.ok ? null : (
-            <p className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              {higgsfield.reason || "El CLI de Higgsfield no responde."} Sin él solo se pueden
-              subir caras.
-            </p>
+            <div className="mt-2 space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <p>
+                {higgsfield.reason || "El CLI de Higgsfield no responde."} Sin él solo se pueden
+                subir caras.
+              </p>
+
+              {/*
+                El login devuelve a `localhost:8765`, y por SSH esa vuelta no
+                llega: el navegador está en tu máquina y quien escucha es el
+                servidor. El túnel es lo que los une.
+              */}
+              <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
+                <code>{`ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co
+cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765`}</code>
+              </pre>
+            </div>
           )}
 
           {/*

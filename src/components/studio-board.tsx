@@ -87,8 +87,8 @@ export function StudioBoard({
   products: { id: string; name: string }[];
   cliModels: { slug: string; name: string }[];
   cliVideoModels: { slug: string; name: string; takesReferences: boolean }[];
-  /** Si el CLI de Higgsfield responde, y por qué no si no. */
-  higgsfield: { ok: boolean; reason: string };
+  /** Si el CLI de Higgsfield responde, por qué no, y dónde busca la sesión. */
+  higgsfield: { ok: boolean; reason: string; credentialsPath?: string; hasCredentials?: boolean };
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -238,20 +238,37 @@ export function StudioBoard({
             {higgsfield.reason ||
               "El CLI de Higgsfield no responde. Sin él solo están los modelos de kie."}
           </p>
-          <p className="mt-1 text-xs">
-            {higgsfield.ok ? (
-              <>
-                Comprueba qué devuelve:{" "}
-                <code>cd /home/plataforma/plataforma-ia && npx higgsfield model list --video --json</code>
-              </>
-            ) : (
-              <>
-                En el servidor:{" "}
-                <code>cd /home/plataforma/plataforma-ia && npx higgsfield auth login</code>. La
-                sesión se renueva sola después.
-              </>
-            )}
-          </p>
+          {higgsfield.ok ? (
+            <p className="mt-1 text-xs">
+              Comprueba qué devuelve:{" "}
+              <code>cd /home/plataforma/plataforma-ia && npx higgsfield model list --video --json</code>
+            </p>
+          ) : (
+            /*
+              El login abre un navegador y devuelve a `localhost:8765`.
+
+              Por SSH eso no llega: el navegador está en tu máquina y quien
+              escucha en ese puerto es el servidor. El túnel es lo que los une, y
+              sin él el login «sale bien» y la sesión nunca se guarda.
+
+              Y tiene que ser **el usuario del servicio**: el CLI guarda en el
+              HOME de quien ejecuta, así que con `sudo` acaba en /root.
+            */
+            <div className="mt-2 space-y-1 text-xs">
+              <p>Desde tu máquina, con un túnel para que la vuelta del navegador llegue:</p>
+              <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
+                <code>{`ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co
+cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765`}</code>
+              </pre>
+              <p>
+                Sin <code>sudo</code> y con el usuario <code>plataforma</code>: el CLI guarda la
+                sesión en el HOME de quien ejecuta el comando.
+                {higgsfield.credentialsPath ? (
+                  <> Aquí se busca en <code>{higgsfield.credentialsPath}</code>.</>
+                ) : null}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

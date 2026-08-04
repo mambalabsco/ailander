@@ -331,3 +331,28 @@ cambio de hoy a un gasto de marzo daría un beneficio que parece exacto y no lo 
 campaña van a su propio grupo, «sin atribuir», en vez de repartirse: repartirlos le
 daría a cada campaña un ROAS más bonito y falso, y verlos juntos dice cuánto del
 negocio no sabes de dónde viene.
+
+## El CLI de Higgsfield en el servidor
+
+`higgsfield auth login` abre un navegador y espera la vuelta en
+`http://localhost:8765/callback`. Por SSH eso **no llega**: el navegador está en
+tu máquina y quien escucha en ese puerto es el servidor. El login parece salir
+bien y la sesión nunca se guarda.
+
+Se une con un túnel:
+
+```
+ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co
+cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765
+```
+
+Abre en tu navegador la dirección que imprima. La vuelta a `localhost:8765` viaja
+por el túnel hasta el CLI que está esperando en el servidor.
+
+**Sin `sudo`, y con el usuario `plataforma`.** El CLI guarda la sesión en el
+`~/.config/higgsfield/credentials.json` de quien ejecuta el comando. Con `sudo`
+acaba en `/root/.config/…`, que la plataforma no mira nunca: el login sale bien
+y en la pantalla sigue diciendo que no hay sesión.
+
+Si el aviso de la plataforma dice que la sesión existe pero ya no vale, es que
+caducó: mismo comando, mismo usuario.
