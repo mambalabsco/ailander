@@ -3,7 +3,10 @@ import { test } from "node:test";
 
 import {
   buildCopyPrompt,
+  hasSubstance,
+  isChrome,
   keepsShape,
+  neutralizeLinks,
   sanitizeCss,
   sanitizeHtml,
 } from "./landing-copy-html.ts";
@@ -24,6 +27,36 @@ test("los scripts se van con su contenido", () => {
 
 test("un script sin cerrar tampoco se cuela", () => {
   assert.ok(!sanitizeHtml('<div><script src="https://mal/x.js">').includes("script"));
+});
+
+/*
+ * El fallo que llenó una vista previa de CSS a la vista. Las secciones se
+ * recortan por tamaño antes de llegar aquí, y ese recorte cae a veces dentro de
+ * un `<style>`: sin etiqueta de cierre, la de apertura se quitaba sola y las
+ * reglas se quedaban **como texto** en mitad de la página.
+ */
+test("un style cortado a la mitad no deja sus reglas como texto", () => {
+  const cortado =
+    '<div class="gps"><style>.gps [style*="--b:"]{border:var(--b)} .gps.gpsi:hover{color:red}';
+
+  const limpio = sanitizeHtml(cortado);
+
+  assert.equal(limpio, '<div class="gps">');
+  assert.ok(!limpio.includes("border:var"));
+});
+
+test("un script cortado tampoco deja su código escrito", () => {
+  const limpio = sanitizeHtml('<div>Hola<script>const secreto = "abc"; fetch(');
+
+  assert.equal(limpio, "<div>Hola");
+  assert.ok(!limpio.includes("secreto"));
+});
+
+/* Lo que está bien cerrado sigue funcionando igual: solo se cae lo colgante. */
+test("lo que viene después de un style cerrado no se pierde", () => {
+  const limpio = sanitizeHtml("<div>Antes<style>.a{color:red}</style><p>Después</p></div>");
+
+  assert.equal(limpio, "<div>Antes<p>Después</p></div>");
 });
 
 test("los iframes y los objetos se van", () => {
@@ -174,4 +207,66 @@ test("se le dice el idioma y que traduzca con intención", () => {
 
 test("nada de lo del otro producto se arrastra", () => {
   assert.match(buildCopyPrompt({ html: SECCION, context: "x", language: "es" }), /ni estudios/);
+});
+
+/* ------------------------------- Los enlaces -------------------------------- */
+
+/*
+ * Los botones de una página de venta llevan al carrito **de esa tienda**.
+ * Copiarla tal cual da una página tuya cuyo «Comprar» convierte para el
+ * competidor — y no falla en ningún sitio, la página se ve perfecta.
+ */
+test("los enlaces dejan de apuntar a la tienda copiada", () => {
+  const { html, changed } = neutralizeLinks(
+    '<a href="https://otra.com/cart" class="cta">Comprar</a><a href="/products/x">Ver</a>',
+  );
+
+  assert.ok(!html.includes("otra.com"));
+  assert.ok(!html.includes("/products/x"));
+  assert.equal(changed, 2);
+  assert.match(html, /class="cta"/);
+});
+
+/* Un ancla es navegación dentro de la misma página: sigue valiendo. */
+test("las anclas internas se quedan", () => {
+  const { html, changed } = neutralizeLinks('<a href="#oferta">Ir a la oferta</a>');
+
+  assert.match(html, /href="#oferta"/);
+  assert.equal(changed, 0);
+});
+
+test("un enlace sin href no se toca", () => {
+  assert.equal(neutralizeLinks("<a>Texto</a>").changed, 0);
+});
+
+/* ---------------------------- Lo que no se copia ---------------------------- */
+
+/*
+ * La cabecera de un tema de Shopify son veinte mil caracteres de menú
+ * desplegable, con los enlaces y el logo de otro.
+ */
+test("el armazón de la tienda no es la landing", () => {
+  for (const type of ["announcement-bar", "header", "footer", "main-nav", "cookie-banner"]) {
+    assert.equal(isChrome(type), true, type);
+  }
+});
+
+test("lo que sí es la página se copia", () => {
+  for (const type of ["hero", "slider", "rich-text", "faq", "testimonios"]) {
+    assert.equal(isChrome(type), false, type);
+  }
+});
+
+/*
+ * Después de limpiar puede no quedar nada: una franja que solo era un script de
+ * seguimiento. Guardarla mete huecos vacíos en mitad de la página.
+ */
+test("una sección que se quedó en nada no se guarda", () => {
+  assert.equal(hasSubstance('<div class="x"></div>'), false);
+  assert.equal(hasSubstance("   "), false);
+});
+
+test("una sección con texto o con imagen sí", () => {
+  assert.equal(hasSubstance("<p>Volver a caminar sin pensarlo</p>"), true);
+  assert.equal(hasSubstance('<div><img src="/a.jpg" alt=""></div>'), true);
 });

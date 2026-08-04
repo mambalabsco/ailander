@@ -763,9 +763,15 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
       await report("Descargando la página y separando sus secciones");
 
       const { readReferenceSections } = await import("@/lib/reference-page");
-      const { buildCopyPrompt, keepsShape, sanitizeCss, sanitizeHtml } = await import(
-        "@/lib/landing-copy-html"
-      );
+      const {
+        buildCopyPrompt,
+        hasSubstance,
+        isChrome,
+        keepsShape,
+        neutralizeLinks,
+        sanitizeCss,
+        sanitizeHtml,
+      } = await import("@/lib/landing-copy-html");
 
       const sections = await readReferenceSections(url);
 
@@ -780,13 +786,40 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
       let inputTokens = 0;
       let outputTokens = 0;
 
+      let links = 0;
+
       for (const [index, section] of sections.entries()) {
         if (await cancelled()) break;
 
+        /*
+         * El armazón de su tienda no es su landing.
+         *
+         * La barra de anuncio, la cabecera con su menú y el pie con sus
+         * condiciones vienen con sus enlaces, su logo y sus políticas. Copiarlos
+         * da una página con la navegación de otro encima — y son la mitad del
+         * peso: la cabecera de un tema de Shopify son veinte mil caracteres de
+         * menú desplegable.
+         */
+        if (isChrome(section.type, section.role)) continue;
+
         await report(`Adaptando la sección ${index + 1} de ${sections.length}`);
 
-        const original = sanitizeHtml(section.html);
+        /*
+         * Los enlaces dejan de apuntar a su tienda.
+         *
+         * Los botones de una página de venta llevan a **su** carrito: copiarla
+         * tal cual da una página tuya cuyo «Comprar» convierte para él. Y no
+         * falla en ningún sitio, la página se ve perfecta.
+         */
+        const clean = neutralizeLinks(sanitizeHtml(section.html));
+        const original = clean.html;
         const css = sanitizeCss(section.css);
+
+        links += clean.changed;
+
+        // Lo que se quedó en nada al limpiar —una franja que solo era un script
+        // de seguimiento, o un bloque cortado por el tope— mete huecos vacíos.
+        if (!hasSubstance(original)) continue;
 
         /*
          * Una sección sin texto —un separador, una franja de color— no necesita
@@ -823,7 +856,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           inputTokens += outcome.inputTokens;
           outputTokens += outcome.outputTokens;
 
-          const rewritten = sanitizeHtml(outcome.data.html);
+          const rewritten = neutralizeLinks(sanitizeHtml(outcome.data.html)).html;
           const verdict = keepsShape(original, rewritten);
 
           if (!verdict.ok) {
@@ -848,6 +881,19 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         }
       }
 
+      /*
+       * Si al limpiar no quedó nada, se dice en vez de guardar una página vacía.
+       *
+       * Pasa con las que pinta entera el navegador: hay secciones en el HTML,
+       * pero dentro solo hay contenedores y scripts. Guardar quince secciones
+       * vacías se lee como que la copia funcionó.
+       */
+      if (out.length === 0) {
+        throw new Error(
+          "De esa página no quedó ninguna sección con contenido al limpiarla. Suele pasar cuando la pinta entera el navegador: no hay marcado que copiar.",
+        );
+      }
+
       await report("Guardando la página");
 
       const page = await saveLanding({
@@ -864,8 +910,13 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       return {
         summary: [
-          `${out.length} secciones copiadas de ${new URL(url).hostname}.`,
+          `${out.length} secciones copiadas de ${new URL(url).hostname}`,
+          out.length < sections.length
+            ? ` (de ${sections.length}; el resto era su cabecera, su pie o quedó vacío)`
+            : "",
+          ".",
           warnings.length > 0 ? ` ${warnings.length} se quedaron con el texto original.` : "",
+          links > 0 ? ` ${links} enlaces apuntaban a su tienda y se han desactivado.` : "",
           " Las imágenes siguen siendo las suyas: cámbialas antes de publicar.",
         ].join(""),
         result: { landingId: page.id, warnings },
