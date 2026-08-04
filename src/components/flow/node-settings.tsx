@@ -368,6 +368,9 @@ export function NodeSettings({
             <ClipSeconds
               model={text(settings, "model") || (type === "anuncio" ? "seedance2" : "")}
               value={number(settings, "seconds", type === "anuncio" ? 15 : 6)}
+              // El nodo de anuncio parte solo lo que no cabe en una pieza; el de
+              // clip no, porque un clip **es** un plano.
+              chains={type === "anuncio"}
               onChange={(next) => set("seconds", next)}
             />
             {aspect()}
@@ -832,15 +835,19 @@ function WriteWithClaude({
 function ClipSeconds({
   model,
   value,
+  chains,
   onChange,
 }: {
   model: string;
   value: number;
+  /** Si el nodo sabe partir el encargo en tramos encadenados. */
+  chains?: boolean;
   onChange: (seconds: number) => void;
 }) {
   const generator = findGenerator(model);
   const fits = nearestDuration(generator, value);
   const short = fits < Math.round(value);
+  const pieces = Math.ceil(Math.max(1, Math.round(value)) / generator.maxSeconds);
 
   return (
     <label className="flex flex-col gap-1">
@@ -848,7 +855,7 @@ function ClipSeconds({
         Segundos · {durationLabel(generator)}
       </span>
 
-      {generator.durations.length > 0 ? (
+      {generator.durations.length > 0 && !chains ? (
         <SelectField value={String(fits)} onChange={(event) => onChange(Number(event.target.value))}>
           {generator.durations.map((option) => (
             <option key={option} value={option}>
@@ -860,17 +867,29 @@ function ClipSeconds({
         <input
           type="number"
           min={generator.minSeconds}
-          max={generator.maxSeconds}
+          // Partiendo en tramos, el tope deja de ser el del generador: lo que
+          // manda es lo que dura el anuncio.
+          max={chains ? 180 : generator.maxSeconds}
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
           // Se ajusta al salir y no al teclear: corregirlo mientras se escribe
           // impide llegar a un número de dos cifras.
-          onBlur={() => onChange(fits)}
+          onBlur={() => (chains ? undefined : onChange(fits))}
           className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
         />
       )}
 
-      {short ? (
+      {/*
+        Con encadenado, pasarse del tope ya no es un problema: es lo normal.
+        Sin él, sigue siendo un recorte y hay que decirlo.
+      */}
+      {chains && pieces > 1 ? (
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {generator.label} hace {generator.maxSeconds} s por pieza, así que esto sale en{" "}
+          {pieces} tramos encadenados: cada uno arranca del último fotograma del anterior y cuenta
+          su parte del guion. Son {pieces} generaciones.
+        </span>
+      ) : short && !chains ? (
         <span className="text-xs text-amber-700 dark:text-amber-400">
           {generator.label} no llega a {Math.round(value)} s: va a durar {fits}. Para más largo,
           monta el anuncio plano a plano y encadénalo con un montaje.

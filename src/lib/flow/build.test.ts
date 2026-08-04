@@ -49,8 +49,8 @@ test("lo que no cabe en una pieza se dice, no se recorta", () => {
     videoModels: [{ id: "seedance2", label: "Seedance 2", note: "", maxSeconds: 15 }],
   });
 
-  assert.match(prompt, /no caben en un solo nodo de anuncio/);
-  assert.match(prompt, /acelerado/);
+  assert.match(prompt, /lo resuelve solo|resuelve solo/);
+  assert.match(prompt, /un solo\*\* nodo de anuncio/);
 });
 
 test("lo que sí cabe no lleva advertencia", () => {
@@ -60,7 +60,7 @@ test("lo que sí cabe no lleva advertencia", () => {
     videoModels: [{ id: "seedance2", label: "Seedance 2", note: "", maxSeconds: 15 }],
   });
 
-  assert.ok(!prompt.includes("no caben en un solo nodo"));
+  assert.ok(!prompt.includes("lo\nresuelve solo"));
 });
 
 test("cuánto dura cada generador se le dice", () => {

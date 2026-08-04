@@ -21,6 +21,7 @@ import {
   burnSubtitles,
   compose,
   keyframe,
+  lastFrame,
   makeMusic,
   mediaSeconds,
   mergeVideos,
@@ -31,6 +32,7 @@ import {
 import { composeTracks, planAssembly } from "@/lib/flow/assemble";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
+import { planSegments, segmentInstruction, sliceScript, totalSeconds } from "@/lib/video/segments";
 import { findMusicGenerator } from "@/lib/video/music";
 import { findMusicLevel } from "@/lib/video/loudness";
 import { findVoicePreset } from "@/lib/video/voice-settings";
@@ -347,43 +349,112 @@ async function runNode(
        * tercio de lo planeado es otro anuncio.
        */
       const wanted = num(node.settings, "seconds", 15);
-      const seconds = nearestDuration(model, wanted);
+
+      /*
+       * Un anuncio largo, en un generador que solo hace piezas cortas.
+       *
+       * Antes se recortaba a lo que el modelo aceptaba y la dirección seguía
+       * pidiendo la historia entera: salía el anuncio al triple de velocidad. La
+       * otra salida —montar cuatro nodos y escribir una trama nueva en cada uno—
+       * no da un anuncio de cincuenta segundos, da cuatro de quince pegados, con
+       * otro sitio y otra cara en cada uno.
+       *
+       * Así que se parte en tramos que el generador sí acepta y se encadenan por
+       * el último fotograma: cada uno empieza exactamente donde acabó el
+       * anterior, y cada uno cuenta **su parte** del guion. Con un solo tramo
+       * esto no cambia nada — es el caso normal y no paga nada de más.
+       */
+      const segments = planSegments({
+        seconds: wanted,
+        maxSeconds: model.maxSeconds,
+        minSeconds: model.minSeconds,
+        durations: model.durations,
+      });
+
+      const seconds = segments[0].seconds;
+      const total = totalSeconds(segments);
+
+      if (segments.length > 1) {
+        await ctx.report(
+          `${Math.round(wanted)} s no caben en una pieza de ${model.label}: van ${segments.length} tramos de ${seconds} s encadenados, ${total} s en total.`,
+        );
+      } else if (seconds !== Math.round(wanted)) {
+        await ctx.report(
+          `${model.label} no hace ${Math.round(wanted)} s: este anuncio va a durar ${seconds}. ${durationLabel(model)}.`,
+        );
+      }
 
       // El nombre solo para nombrarlo en el encargo; que falle no impide rodar.
       const product = await findProductAnywhere(ctx.productId).catch(() => null);
 
-      const brief = directorBrief({
-        script: script.value,
-        templateId: text(node.settings, "director"),
-        productName: product?.name,
-        language: product?.language,
-        seconds,
-        aspectRatio,
-        references: references.length,
-      });
+      const pieces: string[] = [];
+      /** El último fotograma del tramo anterior, que abre el siguiente. */
+      let carry = "";
 
-      if (seconds !== Math.round(wanted)) {
+      for (const segment of segments) {
+        const brief = directorBrief({
+          script: sliceScript(script.value, segment),
+          templateId: text(node.settings, "director"),
+          productName: product?.name,
+          language: product?.language,
+          seconds: segment.seconds,
+          aspectRatio,
+          references: references.length + (carry ? 1 : 0),
+          continuity: segmentInstruction(segment),
+        });
+
+        if (brief.trimmed > 0) {
+          await ctx.report(`El encargo no cabía: se recortaron ${brief.trimmed} caracteres.`);
+        }
+
         await ctx.report(
-          `${model.label} no hace ${Math.round(wanted)} s de una pieza: este anuncio va a durar ${seconds}. ` +
-            `${durationLabel(model)}. Para más largo, móntalo plano a plano y encadénalo con un montaje.`,
+          segments.length > 1
+            ? `Generando el tramo ${segment.index} de ${segment.total} con ${model.label}`
+            : `Generando el anuncio con ${model.label}`,
         );
+
+        /*
+         * El fotograma que encadena va **primero**.
+         *
+         * En los generadores por referencias, la primera manda: es la que fija
+         * de dónde arranca la toma. Ponerla al final la deja como una
+         * inspiración más y el tramo empieza donde quiere.
+         */
+        const piece = await animate({
+          prompt: brief.prompt,
+          references: [carry, ...references].filter(Boolean).slice(0, 9),
+          seconds: segment.seconds,
+          model: model.slug,
+          aspectRatio,
+          // Con sonido propio salvo que se diga: es la gracia de este nodo.
+          sound: node.settings.sound !== false,
+        });
+
+        pieces.push(piece);
+
+        if (segment.index < segment.total) {
+          await ctx.report(`Sacando el fotograma con el que sigue el tramo ${segment.index + 1}`);
+
+          /*
+           * Si no se puede sacar el fotograma, se sigue sin él.
+           *
+           * El tramo siguiente saldrá menos pegado, pero tirar un anuncio a
+           * medias por esto sería tirar lo que ya está generado y pagado.
+           */
+          carry = await lastFrame(piece).catch(async (error: unknown) => {
+            await ctx.report(
+              `No se pudo encadenar por el fotograma: ${error instanceof Error ? error.message : "falló"}. El siguiente tramo puede no continuar igual.`,
+            );
+            return "";
+          });
+        }
       }
 
-      if (brief.trimmed > 0) {
-        await ctx.report(`El encargo no cabía: se recortaron ${brief.trimmed} caracteres.`);
-      }
+      await ctx.report(
+        pieces.length > 1 ? "Uniendo los tramos" : "Anuncio listo",
+      );
 
-      await ctx.report(`Generando el anuncio con ${model.label}`);
-
-      const url = await animate({
-        prompt: brief.prompt,
-        references,
-        seconds,
-        model: model.slug,
-        aspectRatio,
-        // Con sonido propio salvo que se diga: es la gracia de este nodo.
-        sound: node.settings.sound !== false,
-      });
+      const url = pieces.length > 1 ? await mergeVideos(pieces) : pieces[0];
 
       return { kind: "video", url, value: script.value };
     }

@@ -235,11 +235,14 @@ export function buildFlowPrompt(options: {
     if (longest > 0 && options.seconds > longest) {
       lines.push(
         "",
-        `Ningún generador pasa de ${longest} s por pieza, así que ${Math.round(options.seconds)} s`,
-        "**no caben en un solo nodo de anuncio**. Móntalo plano a plano con",
-        "`montaje`, o reparte la historia en varios nodos de anuncio encadenados.",
-        "Nunca pidas más segundos de los que un generador acepta: los recorta sin",
-        "avisar y el anuncio sale acelerado.",
+        `Ningún generador pasa de ${longest} s por pieza, pero el nodo \`anuncio\` lo`,
+        "resuelve solo: parte el encargo en tramos que sí caben y los encadena por",
+        "el último fotograma, de forma que cada uno sigue exactamente donde acabó",
+        "el anterior y cuenta su parte del guion.",
+        "",
+        `Así que pon los ${Math.round(options.seconds)} s en **un solo** nodo de anuncio y no`,
+        "los repartas tú en varios: repartirlos a mano da varios anuncios cortos",
+        "seguidos, con otro sitio y otra cara en cada uno.",
       );
     }
   }

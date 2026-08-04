@@ -137,3 +137,42 @@ test("todas las plantillas tienen partes", () => {
     assert.ok(template.label && template.note, template.id);
   }
 });
+
+/* ------------------------------- La continuidad ------------------------------ */
+
+const TRAMO = [
+  "## Qué parte de la historia es esta",
+  "Este vídeo es el tramo 2 de 4.",
+  "Y no cierres: después viene más.",
+].join("\n");
+
+/*
+ * Sin esto, cada tramo de un anuncio largo cuenta la historia entera y salen
+ * cuatro anuncios seguidos diciendo lo mismo.
+ */
+test("con plantilla, la continuidad va antes que la estructura", () => {
+  const { prompt } = directorBrief({ script: GUION, templateId: "ugc", continuity: TRAMO });
+
+  assert.ok(prompt.indexOf("tramo 2 de 4") < prompt.indexOf("## Estructura"));
+});
+
+/* No es estilo, es dónde encaja: callarla haría que el tramo 3 se creyera el
+ * anuncio entero. */
+test("sin plantilla la continuidad entra igual", () => {
+  const { prompt } = directorBrief({ script: GUION, continuity: TRAMO });
+
+  assert.match(prompt, /tramo 2 de 4/);
+  assert.ok(prompt.includes(GUION));
+});
+
+test("sin continuidad no queda ningún hueco", () => {
+  const { prompt } = directorBrief({ script: GUION, templateId: "ugc" });
+
+  assert.ok(!prompt.includes("tramo"));
+  assert.ok(!/\n\n\n/.test(prompt));
+});
+
+test("los segundos del encargo son los del tramo, no los del anuncio", () => {
+  const { prompt } = directorBrief({ script: GUION, seconds: 13, continuity: TRAMO, templateId: "demo" });
+  assert.match(prompt, /13 segundos/);
+});

@@ -207,22 +207,39 @@ export function directorBrief(options: {
   language?: string;
   /** Cuántas imágenes van de referencia, para decir qué es cada una. */
   references?: number;
+  /**
+   * Lo que sitúa este vídeo dentro de un anuncio más largo.
+   *
+   * Va aparte del guion porque no es guion: dice qué tramo es, que ya se contó
+   * lo anterior y si le toca cerrar o no. Sin esto, cada tramo cuenta la
+   * historia entera y salen cuatro anuncios seguidos que dicen lo mismo.
+   */
+  continuity?: string;
 }): DirectorBrief {
   const script = options.script.trim();
   const template = findDirectorTemplate(options.templateId ?? "");
 
   if (!template) {
-    const prompt = stripFiller(script);
+    /*
+     * Sin plantilla va el guion tal cual — pero la continuidad sí entra.
+     *
+     * No es estilo: es dónde encaja este vídeo. Callarla porque no hay plantilla
+     * haría que el tramo tres del anuncio se creyera el anuncio entero.
+     */
+    const prompt = stripFiller([options.continuity?.trim(), script].filter(Boolean).join("\n\n"));
+
     return { prompt: prompt.slice(0, MAX_PROMPT), trimmed: Math.max(0, prompt.length - MAX_PROMPT) };
   }
 
   const lines: string[] = [
-    `Anuncio de ${options.seconds && options.seconds > 0 ? Math.round(options.seconds) : 15} segundos`,
+    `Vídeo de ${options.seconds && options.seconds > 0 ? Math.round(options.seconds) : 15} segundos`,
     `Formato ${options.aspectRatio || "9:16"}. Voz en ${options.language || "español"}.`,
-    "",
-    "## Estructura",
-    "",
   ];
+
+  // Antes que nada: si esto es un tramo de algo más largo, cambia todo lo demás.
+  if (options.continuity?.trim()) lines.push("", options.continuity.trim());
+
+  lines.push("", "## Estructura", "");
 
   for (const [index, beat] of template.beats.entries()) {
     lines.push(`${index + 1}. **${beat.title}** — ${beat.ask}`);

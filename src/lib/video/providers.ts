@@ -532,6 +532,48 @@ export async function trimClip(url: string, seconds: number): Promise<string> {
 }
 
 /**
+ * El último fotograma de un vídeo.
+ *
+ * ## Para qué
+ *
+ * Para encadenar tramos. Un generador que solo hace quince segundos puede hacer
+ * un anuncio de cincuenta si cada tramo **empieza donde acabó el anterior**: se
+ * saca el último fotograma y se le manda como imagen de partida al siguiente.
+ *
+ * Sin eso, cuatro tramos de quince segundos son cuatro anuncios distintos
+ * pegados: cambia el sitio, cambia la ropa y cambia la cara entre uno y otro. Y
+ * eso no da error en ningún sitio — se ve al reproducirlo, con los cuatro ya
+ * pagados.
+ *
+ * El parámetro se llama `frame_type` y vale `first`, `middle` o `last`. Por
+ * defecto es `first`: mandarlo mal no falla, devuelve el fotograma equivocado y
+ * el tramo siguiente arranca del principio del anterior.
+ */
+export async function lastFrame(videoUrl: string): Promise<string> {
+  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/extract-frame", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key("FAL_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ video_url: videoUrl, frame_type: "last" }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`No se pudo sacar el último fotograma: ${response.status} ${detail.slice(0, 200)}`);
+  }
+
+  const data = (await response.json()) as { images?: { url?: string }[] };
+  const url = data.images?.[0]?.url;
+
+  if (!url) throw new Error("El extractor no devolvió ningún fotograma.");
+
+  return url;
+}
+
+/**
  * Pega varios clips en uno, en orden.
  *
  * Aquí no hay tiempos que interpretar: es una lista y se unen uno detrás de
