@@ -565,3 +565,25 @@ test("lo que ya sirve se devuelve tal cual", () => {
 test("se pide traducir con intención, no palabra por palabra", () => {
   assert.match(buildTextPrompt({ texts: ["x"], context: "y", language: "es" }), /no palabra por palabra/);
 });
+
+/*
+ * Una imagen moderna va dentro de un `<picture>` con varios `<source>` delante.
+ * El navegador elige el primero que encaje y solo cae al `<img>` si ninguno
+ * vale, así que arreglar solo el `<img>` no cambia nada: se sigue viendo el
+ * hueco del `<source>`.
+ */
+test("los source de un picture también se despiertan", () => {
+  const html =
+    '<picture><source media="(max-width:767px)" data-srcset="/movil.webp" srcset="data:image/svg+xml;base64,A"><img src="data:image/gif;base64,A" data-src="/grande.jpg"></picture>';
+
+  const out = unlazy(html);
+
+  assert.match(out, /srcset="\/movil\.webp"/);
+  assert.match(out, /src="\/grande\.jpg"/);
+  assert.ok(!out.includes("base64"));
+});
+
+test("un source que ya trae su srcset no se toca", () => {
+  const html = '<source media="(max-width:767px)" srcset="/movil.webp">';
+  assert.equal(unlazy(html), html);
+});
