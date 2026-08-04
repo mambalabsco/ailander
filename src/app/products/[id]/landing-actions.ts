@@ -769,129 +769,78 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         applyTexts,
         buildTextPrompt,
         closeOpenTags,
-        cutAtTag,
         dropHidingRules,
         extractTexts,
         reveal,
         scopeCss,
         unlazy,
-        hasSubstance,
-        isChrome,
         neutralizeLinks,
         sanitizeCss,
         sanitizeHtml,
       } = await import("@/lib/landing-copy-html");
 
       const page = await readPageForCopy(url);
-      const sections = page.sections;
       const origin = new URL(url).origin;
 
-      if (sections.length === 0) {
-        throw new Error(
-          "De esa página no salió ninguna sección. Puede que la pinte entera el navegador: en ese caso no hay marcado que copiar.",
-        );
-      }
-
-      const out: LandingSection[] = [];
       const warnings: string[] = [];
       let inputTokens = 0;
       let outputTokens = 0;
 
-      let links = 0;
+      if (!page.body.trim()) {
+        throw new Error(
+          "De esa página no salió nada. Puede que la pinte entera el navegador: en ese caso no hay marcado que copiar.",
+        );
+      }
 
-      for (const [index, section] of sections.entries()) {
+      /*
+       * El cuerpo entero, en un solo paso y en este orden.
+       *
+       * Cada uno arregla algo que se veía:
+       *
+       * 1. `unlazy` — el `src` de una imagen no es la imagen: es un hueco, y la
+       *    de verdad está en `data-src` esperando a un JavaScript que la copia no
+       *    lleva. Y lo mismo en los `<source>` del `<picture>`, que el navegador
+       *    prefiere.
+       * 2. `absolutize` — `/cdn/shop/x.jpg` servido desde otro dominio se pide a
+       *    ese otro dominio y no existe.
+       * 3. `reveal` — los constructores dejan cada bloque invisible y su
+       *    JavaScript le quita la clase al hacer scroll. Sin esto, la página
+       *    entera se queda en `opacity: 0`.
+       * 4. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
+       * 5. `neutralizeLinks` — que el «Comprar» no lleve a su carrito.
+       * 6. `closeOpenTags` — por si el tope de tamaño cortó algo.
+       */
+      await report("Limpiando el marcado");
+
+      const body = closeOpenTags(
+        neutralizeLinks(sanitizeHtml(reveal(absolutize(unlazy(page.body), origin)))).html,
+      );
+
+      /*
+       * El texto sale numerado y vuelve numerado a su sitio.
+       *
+       * Se manda en tandas: una página entera puede llevar mil frases, y mil no
+       * caben en una respuesta. Cada tanda es independiente, así que si una falla
+       * las demás siguen — y lo que no vuelva se queda en su idioma, que se ve al
+       * mirar la página. Un hueco vacío no se ve.
+       */
+      const texts = extractTexts(body);
+      const CHUNK = 120;
+      const adapted: string[] = [];
+
+      for (let at = 0; at < texts.length; at += CHUNK) {
         if (await cancelled()) break;
 
-        /*
-         * El armazón de su tienda no es su landing.
-         *
-         * La barra de anuncio, la cabecera con su menú y el pie con sus
-         * condiciones vienen con sus enlaces, su logo y sus políticas. Copiarlos
-         * da una página con la navegación de otro encima — y son la mitad del
-         * peso: la cabecera de un tema de Shopify son veinte mil caracteres de
-         * menú desplegable.
-         */
-        if (isChrome(section.type, section.role)) continue;
+        const batch = texts.slice(at, at + CHUNK);
 
-        await report(`Adaptando la sección ${index + 1} de ${sections.length}`);
-
-        /*
-         * Los enlaces dejan de apuntar a su tienda.
-         *
-         * Los botones de una página de venta llevan a **su** carrito: copiarla
-         * tal cual da una página tuya cuyo «Comprar» convierte para él. Y no
-         * falla en ningún sitio, la página se ve perfecta.
-         */
-        /*
-         * Limpiar, desactivar enlaces y **cerrar lo que el recorte dejó
-         * abierto**, en ese orden.
-         *
-         * Lo último importa tanto como lo primero: una sección recortada se
-         * queda con tres o cuatro `<div>` abiertos, y el navegador los cierra al
-         * final del documento — con el resto de la página metida dentro,
-         * heredando su ancho y su fondo.
-         */
-        /*
-         * Se corta por el final de una etiqueta, no por un número de
-         * caracteres: cortar en medio deja `<div style="--jc:` sin su `>`, y eso
-         * el navegador lo pinta como texto en mitad de la página.
-         */
-        /*
-         * El orden importa y cada paso arregla algo que se veía:
-         *
-         * 1. `unlazy` — el `src` de una imagen no es la imagen: es un hueco, y
-         *    la dirección real está en `data-src` esperando a un JavaScript que
-         *    la copia no lleva. Sin esto, quince huecos en blanco.
-         * 2. `absolutize` — `/cdn/shop/x.jpg` servido desde otro dominio se pide
-         *    a ese otro dominio y no existe.
-         * 3. `reveal` — los constructores dejan cada bloque invisible en el CSS
-         *    y su JavaScript le quita la clase al hacer scroll. Sin él, la
-         *    página entera se queda en `opacity: 0`: con su maqueta, su texto y
-         *    sus imágenes, todo bien generado y todo invisible.
-         * 4. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
-         * 4. `neutralizeLinks` — que el «Comprar» no lleve a su carrito.
-         * 5. `closeOpenTags` — lo que el recorte dejó abierto.
-         */
-        const clean = neutralizeLinks(
-          sanitizeHtml(reveal(absolutize(unlazy(cutAtTag(section.html, 150_000)), origin))),
-        );
-
-        const original = closeOpenTags(clean.html);
-
-        links += clean.changed;
-
-        // Lo que se quedó en nada al limpiar —una franja que solo era un script
-        // de seguimiento, o un bloque cortado por el tope— mete huecos vacíos.
-        if (!hasSubstance(original)) continue;
-
-        /*
-         * Se manda **solo el texto**, numerado.
-         *
-         * Pedirle el marcado entero no funciona: ciento cincuenta mil caracteres
-         * no caben en una respuesta, y cada vez que lo devuelve hay una
-         * posibilidad de que lo devuelva distinto — y entonces la copia deja de
-         * parecerse, que es justo lo que se venía a evitar.
-         *
-         * Con solo las frases, la maqueta no se toca: es la misma **por
-         * construcción**, no por suerte. Y se paga el texto, que es una
-         * centésima parte.
-         */
-        const texts = extractTexts(original);
-
-        // Una sección sin texto —un separador, una franja de color— no necesita
-        // pasar por el modelo: no hay nada que adaptar.
-        if (texts.length === 0) {
-          out.push({ kind: "crudo", html: original });
-          continue;
-        }
+        await report(`Adaptando el texto ${at + 1}–${at + batch.length} de ${texts.length}`);
 
         try {
           const outcome = await generateStructured<{ textos: string[] }>({
             prompt: buildTextPrompt({
-              texts,
+              texts: batch,
               context,
               language: `español de ${product.country || "México"}`,
-              role: section.role,
             }),
             schema: {
               type: "object",
@@ -914,54 +863,56 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
           const back = outcome.data.textos ?? [];
 
-          /*
-           * Si vuelven menos, los que faltan se quedan como estaban.
-           *
-           * Es lo correcto y no una rendición: un hueco a medias es una frase en
-           * el idioma equivocado, y eso se ve al mirar la página. Un hueco vacío
-           * es un trozo que desaparece, y eso no.
-           */
-          if (back.length < texts.length) {
+          if (back.length < batch.length) {
             warnings.push(
-              `Sección ${index + 1}: volvieron ${back.length} de ${texts.length} textos; el resto se quedó en el idioma original.`,
+              `De los textos ${at + 1}–${at + batch.length} volvieron ${back.length}: el resto se quedó en el idioma original.`,
             );
           }
 
-          out.push({ kind: "crudo", html: applyTexts(original, back) });
+          adapted.push(...batch.map((original, index) => back[index] ?? original));
         } catch (error) {
           warnings.push(
-            `Sección ${index + 1}: ${error instanceof Error ? error.message : "falló"}. Se quedó con el texto original.`,
+            `Los textos ${at + 1}–${at + batch.length} no se pudieron adaptar (${error instanceof Error ? error.message : "falló"}): se quedaron como estaban.`,
           );
 
-          out.push({ kind: "crudo", html: original });
+          adapted.push(...batch);
         }
       }
 
-      /*
-       * El CSS va **una vez y entero**, delante de todo.
-       *
-       * Repartirlo por secciones con un tope por sección era el fallo: en una
-       * página de constructor, ese tope se gastaba en las variables de color del
-       * tema y la clase que lleva la maqueta no llegaba a entrar. Salía el texto
-       * correcto sin una sola regla aplicada — la página desmaquetada.
-       *
-       * Y atado al contenedor de la copia, porque si no repinta la plataforma:
-       * un `.grid` o un `h2` del tema ajeno cambiando los botones del panel, sin
-       * que nada falle y sin ninguna pista de por qué.
-       */
-      if (page.css.trim()) {
-        out.unshift({
+      const out: LandingSection[] = [
+        {
           kind: "crudo",
-          html: "",
-          // `dropHidingRules` por el otro lado: la lista de marcas no puede
-          // estar completa —hay un constructor nuevo cada año— así que también
-          // se quitan las reglas que solo esconden esperando a ese JavaScript.
+          html: applyTexts(body, adapted),
+          /*
+           * El CSS entero, atado al contenedor.
+           *
+           * Sin atarlo repinta **la plataforma**: un `.grid` o un `h2` del tema
+           * ajeno cambiando los botones del panel, sin que nada falle y sin
+           * ninguna pista de por qué. Y eso incluye lo de dentro de un `@media`,
+           * que es donde vive media maqueta.
+           */
           css: scopeCss(
             dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)),
             ".copiado",
           ),
-        });
-      }
+        },
+      ];
+
+      /*
+       * Las imágenes del original, listadas para poder adaptarlas después.
+       *
+       * No se generan ni se sustituyen aquí: se guardan sus direcciones para que
+       * la pestaña de imágenes las tenga a mano. Adaptarlas al producto propio es
+       * otro paso y otra decisión.
+       */
+      const images = page.images.map((src, index) => ({
+        slot: `orig-${index + 1}`,
+        purpose: "Imagen de la página original, para adaptarla",
+        prompt: "",
+        alt: "",
+        aspectRatio: "1:1",
+        url: absolutizeCss(`url(${src})`, origin).slice(4, -1),
+      }));
 
       await report("Guardando la página");
 
@@ -971,7 +922,15 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         slug: `copia-${new URL(url).hostname.replace(/[^a-z0-9]+/gi, "-")}-${Date.now()}`,
         shapeId: "copia",
         sections: out,
-        imageSlots: [],
+        imageSlots: images.map((image) => ({
+          slot: image.slot,
+          purpose: image.purpose,
+          // La dirección de la original va en el prompt: es de donde saldrá la
+          // adaptación, y el hueco no tiene otro campo para guardarla.
+          prompt: image.url,
+          alt: image.alt,
+          aspectRatio: image.aspectRatio,
+        })),
         comments: [],
       });
 
@@ -979,14 +938,9 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       return {
         summary: [
-          `${out.length} secciones copiadas de ${new URL(url).hostname}`,
-          out.length < sections.length
-            ? ` (de ${sections.length}; el resto era su cabecera, su pie o quedó vacío)`
-            : "",
-          ".",
-          warnings.length > 0 ? ` ${warnings.length} se quedaron con el texto original.` : "",
-          links > 0 ? ` ${links} enlaces apuntaban a su tienda y se han desactivado.` : "",
-          " Las imágenes siguen siendo las suyas: cámbialas antes de publicar.",
+          `Copiada ${new URL(url).hostname}: ${texts.length} textos adaptados y ${images.length} imágenes recogidas.`,
+          warnings.length > 0 ? ` ${warnings.length} aviso(s).` : "",
+          " Las imágenes siguen siendo las suyas: adáptalas antes de publicar.",
         ].join(""),
         result: { landingId: saved.id, warnings },
         inputTokens,

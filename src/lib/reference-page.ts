@@ -92,6 +92,7 @@ function sheetUrls(html: string, origin: string): string[] {
 
 export type { ReferenceSection } from "@/lib/page-sections";
 
+import { bodyOf, collectImages, stripChrome } from "@/lib/landing-copy-html";
 import type { ReferenceSection } from "@/lib/page-sections";
 
 /**
@@ -158,41 +159,36 @@ export { takeForRole } from "@/lib/page-sections";
 
 /* ------------------------------ El modo copia ------------------------------- */
 
-/**
- * Cuánto marcado se conserva por sección al copiar.
- *
- * Muy por encima del que se usa para «leer» una página. Ahí se recorta porque lo
- * que interesa es la estructura y el texto; aquí se recorta lo que **falta en la
- * copia**: una sección cortada por la mitad pierde su oferta, sus testimonios y
- * su cierre, y eso no se ve hasta poner las dos páginas al lado.
- */
-const COPY_HTML_LIMIT = 150_000;
-
-/** Y cuánto CSS. Una página de constructor ronda los trescientos mil. */
-const COPY_CSS_LIMIT = 600_000;
-
 export interface PageForCopy {
   /** Todo el CSS de la página, junto y una sola vez. */
   css: string;
-  sections: { type: string; role: string; html: string }[];
+  /** El cuerpo entero, sin el armazón de la tienda. */
+  body: string;
+  /** Las direcciones de todas sus imágenes, para poder adaptarlas después. */
+  images: string[];
 }
 
 /**
  * La página entera, para copiarla tal cual.
  *
- * ## En qué se diferencia de `readReferenceSections`
+ * ## Por qué el cuerpo entero y no sección a sección
  *
- * Aquella reparte el CSS por secciones, quedándose con las reglas que menciona
- * cada una y con un tope de treinta mil caracteres por sección. Para describir
- * una página está bien.
+ * Porque partirla y volver a montarla **cambia la página**. Cada trozo acababa
+ * envuelto en un contenedor que no estaba, y el CSS de un constructor mira la
+ * jerarquía: `body > .shopify-section`, `.gps > div`, un `grid` que reparte
+ * entre sus hijos directos. Con un envoltorio de más, la sección deja de ser
+ * hija de quien era y sale con otro ancho — que es exactamente lo que se veía,
+ * anchos distintos según la sección.
  *
- * Para copiarla no, y se vio: en una página de GemPages ese tope se gastaba
- * entero en las variables de color del tema —que no pintan nada— y **la clase
- * que lleva la maqueta de la sección no llegaba a entrar**. El resultado era el
- * texto correcto sin una sola regla de estilo aplicada: la página, desmaquetada.
+ * Copiando el cuerpo y quitando solo el armazón de la tienda, la jerarquía es la
+ * misma y los anchos salen solos.
  *
- * Aquí el CSS se coge entero y una sola vez para toda la página. Es más grande y
- * es lo que hay: una copia sin la maqueta no es una copia.
+ * ## Y el CSS entero
+ *
+ * Repartirlo por secciones con un tope por sección era el otro fallo: en una
+ * página de constructor ese tope se gastaba en las variables de color del tema y
+ * la clase que lleva la maqueta no llegaba a entrar. Se coge entero, incluidas
+ * las hojas del CDN — donde vive la mitad de la maqueta.
  */
 export async function readPageForCopy(
   pageUrl: string,
@@ -205,7 +201,7 @@ export async function readPageForCopy(
     origin = new URL(pageUrl).origin;
     html = await get(pageUrl, timeoutMs);
   } catch {
-    return { css: "", sections: [] };
+    return { css: "", body: "", images: [] };
   }
 
   const inline = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)]
@@ -215,9 +211,9 @@ export async function readPageForCopy(
   /*
    * Las hojas externas también, y las de otros dominios.
    *
-   * El CSS de un tema de Shopify vive en su CDN, y el de las apps del escaparate
+   * El CSS de un tema de Shopify vive en su CDN y el de las apps del escaparate
    * en el de Shopify: dejarlas fuera por venir de otro dominio quita justo la
-   * mitad de la maqueta. Se piden todas y las que fallen simplemente no suman.
+   * mitad de la maqueta.
    */
   const sheets = await Promise.all(
     sheetUrls(html, origin)
@@ -225,14 +221,8 @@ export async function readPageForCopy(
       .map((url) => get(url, timeoutMs).catch(() => "")),
   );
 
-  const css = [inline, ...sheets].join("\n").slice(0, COPY_CSS_LIMIT);
+  const css = [inline, ...sheets].join("\n").slice(0, 800_000);
+  const body = stripChrome(bodyOf(html)).slice(0, 800_000);
 
-  return {
-    css,
-    sections: splitShopifySections(html).map((section) => ({
-      type: section.type,
-      role: roleOf(section.type),
-      html: section.html.slice(0, COPY_HTML_LIMIT),
-    })),
-  };
+  return { css, body, images: collectImages(body, css) };
 }

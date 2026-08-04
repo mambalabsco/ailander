@@ -4,7 +4,9 @@ import { test } from "node:test";
 import {
   absolutize,
   applyTexts,
+  bodyOf,
   buildTextPrompt,
+  collectImages,
   absolutizeCss,
   closeOpenTags,
   cutAtTag,
@@ -17,6 +19,7 @@ import {
   sanitizeHtml,
   reveal,
   scopeCss,
+  stripChrome,
   unlazy,
 } from "./landing-copy-html.ts";
 
@@ -586,4 +589,66 @@ test("los source de un picture también se despiertan", () => {
 test("un source que ya trae su srcset no se toca", () => {
   const html = '<source media="(max-width:767px)" srcset="/movil.webp">';
   assert.equal(unlazy(html), html);
+});
+
+/* ------------------------------ La página entera ---------------------------- */
+
+test("se coge lo que hay dentro del cuerpo", () => {
+  const html = "<html><head><title>x</title></head><body><div>Hola</div></body></html>";
+  assert.equal(bodyOf(html), "<div>Hola</div>");
+});
+
+test("un fragmento sin cuerpo se devuelve tal cual", () => {
+  assert.equal(bodyOf("<div>Hola</div>"), "<div>Hola</div>");
+});
+
+/*
+ * Partir la página en secciones y volver a montarla **cambia la página**: cada
+ * trozo acaba envuelto en un contenedor que no estaba, y el CSS de un
+ * constructor mira la jerarquía. Con un envoltorio de más, la sección ya no es
+ * hija de quien era y sale con otro ancho.
+ */
+test("el armazón de la tienda se va, el contenido se queda", () => {
+  const html =
+    '<div id="shopify-section-sections--1__header"><nav>menú</nav></div>' +
+    '<div id="shopify-section-template--1__hero">El contenido</div>' +
+    '<div id="shopify-section-sections--1__footer">pie</div>';
+
+  const out = stripChrome(html);
+
+  assert.match(out, /El contenido/);
+  assert.ok(!out.includes("menú"));
+  assert.ok(!out.includes("pie"));
+});
+
+test("los elementos que ya se llaman por su nombre también", () => {
+  assert.equal(stripChrome("<header>a</header><main>b</main><footer>c</footer>"), "<main>b</main>");
+});
+
+/* ------------------------------ Las imágenes -------------------------------- */
+
+test("se recogen las del marcado y las de los fondos", () => {
+  const html = '<img src="/a.jpg"><source srcset="/b.jpg 1x, /c.jpg 2x">';
+  const css = ".hero{background:url(/fondo.png)}";
+
+  const found = collectImages(html, css);
+
+  assert.ok(found.includes("/a.jpg"));
+  assert.ok(found.includes("/fondo.png"));
+});
+
+/* Del srcset se coge la grande: es la que sirve para adaptarla después. */
+test("del srcset se guarda la más grande", () => {
+  const found = collectImages('<source srcset="/pequena.jpg 1x, /grande.jpg 2x">');
+
+  assert.ok(found.includes("/grande.jpg"));
+  assert.ok(!found.includes("/pequena.jpg"));
+});
+
+test("los huecos incrustados no son imágenes", () => {
+  assert.deepEqual(collectImages('<img src="data:image/gif;base64,AAA">'), []);
+});
+
+test("no se repiten", () => {
+  assert.deepEqual(collectImages('<img src="/a.jpg"><img src="/a.jpg">'), ["/a.jpg"]);
 });
