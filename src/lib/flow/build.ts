@@ -141,6 +141,15 @@ export function buildFlowPrompt(options: {
   idea?: string;
   /** Los ángulos ya investigados, para no reinventarlos. */
   angles?: string[];
+  /**
+   * El ángulo elegido a mano, cuando se elige uno.
+   *
+   * Manda sobre la lista: con uno decidido, enseñarle los otros siete solo le da
+   * ocasiones de mezclarlos, y un anuncio con dos ángulos deja los dos a medias.
+   */
+  chosenAngle?: string;
+  /** Copys que ya funcionaron, elegidos para partir de ellos. */
+  copies?: { label: string; text: string }[];
   /** Los ids de los generadores de vídeo que existen, con lo que dura cada uno. */
   videoModels?: { id: string; label: string; note: string; maxSeconds: number }[];
   /** Los ids de los estilos de subtítulos. */
@@ -249,7 +258,17 @@ export function buildFlowPrompt(options: {
 
   if (options.aspectRatio) lines.push(`Formato ${options.aspectRatio}.`);
 
-  if (options.angles?.length) {
+  if (options.chosenAngle?.trim()) {
+    lines.push(
+      "",
+      "## El ángulo, que ya está decidido",
+      "",
+      options.chosenAngle.trim(),
+      "",
+      "Móntalo entero por aquí. No propongas otro ni lo mezcles con nada: un",
+      "anuncio con dos ángulos deja los dos a medias.",
+    );
+  } else if (options.angles?.length) {
     lines.push(
       "",
       "## Ángulos ya investigados",
@@ -257,6 +276,28 @@ export function buildFlowPrompt(options: {
       ...options.angles.slice(0, 8).map((angle) => `- ${angle}`),
       "",
       "Elige uno y móntalo entero. Mezclar dos ángulos en un anuncio deja los dos a medias.",
+    );
+  }
+
+  /*
+   * Los copys que ya funcionaron.
+   *
+   * No para copiarlos: para saber **qué frases ya convierten** con este público.
+   * Un gancho que funcionó en texto suele funcionar dicho en voz alta, y
+   * reinventarlo desde cero es tirar la única prueba real que hay.
+   */
+  if (options.copies?.length) {
+    lines.push(
+      "",
+      "## Copys que ya funcionaron",
+      "",
+      ...options.copies
+        .slice(0, 4)
+        .map((copy) => `### ${copy.label}\n\n${copy.text.slice(0, 2_000)}`),
+      "",
+      "Quédate con sus ganchos y sus objeciones: son lo único probado que hay. El",
+      "guion del vídeo no es el texto de un anuncio de Meta, así que adáptalo a",
+      "lo que se dice en voz alta — pero no lo reinventes de cero.",
     );
   }
 

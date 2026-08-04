@@ -317,3 +317,60 @@ test("un círculo no cuelga la colocación", () => {
 
   assert.equal(layout(flow).nodes.length, 2);
 });
+
+/*
+ * Con un ángulo decidido, enseñarle los otros siete solo le da ocasiones de
+ * mezclarlos — y un anuncio con dos ángulos deja los dos a medias.
+ */
+test("el ángulo elegido manda sobre la lista", () => {
+  const prompt = buildFlowPrompt({
+    context: "x",
+    angles: ["angulo-a", "angulo-b"],
+    chosenAngle: "Para quien ya probó colágeno",
+  });
+
+  assert.match(prompt, /ya está decidido/);
+  assert.match(prompt, /ya probó colágeno/);
+  assert.ok(!prompt.includes("angulo-b"));
+});
+
+test("sin elegir se enseñan los investigados", () => {
+  const prompt = buildFlowPrompt({ context: "x", angles: ["angulo-a"] });
+
+  assert.match(prompt, /Ángulos ya investigados/);
+  assert.ok(!prompt.includes("ya está decidido"));
+});
+
+/* Los copys probados son la única prueba real de qué frases convierten. */
+test("los copys elegidos entran con su nombre", () => {
+  const prompt = buildFlowPrompt({
+    context: "x",
+    copies: [{ label: "Gancho de enero", text: "Me dolían las rodillas" }],
+  });
+
+  assert.match(prompt, /### Gancho de enero/);
+  assert.match(prompt, /Me dolían las rodillas/);
+});
+
+test("se le dice que los adapte a voz alta, no que los copie", () => {
+  const prompt = buildFlowPrompt({ context: "x", copies: [{ label: "A", text: "B" }] });
+
+  assert.match(prompt, /en voz alta/);
+  assert.match(prompt, /no lo reinventes de cero/);
+});
+
+test("sin copys no queda la sección vacía", () => {
+  assert.ok(!buildFlowPrompt({ context: "x" }).includes("Copys que ya funcionaron"));
+});
+
+/* Cuatro copys largos se comen el encargo entero. */
+test("no se mandan todos los copys ni enteros", () => {
+  const prompt = buildFlowPrompt({
+    context: "x",
+    copies: Array.from({ length: 9 }, (_, i) => ({ label: `copy-${i}`, text: "y".repeat(5_000) })),
+  });
+
+  assert.ok(prompt.includes("copy-0"));
+  assert.ok(!prompt.includes("copy-5"));
+  assert.ok(!prompt.includes("y".repeat(2_500)));
+});

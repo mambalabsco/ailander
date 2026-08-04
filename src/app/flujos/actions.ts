@@ -484,10 +484,36 @@ export async function buildFlowAction(input: unknown): Promise<{
 
     const shape = readText(raw.shape);
 
+    /*
+     * Lo que se ha elegido a mano en la pantalla.
+     *
+     * Es la diferencia entre «móntame un anuncio» y «móntame **este** anuncio»:
+     * con un ángulo decidido y dos copys que ya convierten delante, el plano
+     * sale de lo que ya se sabe que funciona en vez de de una idea nueva.
+     */
+    const chosen = angles.find((angle) => angle.id === readText(raw.angleId));
+
+    const copyIds = Array.isArray(raw.copyIds) ? raw.copyIds.map((item) => readText(item)) : [];
+
+    const copies = copyIds.length
+      ? await import("@/lib/data/swipe")
+          .then(({ listSwipeCopies }) => listSwipeCopies(productId))
+          .then((all) =>
+            all
+              .filter((copy) => copyIds.includes(copy.id))
+              .map((copy) => ({ label: copy.title || copy.source || "Copy", text: copy.body })),
+          )
+          .catch(() => [])
+      : [];
+
     const outcome = await generateStructured<FlowPlan>({
       prompt: buildFlowPrompt({
         context: buildProductContext(product, research, null),
         idea: readText(raw.idea),
+        chosenAngle: chosen
+          ? `${chosen.name} — ${chosen.desire}. Para ${chosen.targetAudience}. ${chosen.problemMechanism}`
+          : undefined,
+        copies,
         angles: angles.map(
           (angle) => `${angle.name} — ${angle.desire}. Para ${angle.targetAudience}.`,
         ),

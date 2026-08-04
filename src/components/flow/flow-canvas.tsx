@@ -431,6 +431,7 @@ export function FlowCanvas({
       <AutoBuild
         flowId={flowId}
         references={references}
+        copyReferences={copyReferences}
         // Sustituir lo que hay es destructivo y no se puede deshacer: si ya hay
         // trabajo en el lienzo, se pregunta.
         busy={running}
@@ -728,6 +729,7 @@ function previewOf(
 function AutoBuild({
   flowId,
   references,
+  copyReferences,
   busy,
   onBuilt,
 }: {
@@ -740,6 +742,7 @@ function AutoBuild({
     hadAudio: boolean;
     frames: number;
   }[];
+  copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
   busy: boolean;
   /** Devuelve si se aplicó: puede rechazarse para no pisar lo que ya hay. */
   onBuilt: (graph: Flow, message: string) => boolean;
@@ -756,6 +759,9 @@ function AutoBuild({
   const [referenceId, setReferenceId] = useState("");
   const [voice, setVoice] = useState("auto");
   const [voiceNote, setVoiceNote] = useState("");
+  /** El ángulo decidido y los copys probados de los que partir. */
+  const [angleId, setAngleId] = useState("");
+  const [copyIds, setCopyIds] = useState<Set<string>>(new Set());
 
   const reference = references.find((item) => item.id === referenceId) ?? null;
   const cloning = source === "clon";
@@ -835,6 +841,75 @@ function AutoBuild({
         />
       )}
 
+      {/*
+        De qué partir, además de la idea.
+
+        Es la diferencia entre «móntame un anuncio» y «móntame **este**
+        anuncio»: con un ángulo decidido y los copys que ya convierten delante,
+        el plano sale de lo que se sabe que funciona.
+      */}
+      {!cloning && copyReferences.length > 0 ? (
+        <div className="space-y-2 rounded-xl border border-slate-200 p-2 dark:border-slate-800">
+          {copyReferences.some((item) => item.kind === "angulo") ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500 dark:text-slate-400">Por qué ángulo</span>
+
+              <SelectField value={angleId} onChange={(event) => setAngleId(event.target.value)}>
+                <option value="">Que elija ella entre los investigados</option>
+                {copyReferences
+                  .filter((item) => item.kind === "angulo")
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+              </SelectField>
+            </label>
+          ) : null}
+
+          {copyReferences.some((item) => item.kind === "copy") ? (
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Copys que ya funcionaron, para partir de sus ganchos
+                {copyIds.size > 0 ? ` · ${copyIds.size}` : ""}
+              </p>
+
+              <ul className="mt-1 flex flex-wrap gap-1">
+                {copyReferences
+                  .filter((item) => item.kind === "copy")
+                  .map((item) => {
+                    const on = copyIds.has(item.id);
+
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          title={item.text.slice(0, 200)}
+                          onClick={() =>
+                            setCopyIds((current) => {
+                              const next = new Set(current);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.add(item.id);
+                              return next;
+                            })
+                          }
+                          className={`max-w-52 truncate rounded-lg border px-2 py-1 text-xs ${
+                            on
+                              ? "border-violet-500 bg-violet-50 dark:bg-violet-950/40"
+                              : "border-slate-300 dark:border-slate-700"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-xs text-slate-500 dark:text-slate-400">Cómo se hace</span>
@@ -896,7 +971,7 @@ function AutoBuild({
 
             const work = cloning
               ? cloneFlowAction({ flowId, referenceId, shape, seconds, voice })
-              : buildFlowAction({ flowId, idea, shape, seconds });
+              : buildFlowAction({ flowId, idea, shape, seconds, angleId, copyIds: [...copyIds] });
 
             void work
               .then((result) => {
