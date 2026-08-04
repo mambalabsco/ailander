@@ -496,3 +496,74 @@ test("y sin foto, ninguna toma dibuja una etiqueta", () => {
 
   assert.match(prompt, /no label, no text/);
 });
+
+/* ------------------- El envase inventado en tomas sin envase --------------- */
+
+const ESTILO = { render: "cinematic", accent: "#0f766e" };
+
+const tomaDe = (scene: string, role = "story"): Shot => ({
+  n: "01",
+  guion: "x",
+  role: role as Shot["role"],
+  scene,
+  motion: "slow push in",
+  speaking: true,
+});
+
+/*
+ * El agujero que dejó frascos inventados en la mitad del vídeo: cuando la escena
+ * no nombraba el envase no se decía **nada** del producto, y el modelo lo añadía
+ * igual porque el estilo huele a anuncio de suplemento. Callar no es neutral.
+ */
+test("una toma sin envase pide explícitamente que no lo dibuje", () => {
+  const prompt = keyframePrompt(tomaDe("a woman working at her desk by a window"), ESTILO, {
+    name: "Sculpt Lymphatic",
+    hasReference: true,
+  });
+
+  assert.match(prompt, /no product, no bottle/);
+});
+
+test("una toma con envase no lleva esa prohibición", () => {
+  const prompt = keyframePrompt(tomaDe("the bottle on the kitchen counter"), ESTILO, {
+    name: "Sculpt Lymphatic",
+    hasReference: true,
+  });
+
+  assert.equal(prompt.includes("no product, no bottle"), false);
+  assert.match(prompt, /EXACTLY the one in the attached reference/);
+});
+
+/*
+ * `showsProduct` adivina qué va a dibujar el modelo leyendo el texto de la
+ * escena, y no puede acertar siempre. Forzar es la salida para esa toma sin
+ * reescribir el guion.
+ */
+test("se puede forzar el envase en una escena que no lo nombra", () => {
+  const escena = tomaDe("a woman walking down a dark corridor");
+
+  const normal = keyframePrompt(escena, ESTILO, { name: "Sculpt", hasReference: true });
+  const forzado = keyframePrompt(escena, ESTILO, { name: "Sculpt", hasReference: true }, true);
+
+  assert.match(normal, /no product, no bottle/);
+  assert.match(forzado, /EXACTLY the one in the attached reference/);
+  assert.equal(forzado.includes("no product, no bottle"), false);
+});
+
+test("forzando sin foto de referencia se pide un frasco liso, no uno con marca", () => {
+  // Una etiqueta inventada se lee como real; un frasco liso se ve claramente
+  // como pendiente de sustituir.
+  const prompt = keyframePrompt(tomaDe("un pasillo"), ESTILO, { name: "x", hasReference: false }, true);
+
+  assert.match(prompt, /plain unbranded bottle/);
+});
+
+test("la escena y el estilo siguen viajando enteros", () => {
+  const prompt = keyframePrompt(tomaDe("a quiet bedroom at dawn"), ESTILO, {
+    name: "x",
+    hasReference: true,
+  });
+
+  assert.match(prompt, /a quiet bedroom at dawn/);
+  assert.match(prompt, /cinematic/);
+});

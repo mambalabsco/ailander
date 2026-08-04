@@ -427,6 +427,15 @@ export function keyframePrompt(
   shot: Shot,
   anchor: StyleAnchor,
   product?: { name: string; hasReference: boolean },
+  /**
+   * Forzar que salga el envase, aunque la escena no lo nombre.
+   *
+   * `showsProduct` acierta muchas veces y no puede acertar siempre: adivina qué
+   * va a dibujar el modelo leyendo el texto de la escena, y el modelo añade el
+   * frasco por su cuenta cuando el estilo huele a anuncio de suplemento. Esto es
+   * la salida para esa toma concreta, sin tener que reescribir el guion.
+   */
+  forceProduct = false,
 ): string {
   const parts = [
     shot.scene,
@@ -447,7 +456,7 @@ export function keyframePrompt(
    * Y en un suplemento el envase es el producto. Un anuncio que enseña un frasco
    * que no es el que llega es una devolución.
    */
-  const conEnvase = showsProduct(shot, product?.name);
+  const conEnvase = forceProduct || showsProduct(shot, product?.name);
 
   if (conEnvase && product?.hasReference) {
     parts.push(
@@ -471,6 +480,24 @@ export function keyframePrompt(
    */
   if (conEnvase && product && !product.hasReference) {
     parts.push("plain unbranded bottle, no label, no text of any kind");
+  }
+
+  /*
+   * Y si la toma **no** lleva envase, se dice que no lo dibuje.
+   *
+   * Aquí estaba el agujero. Cuando la escena no nombraba el frasco no se decía
+   * nada del producto: ni referencia, ni «sin etiqueta», nada. Y el modelo lo
+   * añadía igual —el estilo huele a anuncio de suplemento y él rellena—,
+   * inventándose un bote con su marca y su etiqueta bien escrita.
+   *
+   * Un envase inventado queda convincente, y ese es el problema: no se nota
+   * hasta compararlo con el de verdad, con el vídeo ya montado y pagado. Callar
+   * no es neutral: es dejarle elegir.
+   */
+  if (!conEnvase) {
+    parts.push(
+      "no product, no bottle, no jar, no supplement packaging and no branded label anywhere in the frame",
+    );
   }
 
   return parts.filter(Boolean).join(". ");

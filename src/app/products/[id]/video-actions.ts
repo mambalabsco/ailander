@@ -371,6 +371,17 @@ export async function generateKeyframesAction(
   const productId = readText(raw.productId);
   const only = Array.isArray(raw.only) ? raw.only.map((item) => readText(item)) : [];
 
+  /*
+   * Forzar el envase en las tomas que se rehacen.
+   *
+   * `showsProduct` adivina si el modelo va a dibujar el frasco leyendo el texto
+   * de la escena, y no puede acertar siempre: el modelo lo añade por su cuenta
+   * cuando el estilo huele a anuncio de suplemento. Cuando eso pasa, esto es la
+   * salida — mismo prompt, mismo encuadre, pero con la foto del envase delante
+   * y la orden de no rediseñarlo.
+   */
+  const forceProduct = raw.conProducto === true;
+
   if (!videoId || !productId) throw new Error("Falta el vídeo.");
   await guard();
 
@@ -476,6 +487,7 @@ export async function generateKeyframesAction(
               shot,
               { render: video.styleRender, accent: video.styleAccent },
               { name: product?.name ?? "", hasReference: Boolean(productShot) },
+              forceProduct,
             ),
             /*
              * La foto real va a **toda** toma donde salga el envase.
@@ -490,7 +502,9 @@ export async function generateKeyframesAction(
              * cuela en una escena donde no pinta nada.
              */
             references:
-              showsProduct(shot, product?.name) && productShot ? [productShot.url] : [],
+              (forceProduct || showsProduct(shot, product?.name)) && productShot
+                ? [productShot.url]
+                : [],
           });
 
           await updateShot(shot.id, { keyframeUrl: url, error: null });

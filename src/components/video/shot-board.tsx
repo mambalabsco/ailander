@@ -177,7 +177,36 @@ export function ShotBoard({
               generateKeyframesAction({ videoId: video.id, productId, only: [...redo] })
             }
             label={`Rehacer ${redo.size} imagen(es)`}
-            hint="Solo las marcadas."
+            hint="Solo las marcadas, con el mismo encargo."
+          />
+        ) : null}
+
+        {/*
+          Rehacer **con el envase delante**.
+
+          Existe porque la detección de «en esta toma sale el frasco» lee el
+          texto de la escena, y el modelo lo dibuja por su cuenta cuando el
+          estilo huele a anuncio de suplemento: ahí sale un bote inventado con
+          su etiqueta, convincente, y no se nota hasta compararlo con el de
+          verdad.
+
+          Mismo encargo y mismo encuadre; lo único que cambia es que va la foto
+          del producto como referencia y la orden de no rediseñarlo.
+        */}
+        {redo.size > 0 ? (
+          <GenerateButton
+            variant="primary"
+            action={() =>
+              generateKeyframesAction({
+                videoId: video.id,
+                productId,
+                only: [...redo],
+                conProducto: true,
+              })
+            }
+            label={`Rehacer ${redo.size} con mi producto`}
+            disabled={!providers.images}
+            hint="El mismo encargo, pero mandando la foto de tu envase. Para las tomas donde salió un frasco inventado."
           />
         ) : null}
 
