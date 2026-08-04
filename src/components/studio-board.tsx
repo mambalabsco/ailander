@@ -260,26 +260,35 @@ export function StudioBoard({
                 vive mientras dure la sesión.
               </p>
               <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
-                <code>ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co</code>
+                <code>ssh -L 8765:localhost:8765 root@TU-SERVIDOR</code>
               </pre>
 
               <p>
-                <strong>2.</strong> Ya dentro del servidor —el prompt habrá cambiado—, inicia
-                sesión:
+                <strong>2.</strong> Ya dentro, cambia al usuario del servicio. El guion no es
+                opcional: sin él conservas el HOME del usuario anterior y la sesión acaba en una
+                carpeta que la plataforma no mira.
+              </p>
+              <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
+                <code>su - plataforma</code>
+              </pre>
+
+              <p>
+                <strong>3.</strong> Ahora el login:
               </p>
               <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
                 <code>cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765</code>
               </pre>
 
               <p>
-                <strong>3.</strong> Copia la dirección que imprima y ábrela en el navegador del
+                <strong>4.</strong> Copia la dirección que imprima y ábrela en el navegador del
                 Mac. La vuelta a <code>localhost:8765</code> viaja por el túnel hasta el CLI que
-                está esperando en el servidor.
+                está esperando en el servidor. Comprueba con{" "}
+                <code>npx higgsfield auth token</code> antes de salir.
               </p>
 
               <p>
-                Sin <code>sudo</code> y como <code>plataforma</code>: el CLI guarda la sesión en el
-                HOME de quien ejecuta el comando.
+                El túnel usa la dirección con la que ya entras por SSH —si el dominio va por
+                Cloudflare, ahí no pasa SSH y hay que usar la IP—.
                 {higgsfield.credentialsPath ? (
                   <> Aquí se busca en <code>{higgsfield.credentialsPath}</code>.</>
                 ) : null}

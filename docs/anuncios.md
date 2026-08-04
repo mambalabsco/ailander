@@ -345,21 +345,32 @@ Se une con un túnel, y son **dos comandos en dos sitios**.
 dure la sesión de SSH.
 
 ```
-ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co
+ssh -L 8765:localhost:8765 root@198.211.102.193
 ```
 
-**2. Ya dentro del servidor** —el prompt habrá cambiado a `plataforma@…`—, inicia
-sesión:
+Con la **IP** y no con el dominio: si el dominio va por Cloudflare, ahí no pasa
+SSH y el intento acaba en «Operation timed out».
+
+**2. Ya dentro**, cambia al usuario del servicio:
+
+```
+su - plataforma
+```
+
+El guion no es opcional. Sin él conservas el `HOME` de root y la sesión acaba en
+`/root/.config/higgsfield/`, que la plataforma no mira nunca.
+
+**3.** Inicia sesión:
 
 ```
 cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765
 ```
 
-**3.** Copia la dirección que imprima y ábrela **en el navegador del Mac**. La
+**4.** Copia la dirección que imprima y ábrela **en el navegador del Mac**. La
 vuelta a `localhost:8765` viaja por el túnel hasta el CLI que está esperando en el
 servidor.
 
-**4.** Comprueba antes de salir, en la misma sesión de SSH:
+**5.** Comprueba antes de salir, en la misma sesión de SSH:
 
 ```
 npx higgsfield auth token
