@@ -11,10 +11,24 @@ export default async function SettingsPage(props: {
   searchParams: Promise<{ meta?: string; detalle?: string }>;
 }) {
   const params = await props.searchParams;
-  // Sin secretos ni tokens: solo lo que hace falta para elegir y para avisar.
+  /*
+   * Sin secretos ni tokens: solo lo que hace falta para elegir y para avisar.
+   *
+   * El fallo de lectura se guarda en vez de tragárselo. Antes se devolvía lista
+   * vacía pasara lo que pasara, y una tabla que todavía no existe —porque faltan
+   * migraciones por aplicar— se veía **igual** que no tener ninguna sesión: la
+   * pantalla decía «conecta una» estando ya conectado, y la salida obvia era
+   * volver a conectar. Que es justo lo que esto venía a evitar.
+   */
   const [metaApps, metaLogins] = await Promise.all([
     listMetaApps().catch(() => []),
-    listMetaLogins().catch(() => []),
+    listMetaLogins().then(
+      (logins) => ({ logins, problem: "" }),
+      (error: unknown) => ({
+        logins: [] as Awaited<ReturnType<typeof listMetaLogins>>,
+        problem: error instanceof Error ? error.message : "No se pudieron leer las sesiones.",
+      }),
+    ),
   ]);
 
   return (
@@ -25,8 +39,16 @@ export default async function SettingsPage(props: {
         title="Sesiones de Facebook"
         description="Se inicia sesión una vez y vale para todas las tiendas: el permiso es del perfil, no de la tienda. Aquí se ve cuántos días le quedan, que es lo que evita que un martes cualquiera el gasto aparezca a cero."
       >
+        {metaLogins.problem ? (
+          <p className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            No se pudieron leer las sesiones: {metaLogins.problem} Si acabas de actualizar, puede
+            que falte aplicar las migraciones en el servidor. Tus tiendas conectadas siguen
+            leyendo el gasto con el token que ya tenían.
+          </p>
+        ) : null}
+
         <MetaLoginsPanel
-          logins={metaLogins.map((login) => ({
+          logins={metaLogins.logins.map((login) => ({
             id: login.id,
             name: login.name,
             daysLeft: daysLeft(login.expiresAt),
