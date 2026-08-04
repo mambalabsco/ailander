@@ -466,6 +466,25 @@ function renderSection(
     case "separador":
       return `<hr style="border:0;border-top:1px solid ${t.line};margin:32px 0" />`;
 
+    /*
+     * El marcado de la página original, tal cual.
+     *
+     * Va con su CSS delante y dentro de un contenedor propio. No se le aplica
+     * ninguno de los estilos de la plataforma **a propósito**: el modo copia
+     * existe para que la página sea la de la referencia, y meterle nuestro
+     * tamaño de letra o nuestro ancho la convertiría otra vez en una página
+     * nuestra con su texto.
+     *
+     * Llega ya limpio de `sanitizeHtml` y `sanitizeCss`. Aquí no se vuelve a
+     * limpiar porque limpiar en dos sitios acaba en limpiar en ninguno: se
+     * confía en el que guarda, que es el único que lo escribe.
+     */
+    case "crudo":
+      return [
+        section.css ? `<style>${section.css}</style>` : "",
+        `<div class="copiado">${section.html ?? ""}</div>`,
+      ].join("");
+
     case "imagen": {
       const slot = page.imageSlots.find((item) => item.slot === section.slot);
       return imageSlot(t, 

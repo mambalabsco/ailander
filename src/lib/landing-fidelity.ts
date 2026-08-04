@@ -22,10 +22,12 @@
  * Así que en modo calcado esas reglas **no se mandan**. Manda la referencia.
  */
 
-export type Fidelity = "calcado" | "inspirado";
+export type Fidelity = "calcado" | "inspirado" | "copia";
 
 export function readFidelity(value: unknown): Fidelity {
-  return value === "inspirado" ? "inspirado" : "calcado";
+  if (value === "inspirado") return "inspirado";
+  if (value === "copia") return "copia";
+  return "calcado";
 }
 
 /**
@@ -85,7 +87,7 @@ export function referenceRules(fidelity: Fidelity): string {
  * dos cosas incompatibles y quedarse con la que está escrita en números.
  */
 export function houseRules(fidelity: Fidelity, hasReference: boolean): string {
-  if (fidelity === "calcado" && hasReference) return "";
+  if (fidelity !== "inspirado" && hasReference) return "";
 
   return [
     "**Usa la variedad.** Una página de veinte párrafos seguidos se abandona.",

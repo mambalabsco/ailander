@@ -696,3 +696,182 @@ export async function unlinkLandingAction(input: unknown): Promise<{ ok: boolean
     message: "Desvinculada. El siguiente «Publicar» creará una página nueva en Shopify.",
   };
 }
+
+/**
+ * Copiar una página entera: su marcado, su CSS y su reparto.
+ *
+ * ## En qué se diferencia de calcarla
+ *
+ * Calcar reutiliza **el texto** y lo reparte en las secciones que la plataforma
+ * sabe pintar: sale con nuestros colores, nuestros anchos y nuestros tamaños.
+ * Para inspirarse vale; cuando lo que se quiere es *esa* página, no.
+ *
+ * Aquí se reutiliza el marcado y el CSS de cada sección tal y como están y lo
+ * único que cambia es el texto visible. Los colores, los anchos, los tamaños de
+ * bloque y las posiciones salen de la referencia porque son literalmente los
+ * suyos.
+ *
+ * ## Sección a sección, y no la página de una vez
+ *
+ * Una landing larga son cien mil caracteres de marcado. De una vez no cabe en
+ * una petición, y aunque cupiera, un fallo a mitad tiraría las secciones que ya
+ * estaban bien. Por secciones, cada una es una petición corta, se puede reportar
+ * el avance, y la que salga mal se queda con su marcado original en vez de
+ * tumbar la página entera.
+ *
+ * ## Lo que se limpia y lo que se comprueba
+ *
+ * El marcado viene de la web de otro y se va a servir dentro de una página
+ * nuestra: se limpia siempre, con lista de lo permitido. Y se comprueba que lo
+ * que devuelve el modelo sigue siendo la misma sección con otro texto — a veces
+ * devuelve *su* versión del marcado, que no da error y da una página que ya no
+ * se parece a la que se quería copiar.
+ */
+export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const productId = readText(raw.productId);
+  const pageUrl = readText(raw.pageUrl);
+
+  if (!productId) throw new Error("Falta el producto.");
+  if (!pageUrl) throw new Error("Pega la dirección de la página que quieres copiar.");
+
+  if (!isSupabaseConfigured()) {
+    throw new Error("Esto se guarda en Supabase y todavía no está configurado.");
+  }
+  if (!(await hasActiveProviderKey())) {
+    throw new Error("No hay clave de API configurada. Añádela en Configuración.");
+  }
+
+  const { readPageUrl } = await import("@/lib/landing-import");
+  const { url, problem } = readPageUrl(pageUrl);
+  if (problem) throw new Error(problem);
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  const research = await readProductResearch(productId);
+  const store = product.storeId ? await findStore(product.storeId) : null;
+  const { buildProductContext } = await import("@/lib/copy-prompts");
+  const context = buildProductContext(product, research, store);
+
+  return runInBackground({
+    productId,
+    kind: "landing",
+    label: `Copiar página · ${new URL(url).hostname}`,
+    revalidate: `/products/${productId}`,
+    work: async (report, cancelled) => {
+      await report("Descargando la página y separando sus secciones");
+
+      const { readReferenceSections } = await import("@/lib/reference-page");
+      const { buildCopyPrompt, keepsShape, sanitizeCss, sanitizeHtml } = await import(
+        "@/lib/landing-copy-html"
+      );
+
+      const sections = await readReferenceSections(url);
+
+      if (sections.length === 0) {
+        throw new Error(
+          "De esa página no salió ninguna sección. Puede que la pinte entera el navegador: en ese caso no hay marcado que copiar.",
+        );
+      }
+
+      const out: LandingSection[] = [];
+      const warnings: string[] = [];
+      let inputTokens = 0;
+      let outputTokens = 0;
+
+      for (const [index, section] of sections.entries()) {
+        if (await cancelled()) break;
+
+        await report(`Adaptando la sección ${index + 1} de ${sections.length}`);
+
+        const original = sanitizeHtml(section.html);
+        const css = sanitizeCss(section.css);
+
+        /*
+         * Una sección sin texto —un separador, una franja de color— no necesita
+         * pasar por el modelo: no hay nada que adaptar y sería pagar por
+         * devolver lo mismo.
+         */
+        const words = original.replace(/<[^>]*>/g, " ").trim();
+
+        if (words.length < 20) {
+          out.push({ kind: "crudo", html: original, css });
+          continue;
+        }
+
+        try {
+          const outcome = await generateStructured<{ html: string }>({
+            prompt: buildCopyPrompt({
+              html: original,
+              context,
+              language: `español de ${product.country || "México"}`,
+              role: section.role,
+            }),
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["html"],
+              properties: {
+                html: { type: "string", description: "El mismo HTML con el texto cambiado." },
+              },
+            },
+            role: "copy",
+            maxTokens: 16_000,
+          });
+
+          inputTokens += outcome.inputTokens;
+          outputTokens += outcome.outputTokens;
+
+          const rewritten = sanitizeHtml(outcome.data.html);
+          const verdict = keepsShape(original, rewritten);
+
+          if (!verdict.ok) {
+            /*
+             * Si devolvió otra cosa, se queda el marcado original.
+             *
+             * Con el texto del otro producto dentro, sí — pero visible y
+             * corregible. Meter una sección con otra forma rompe justo lo que se
+             * venía a copiar, y eso no se ve hasta abrir las dos páginas juntas.
+             */
+            warnings.push(`Sección ${index + 1}: ${verdict.why} Se dejó la original.`);
+            out.push({ kind: "crudo", html: original, css });
+            continue;
+          }
+
+          out.push({ kind: "crudo", html: rewritten, css });
+        } catch (error) {
+          warnings.push(
+            `Sección ${index + 1}: ${error instanceof Error ? error.message : "falló"}. Se dejó la original.`,
+          );
+          out.push({ kind: "crudo", html: original, css });
+        }
+      }
+
+      await report("Guardando la página");
+
+      const page = await saveLanding({
+        productId,
+        title: `Copia de ${new URL(url).hostname}`,
+        slug: `copia-${new URL(url).hostname.replace(/[^a-z0-9]+/gi, "-")}-${Date.now()}`,
+        shapeId: "copia",
+        sections: out,
+        imageSlots: [],
+        comments: [],
+      });
+
+      revalidatePath(`/products/${productId}`);
+
+      return {
+        summary: [
+          `${out.length} secciones copiadas de ${new URL(url).hostname}.`,
+          warnings.length > 0 ? ` ${warnings.length} se quedaron con el texto original.` : "",
+          " Las imágenes siguen siendo las suyas: cámbialas antes de publicar.",
+        ].join(""),
+        result: { landingId: page.id, warnings },
+        inputTokens,
+        outputTokens,
+      };
+    },
+  });
+}

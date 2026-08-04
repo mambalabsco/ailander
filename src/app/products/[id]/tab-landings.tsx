@@ -5,6 +5,7 @@ import { SectionCard } from "@/components/section-card";
 import { EmptyState } from "@/components/ui";
 import { LandingViewer } from "@/components/landing-viewer";
 import { ExperimentManager } from "@/components/experiment-manager";
+import { CopyPage } from "@/components/copy-page";
 import type { LandingExperiment } from "@/types/experiment";
 import type { LandingPage } from "@/types/landing";
 import type { ProductImage } from "@/types/visuals";
@@ -40,6 +41,19 @@ export function LandingsTab({
           landings={landings.map((item) => item.page)}
           experiments={experiments}
         />
+      </SectionCard>
+
+      {/*
+        Copiar una página entera es otra cosa que generarla: no se elige marco,
+        ni ángulo, ni forma — se pega una dirección y sale esa misma página con
+        otro texto. Por eso va en su tarjeta y no como una opción más del
+        generador.
+      */}
+      <SectionCard
+        title="Copiar una página tal cual"
+        description="El marcado y el CSS de la original, con el texto adaptado a tu producto. Idéntica en colores, anchos y posiciones."
+      >
+        <CopyPage productId={productId} />
       </SectionCard>
 
       <SectionCard

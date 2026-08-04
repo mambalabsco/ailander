@@ -24,6 +24,14 @@ export type SectionKind =
   | "cta"
   | "comentarios"
   | "aviso-legal"
+  /**
+   * El marcado de la página original, con el texto ya cambiado.
+   *
+   * Solo en modo copia. Lleva su propio HTML y su propio CSS, ya limpios, y se
+   * pinta tal cual: es lo que conserva colores, anchos, tamaños de bloque y
+   * posiciones — que es de lo que va ese modo.
+   */
+  | "crudo"
   /* --- Elementos añadidos a partir de las páginas de referencia --- */
   /** Ficha del autor con foto, nombre y credenciales. */
   | "autor"
@@ -60,6 +68,9 @@ export interface LandingSection {
   right?: { title: string; items: string[] };
   /** Para `dato`: la cifra grande y su unidad. */
   value?: string;
+  /** Para `crudo`: el marcado y el estilo de esa sección, ya limpios. */
+  html?: string;
+  css?: string;
   /** Para `faq`: las preguntas con su respuesta. */
   pairs?: { question: string; answer: string }[];
   /** Para `valoracion`: de 0 a 5, y cuántas reseñas. */
