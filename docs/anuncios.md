@@ -339,15 +339,38 @@ negocio no sabes de dónde viene.
 tu máquina y quien escucha en ese puerto es el servidor. El login parece salir
 bien y la sesión nunca se guarda.
 
-Se une con un túnel:
+Se une con un túnel, y son **dos comandos en dos sitios**.
+
+**1. En tu Mac**, abre el túnel. Deja la ventana abierta: el túnel vive mientras
+dure la sesión de SSH.
 
 ```
 ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co
+```
+
+**2. Ya dentro del servidor** —el prompt habrá cambiado a `plataforma@…`—, inicia
+sesión:
+
+```
 cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765
 ```
 
-Abre en tu navegador la dirección que imprima. La vuelta a `localhost:8765` viaja
-por el túnel hasta el CLI que está esperando en el servidor.
+**3.** Copia la dirección que imprima y ábrela **en el navegador del Mac**. La
+vuelta a `localhost:8765` viaja por el túnel hasta el CLI que está esperando en el
+servidor.
+
+**4.** Comprueba antes de salir, en la misma sesión de SSH:
+
+```
+npx higgsfield auth token
+```
+
+Si imprime un token, está. `exit` para cerrar el túnel.
+
+> Si el puerto 8765 ya está ocupado en tu Mac, `ssh` avisa con «bind: Address
+> already in use» **y sigue conectando igual**: el túnel no funciona y el login
+> se queda esperando. Usa otro puerto en los dos sitios —`-L 9876:localhost:9876`
+> y `--port 9876`—.
 
 **Sin `sudo`, y con el usuario `plataforma`.** El CLI guarda la sesión en el
 `~/.config/higgsfield/credentials.json` de quien ejecuta el comando. Con `sudo`

@@ -255,14 +255,31 @@ export function StudioBoard({
               HOME de quien ejecuta, así que con `sudo` acaba en /root.
             */
             <div className="mt-2 space-y-1 text-xs">
-              <p>Desde tu máquina, con un túnel para que la vuelta del navegador llegue:</p>
-              <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
-                <code>{`ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co
-cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765`}</code>
-              </pre>
               <p>
-                Sin <code>sudo</code> y con el usuario <code>plataforma</code>: el CLI guarda la
-                sesión en el HOME de quien ejecuta el comando.
+                <strong>1.</strong> En tu Mac, abre el túnel. Deja esta ventana abierta: el túnel
+                vive mientras dure la sesión.
+              </p>
+              <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
+                <code>ssh -L 8765:localhost:8765 plataforma@aitools.mambalabs.co</code>
+              </pre>
+
+              <p>
+                <strong>2.</strong> Ya dentro del servidor —el prompt habrá cambiado—, inicia
+                sesión:
+              </p>
+              <pre className="overflow-x-auto rounded-lg bg-amber-100/60 p-2 dark:bg-amber-950/60">
+                <code>cd /home/plataforma/plataforma-ia && npx higgsfield auth login --port 8765</code>
+              </pre>
+
+              <p>
+                <strong>3.</strong> Copia la dirección que imprima y ábrela en el navegador del
+                Mac. La vuelta a <code>localhost:8765</code> viaja por el túnel hasta el CLI que
+                está esperando en el servidor.
+              </p>
+
+              <p>
+                Sin <code>sudo</code> y como <code>plataforma</code>: el CLI guarda la sesión en el
+                HOME de quien ejecuta el comando.
                 {higgsfield.credentialsPath ? (
                   <> Aquí se busca en <code>{higgsfield.credentialsPath}</code>.</>
                 ) : null}
