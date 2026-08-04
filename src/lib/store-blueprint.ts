@@ -337,6 +337,8 @@ interface BlueprintWithPages {
   id: string;
   storeName: string;
   pages: StoredPage[];
+  /** Las que se guardaron al analizar la tienda. Opcional: los planos viejos no las tienen. */
+  images?: { url: string }[];
 }
 
 /**
@@ -370,7 +372,7 @@ export function modelOptions(blueprints: BlueprintWithPages[]): { id: string; ti
 export function findModelPage(
   blueprints: BlueprintWithPages[],
   id: string,
-): { label: string; body: string } | null {
+): { label: string; body: string; images: string[] } | null {
   const parts = id.split(":");
   if (parts[0] !== "plano" || parts.length < 3) return null;
 
@@ -384,5 +386,13 @@ export function findModelPage(
   return {
     label: `${blueprint.storeName} — ${page.title || page.kind} (${page.url})`,
     body: page.text,
+    /*
+     * Las imágenes que llevaba, para poder calcar también dónde iban.
+     *
+     * Sin ellas el modelo coloca los huecos donde le parece, y una página
+     * calcada acaba con la foto del producto justo donde el original tenía el
+     * diagrama que explica el mecanismo.
+     */
+    images: (blueprint.images ?? []).map((image) => image.url).filter(Boolean),
   };
 }

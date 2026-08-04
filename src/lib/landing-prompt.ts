@@ -1,6 +1,13 @@
 import "server-only";
 
 import { buildProductContext } from "@/lib/copy-prompts";
+import {
+  NEVER_CARRIED,
+  houseRules,
+  referenceImages,
+  referenceRules,
+  type Fidelity,
+} from "@/lib/landing-fidelity";
 import type { CopyMethod } from "@/types/copy";
 import type { Product } from "@/types";
 import type { ProductResearch } from "@/types/research";
@@ -30,9 +37,9 @@ export function buildLandingPrompt(options: {
   /** El texto ya escrito, cuando la página se monta sobre un copy existente. */
   baseCopy?: string;
   /** Una página o un copy ajeno que sirve de modelo. */
-  reference?: { label: string; body: string };
+  reference?: { label: string; body: string; images?: string[] };
   /** Lo cerca que hay que quedarse de la referencia. */
-  fidelity?: "calcado" | "inspirado";
+  fidelity?: Fidelity;
   angle?: { name: string; problemMechanism: string; solutionMechanism: string } | null;
   commentStyle: "facebook" | "testimonios";
   countryName: string;
@@ -77,13 +84,11 @@ ${options.reference.body}
 
 ---
 
-${
-  options.fidelity === "calcado"
-    ? `**Sigue esta referencia de cerca.** Conserva su orden de secciones, su ritmo y su longitud. Cambia el producto, el problema, el mecanismo, los nombres y los datos por los de esta investigación.`
-    : `**Úsala como patrón.** Quédate con lo que la hace funcionar —por dónde entra, cómo escala, dónde coloca la prueba y la objeción— y escribe una página nueva. No debe reconocerse el original.`
-}
+${referenceRules(options.fidelity ?? "calcado")}
 
-**Nada de lo que afirme la referencia sobre su producto se arrastra aquí**: ni ingredientes, ni estudios, ni cifras de resultados, ni nombres de marca. Solo se queda lo que esta investigación sostiene para este producto. Una página adaptada que promete lo que el producto no hace convierte una vez y devuelve el pedido.
+${referenceImages(options.reference.images ?? [])}
+
+${NEVER_CARRIED}
 `
     : ""
 }
@@ -128,15 +133,9 @@ Devuelve la página como una lista de secciones en orden. Los tipos disponibles:
 - \`comentarios\` — dónde va el bloque social. Una sola vez, cerca del final.
 - \`aviso-legal\` — la última sección, siempre.
 
-**Usa la variedad.** Una página de veinte párrafos seguidos se abandona. Alterna: un dato tras una sección densa, una comparativa antes de la oferta, el mecanismo numerado cuando expliques el porqué, las preguntas frecuentes antes del cierre. Como mínimo deben aparecer \`valoracion\`, \`autor\`, \`dato\`, \`mecanismo\`, \`comparativa\`, \`garantia\` y \`faq\`.
+${houseRules(options.fidelity ?? "calcado", Boolean(options.reference))}
 
-### Reglas que vienen de páginas que funcionan
-
-1. **El producto no aparece en el primer tercio.** Primero el lector tiene que reconocerse en el problema.
-2. Entre 1.100 y 1.500 palabras de cuerpo.
-3. Frases por debajo de 15 palabras, nivel de 5.º grado, párrafos de una a tres frases.
-4. **Tres llamadas a la acción repartidas**: una a mitad, otra tras la prueba social, otra al final. Con texto del tipo «Ver disponibilidad», nunca «Comprar ahora».
-5. El aviso legal final debe decir que esto es un publirreportaje y no un artículo de noticias, un blog ni una comunicación de una autoridad sanitaria.
+El aviso legal final debe decir que esto es un publirreportaje y no un artículo de noticias, un blog ni una comunicación de una autoridad sanitaria. Eso vale siempre, se calque o no.
 
 ### Imágenes
 

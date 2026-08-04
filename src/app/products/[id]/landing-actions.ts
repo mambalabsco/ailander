@@ -83,7 +83,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
    * datos y los nombres salen de esta investigación, y eso lo impone el prompt.
    */
   const referenceId = readText(raw.referenceId);
-  let reference: { label: string; body: string } | undefined;
+  let reference: { label: string; body: string; images?: string[] } | undefined;
   let theme: LandingTheme | undefined;
 
   if (referenceId.startsWith("plano:")) {
@@ -95,7 +95,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
       );
     }
 
-    reference = found;
+    reference = { label: found.label, body: found.body, images: found.images };
   } else if (referenceId) {
     // Entre todos: calcar una landing de otra marca es el caso normal aquí, y
     // llega elegida por su id.
@@ -122,10 +122,26 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
      */
     if (found.format === "landing" && found.note) {
       theme = await lookOf(found.note).catch(() => undefined);
+
+      /*
+       * Y sus imágenes, para calcar también dónde iba cada una.
+       *
+       * Solo al calcar: inspirándose, la página nueva coloca las suyas donde le
+       * convenga y esta lista no llevaría a ninguna decisión — sería una
+       * descarga más para nada.
+       */
+      if (readText(raw.fidelity) !== "inspirado") {
+        const { readReferenceSections } = await import("@/lib/reference-page");
+
+        reference.images = await readReferenceSections(found.note)
+          .then((sections) => [...new Set(sections.flatMap((section) => section.imageUrls))])
+          .catch(() => []);
+      }
     }
   }
 
-  const fidelity = readText(raw.fidelity) === "inspirado" ? "inspirado" : "calcado";
+  const { readFidelity } = await import("@/lib/landing-fidelity");
+  const fidelity = readFidelity(raw.fidelity);
 
   const prompt = buildLandingPrompt({
     product,
