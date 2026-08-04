@@ -6,6 +6,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createCache } from "@/lib/ttl-cache";
 import {
   declaredMediaParams,
   describePayload,
@@ -16,6 +17,20 @@ import {
 } from "@/lib/higgsfield-urls";
 
 const run = promisify(execFile);
+
+/**
+ * Lo que se pregunta al CLI se guarda unos minutos.
+ *
+ * Cada llamada es un **proceso hijo** y una ida y vuelta por red. Sin esto, cada
+ * carga del estudio lanzaba cuatro: `version`, `auth token` y los dos
+ * catálogos. En un servidor de dos núcleos eso son segundos de espera en cada
+ * navegación, y la plataforma se siente lenta sin que nada esté mal.
+ *
+ * Y son datos que cambian cada mucho: el catálogo de un proveedor, si hay
+ * sesión. Los fallos se guardan menos, para que quien acabe de arreglar la
+ * sesión no tenga que esperar cinco minutos a verlo.
+ */
+const cache = createCache();
 
 /**
  * Higgsfield a través de su CLI oficial.
@@ -213,6 +228,13 @@ async function ensureWorkspace(): Promise<void> {
 }
 
 export async function cliStatus(): Promise<CliStatus> {
+  // Nunca falla, así que se guarda siempre con el plazo largo. Los tres casos
+  // que distingue —sin CLI, sin sesión, bien— cambian solo cuando alguien toca
+  // el servidor.
+  return cache.get("status", readStatus);
+}
+
+async function readStatus(): Promise<CliStatus> {
   const file = credentialsFile();
 
   const where = {
@@ -266,6 +288,10 @@ export async function cliStatus(): Promise<CliStatus> {
  * cuáles descartar por el nombre.
  */
 export async function listCliModels(kind: "image" | "video" = "image"): Promise<CliModel[]> {
+  return cache.get(`models:${kind}`, () => readModels(kind));
+}
+
+async function readModels(kind: "image" | "video"): Promise<CliModel[]> {
   const { stdout, stderr } = await exec(["model", "list", `--${kind}`, "--json"], 30_000);
   const combined = `${stdout}\n${stderr}`;
 

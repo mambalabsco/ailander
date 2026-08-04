@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createCache } from "@/lib/ttl-cache";
 import { buildInput, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import {
   buildMusicInput,
@@ -157,6 +158,19 @@ export interface Voice {
  * error no se ve hasta oír el resultado — con la generación ya pagada.
  */
 export async function listVoices(): Promise<Voice[]> {
+  /*
+   * Las voces cambian cuando alguien clona una, o sea casi nunca.
+   *
+   * Y se piden en **cada carga** de las pantallas que las ofrecen. Una ida y
+   * vuelta a ElevenLabs por navegación es medio segundo que se nota, y por un
+   * dato que sigue siendo el mismo.
+   */
+  return voiceCache.get("voices", readVoices);
+}
+
+const voiceCache = createCache();
+
+async function readVoices(): Promise<Voice[]> {
   const response = await fetch("https://api.elevenlabs.io/v1/voices", {
     headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
     cache: "no-store",
@@ -796,6 +810,15 @@ export async function cloneVoice(options: {
 
   const payload = (await response.json()) as { voice_id?: string };
   if (!payload.voice_id) throw new Error("No devolvió ninguna voz.");
+
+  /*
+   * Se olvida la lista para que la voz nueva salga ya.
+   *
+   * Sin esto, quien acaba de clonar una voz no la ve en el desplegable hasta
+   * dentro de cinco minutos y da por hecho que el clonado falló — que es
+   * exactamente el momento en que una caché estorba.
+   */
+  voiceCache.forget("voices");
 
   return { voiceId: payload.voice_id };
 }

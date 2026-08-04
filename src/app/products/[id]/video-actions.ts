@@ -31,6 +31,7 @@ import {
   type ShotRole,
 } from "@/lib/video/shots";
 import { buildTimeline } from "@/lib/video/timeline";
+import { inBatches } from "@/lib/batch";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { buildMusicPrompt, findMusicGenerator, musicCostLabel } from "@/lib/video/music";
 import { belowVoice, findMusicLevel } from "@/lib/video/loudness";
@@ -444,21 +445,32 @@ export async function generateKeyframesAction(
       let stopped = false;
       const failures: string[] = [];
 
-      for (const [index, shot] of pending.entries()) {
-        /*
-         * Se mira entre tomas, no en medio.
-         *
-         * La que está a medias ya está pagada, así que se termina y se guarda.
-         * Las que faltan ni se empiezan, y volver a lanzarlo solo hace esas.
-         */
-        if (await cancelled()) {
-          stopped = true;
-          break;
-        }
+      /*
+       * Las imágenes van en paralelo, con tope.
+       *
+       * No cuestan CPU: se pide cada una y se **espera** veinte segundos a que
+       * el proveedor la haga. Doce tomas en fila son cuatro minutos de reloj
+       * para un trabajo que cabe en uno. El tope existe porque ningún proveedor
+       * publica su límite de llamadas por minuto, y descubrirlo lanzando doce a
+       * la vez son doce errores de cupo.
+       */
+      const CANCELLED = "__cancelado__";
 
-        await report(`Toma ${shot.n} — ${index + 1} de ${pending.length}`);
+      const outcomes = await inBatches(
+        pending,
+        async (shot) => {
+          /*
+           * Se mira **antes de empezar cada una**, no en medio.
+           *
+           * La que está a medias ya está pagada, así que se termina y se
+           * guarda. Las que no han empezado ni se empiezan, y volver a lanzarlo
+           * solo hace esas.
+           */
+          if (stopped || (await cancelled())) {
+            stopped = true;
+            throw new Error(CANCELLED);
+          }
 
-        try {
           const url = await keyframe({
             prompt: keyframePrompt(
               shot,
@@ -482,12 +494,25 @@ export async function generateKeyframesAction(
           });
 
           await updateShot(shot.id, { keyframeUrl: url, error: null });
-          done += 1;
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : "falló";
-          await updateShot(shot.id, { error: reason });
-          failures.push(`${shot.n}: ${reason}`);
-        }
+          return shot.n;
+        },
+        {
+          onDone: (finished, total) => {
+            void report(`${finished} de ${total} imágenes`);
+          },
+        },
+      );
+
+      done = outcomes.filter((item) => item.ok).length;
+
+      for (const outcome of outcomes) {
+        if (outcome.ok || outcome.error === CANCELLED) continue;
+
+        const shot = pending[outcome.index];
+        const reason = outcome.error ?? "falló";
+
+        await updateShot(shot.id, { error: reason });
+        failures.push(`${shot.n}: ${reason}`);
       }
 
       await updateVideo(videoId, {

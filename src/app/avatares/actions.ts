@@ -9,6 +9,7 @@ import { findProductAnywhere } from "@/lib/products";
 import { readPrimaryImage } from "@/lib/image-store";
 import { generateWithCli, modelMediaParams } from "@/lib/higgsfield-cli";
 import { keyframe } from "@/lib/video/providers";
+import { inBatches } from "@/lib/batch";
 import {
   addAvatar,
   addShot,
@@ -348,7 +349,6 @@ export async function generateShotsAction(input: unknown): Promise<LaunchResult>
     resume: { productId, avatarIds, perAvatar, contexts: contextIds, holding, model },
     work: async (report) => {
       const contexts = contextsFor(perAvatar, contextIds);
-      let done = 0;
       const failed: string[] = [];
 
       /*
@@ -368,12 +368,20 @@ export async function generateShotsAction(input: unknown): Promise<LaunchResult>
 
       const productBytes = cli ? await download(productImage, "producto.png") : null;
 
-      for (const avatar of avatars) {
-        for (const [index, context] of contexts.entries()) {
-          await report(
-            `${avatar.name} · ${context.label} (${done + 1} de ${plan.images})`,
-          );
+      /*
+       * Todas las tomas en una lista, para lanzarlas en paralelo.
+       *
+       * Iban de una en una, y no porque cuesten CPU: se pide la imagen y se
+       * **espera** veinte segundos a que el proveedor la haga. Treinta en fila
+       * son quince minutos de reloj para un trabajo que cabe en cuatro.
+       */
+      const jobs = avatars.flatMap((avatar) =>
+        contexts.map((context) => ({ avatar, context })),
+      );
 
+      const outcomes = await inBatches(
+        jobs,
+        async ({ avatar, context }) => {
           const prompt = buildShotPrompt({
             scene: context.scene,
             productName: product.name,
@@ -381,7 +389,7 @@ export async function generateShotsAction(input: unknown): Promise<LaunchResult>
             holding,
           });
 
-          try {
+          {
             /*
              * El orden de las dos imágenes es el del encargo: primero la cara,
              * después el envase. Cambiarlo sin cambiar el texto produce a la
@@ -418,15 +426,21 @@ export async function generateShotsAction(input: unknown): Promise<LaunchResult>
               prompt,
             });
 
-            done += 1;
-          } catch (error) {
-            failed.push(
-              `${avatar.name} en ${context.label}: ${error instanceof Error ? error.message : "falló"}`,
-            );
+            return { avatar: avatar.name, context: context.label };
           }
+        },
+        {
+          onDone: (done, total) => {
+            void report(`${done} de ${total} fotos`);
+          },
+        },
+      );
 
-          void index;
-        }
+      const done = outcomes.filter((item) => item.ok).length;
+
+      for (const failure of outcomes.filter((item) => !item.ok)) {
+        const job = jobs[failure.index];
+        failed.push(`${job.avatar.name} en ${job.context.label}: ${failure.error}`);
       }
 
       if (done === 0) throw new Error(`No salió ninguna foto. ${failed.join("; ")}`);
