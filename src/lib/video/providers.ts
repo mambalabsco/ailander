@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createQueue } from "@/lib/queue";
+
 import { createCache } from "@/lib/ttl-cache";
 import { buildInput, VIDEO_GENERATORS } from "@/lib/video/catalog";
 import {
@@ -46,6 +48,81 @@ function key(name: string): string {
   return value;
 }
 
+/**
+ * La cola por la que pasan **todas** las llamadas a proveedores.
+ *
+ * ## Por qué aquí y no en cada pantalla
+ *
+ * Porque cada pantalla se protegía sola y el proveedor no cuenta por pantalla:
+ * cuenta por cuenta. Cuatro imágenes del adaptador, un flujo generando clips y
+ * alguien en el estudio eran seis llamadas a la vez que nadie había pedido — y
+ * cuando saltaba el cupo, cada pantalla lo descubría y reintentaba por su
+ * cuenta, todas a la vez, que es lo que lo volvía a hacer saltar.
+ *
+ * Interceptando el `fetch` en vez de envolver cada función, no queda ninguna
+ * llamada fuera: la que se añada mañana entra por el mismo sitio.
+ */
+const queue = createQueue({
+  limit: Number(process.env.PROVIDER_CONCURRENCY) || undefined,
+});
+
+/**
+ * A qué carril va cada llamada.
+ *
+ * Uno por proveedor y no uno global: fal y ElevenLabs son cuentas distintas con
+ * cupos distintos, y compartir tope entre ellas sería frenar una porque la otra
+ * va cargada.
+ */
+function laneFor(url: string): string {
+  if (url.includes("fal.run") || url.includes("fal.ai")) return "fal";
+  if (url.includes("elevenlabs.io")) return "eleven";
+  if (url.includes("kie.ai")) return "kie";
+
+  return "otros";
+}
+
+/** Lo que el proveedor pide esperar, cuando lo dice en la cabecera. */
+function retryAfterMs(response: Response): number | undefined {
+  const header = response.headers.get("retry-after");
+  if (!header) return undefined;
+
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const at = Date.parse(header);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
+}
+
+/**
+ * El `fetch` de siempre, pero dentro de la cola.
+ *
+ * Solo se convierten en excepción los estados que **merece la pena reintentar**
+ * —el cupo y los fallos del proveedor—. Un 400 sigue devolviendo su respuesta
+ * tal cual, para que cada función lea su cuerpo y explique qué campo estaba mal:
+ * reintentar eso cuatro veces solo retrasaría el mensaje cuarenta segundos.
+ */
+async function queued(url: string, init: RequestInit): Promise<Response> {
+  return queue.run(laneFor(url), async () => {
+    const response = await fetch(url, init);
+
+    if (response.status === 429 || response.status >= 500) {
+      const detail = await response.text().catch(() => "");
+
+      throw Object.assign(
+        new Error(`${response.status} ${detail.slice(0, 200)}`.trim()),
+        { status: response.status, retryAfterMs: retryAfterMs(response) },
+      );
+    }
+
+    return response;
+  });
+}
+
+/** Qué hay en marcha y qué está esperando, para poder enseñarlo. */
+export function providerQueueStats() {
+  return queue.all();
+}
+
 export function videoProvidersReady(): { voice: boolean; images: boolean; compose: boolean } {
   return {
     voice: Boolean(process.env.ELEVENLABS_API_KEY?.trim()),
@@ -83,7 +160,7 @@ export async function speak(options: {
   /** Cómo suena: estabilidad, parecido, estilo, velocidad. */
   settings?: Partial<VoiceSettings>;
 }): Promise<VoiceResult> {
-  const response = await fetch(
+  const response = await queued(
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(options.voiceId)}/with-timestamps`,
     {
       method: "POST",
@@ -171,7 +248,7 @@ export async function listVoices(): Promise<Voice[]> {
 const voiceCache = createCache();
 
 async function readVoices(): Promise<Voice[]> {
-  const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+  const response = await queued("https://api.elevenlabs.io/v1/voices", {
     headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
     cache: "no-store",
   });
@@ -212,7 +289,7 @@ interface KieTask {
 }
 
 async function kie<T extends KieTask>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(`${KIE_BASE}${path}`, {
+  const response = await queued(`${KIE_BASE}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${key("KIE_API_KEY")}`,
@@ -447,7 +524,7 @@ export async function animate(options: {
  * plataforma solo espera, que es lo que ya hace con el resto de generaciones.
  */
 export async function compose(tracks: Track[]): Promise<{ videoUrl: string; thumbnailUrl: string }> {
-  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/compose", {
+  const response = await queued("https://fal.run/fal-ai/ffmpeg-api/compose", {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
@@ -488,7 +565,7 @@ export async function transcribe(audio: Buffer, languageCode?: string): Promise<
   form.append("model_id", "scribe_v1");
   if (languageCode) form.append("language_code", languageCode);
 
-  const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+  const response = await queued("https://api.elevenlabs.io/v1/speech-to-text", {
     method: "POST",
     headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
     body: form,
@@ -550,7 +627,7 @@ export async function trimClip(url: string, seconds: number): Promise<string> {
  * el tramo siguiente arranca del principio del anterior.
  */
 export async function lastFrame(videoUrl: string): Promise<string> {
-  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/extract-frame", {
+  const response = await queued("https://fal.run/fal-ai/ffmpeg-api/extract-frame", {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
@@ -583,7 +660,7 @@ export async function lastFrame(videoUrl: string): Promise<string> {
 export async function mergeVideos(urls: string[]): Promise<string> {
   if (urls.length === 1) return urls[0];
 
-  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/merge-videos", {
+  const response = await queued("https://fal.run/fal-ai/ffmpeg-api/merge-videos", {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
@@ -637,7 +714,7 @@ export async function burnSubtitles(options: {
   /** Cómo se escribe lo que se pronuncia raro. */
   vocabulary?: VocabularyEntry[];
 }): Promise<string> {
-  const response = await fetch("https://fal.run/veed/subtitles", {
+  const response = await queued("https://fal.run/veed/subtitles", {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
@@ -684,7 +761,7 @@ export async function makeMusic(options: {
 }): Promise<{ url: string; model: MusicGenerator }> {
   const model = findMusicGenerator(options.model ?? "");
 
-  const response = await fetch(`https://fal.run/${model.slug}`, {
+  const response = await queued(`https://fal.run/${model.slug}`, {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
@@ -725,7 +802,7 @@ export async function makeMusic(options: {
  * más y es lo que hace que el resultado caiga donde se pidió.
  */
 export async function normalizeLoudness(url: string, lufs: number): Promise<string> {
-  const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/loudnorm", {
+  const response = await queued("https://fal.run/fal-ai/ffmpeg-api/loudnorm", {
     method: "POST",
     headers: {
       Authorization: `Key ${key("FAL_KEY")}`,
@@ -772,7 +849,7 @@ export async function normalizeLoudness(url: string, lufs: number): Promise<stri
  */
 export async function mediaSeconds(url: string): Promise<number> {
   try {
-    const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/metadata", {
+    const response = await queued("https://fal.run/fal-ai/ffmpeg-api/metadata", {
       method: "POST",
       headers: {
         Authorization: `Key ${key("FAL_KEY")}`,
@@ -821,7 +898,7 @@ export async function cloneVoice(options: {
     );
   }
 
-  const response = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+  const response = await queued("https://api.elevenlabs.io/v1/voices/add", {
     method: "POST",
     headers: { "xi-api-key": key("ELEVENLABS_API_KEY") },
     body: form,

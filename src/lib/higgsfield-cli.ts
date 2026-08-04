@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createCache } from "@/lib/ttl-cache";
+import { createQueue } from "@/lib/queue";
 import {
   declaredMediaParams,
   describePayload,
@@ -17,6 +18,44 @@ import {
 } from "@/lib/higgsfield-urls";
 
 const run = promisify(execFile);
+
+/**
+ * La cola del CLI.
+ *
+ * ## Por qué tiene la suya y no la de los proveedores web
+ *
+ * Porque aquí el tope es de **dos cosas a la vez**, no de una. Cada generación
+ * es un proceso hijo en un servidor de dos núcleos —lanzar seis deja la
+ * plataforma sin responder para quien la esté usando— y además Higgsfield tiene
+ * su propio cupo por cuenta, que no tiene nada que ver con el de fal.
+ *
+ * El de por defecto es dos: uno por núcleo, dejando el otro para atender la web.
+ *
+ * ## Y qué se reintenta
+ *
+ * El CLI no devuelve estados HTTP: escribe el motivo y sale. Así que el veredicto
+ * se lee del texto — cupo, límite, saturación, corte de red— y todo lo demás sale
+ * a la primera. Reintentar «ese modelo no existe» cuatro veces es esperar un
+ * minuto para el mismo error.
+ */
+const queue = createQueue({
+  limit: Number(process.env.HIGGSFIELD_CONCURRENCY) || 2,
+  retryable: (error: unknown) => {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? "");
+
+    return {
+      retry:
+        /rate limit|too many|429|quota|capacity|overloaded|timeout|timed out|econnreset|network|temporarily/.test(
+          message,
+        ),
+    };
+  },
+});
+
+/** Qué hay en marcha en el CLI, para poder enseñarlo junto a lo demás. */
+export function cliQueueStats() {
+  return queue.stats("higgsfield");
+}
 
 /**
  * Lo que se pregunta al CLI se guarda unos minutos.
@@ -131,6 +170,20 @@ function credentialsFile(): { home: string; path: string; exists: boolean } {
 async function exec(
   args: string[],
   timeoutMs = 60_000,
+): Promise<{ stdout: string; stderr: string; failed: boolean }> {
+  /*
+   * Todo el CLI pasa por la cola, no solo las generaciones.
+   *
+   * Un `model list` mientras corren dos generaciones es un tercer proceso en un
+   * servidor de dos núcleos. Cuesta poco y llega igual: lo que hace la cola es
+   * que llegue **después**, no que se pierda.
+   */
+  return queue.run("higgsfield", () => execNow(args, timeoutMs));
+}
+
+async function execNow(
+  args: string[],
+  timeoutMs: number,
 ): Promise<{ stdout: string; stderr: string; failed: boolean }> {
   try {
     const { stdout, stderr } = await run(binary(), args, {

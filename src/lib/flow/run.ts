@@ -36,7 +36,7 @@ import { planSegments, segmentInstruction, sliceScript, totalSeconds } from "@/l
 import { findMusicGenerator } from "@/lib/video/music";
 import { findMusicLevel } from "@/lib/video/loudness";
 import { findVoicePreset } from "@/lib/video/voice-settings";
-import { inputsOf, order, type Flow, type FlowNode } from "@/lib/flow/graph";
+import { inputsOf, order, readyNow, type Flow, type FlowNode } from "@/lib/flow/graph";
 import { saveOutput } from "@/lib/data/flows";
 
 /**
@@ -56,13 +56,16 @@ import { saveOutput } from "@/lib/data/flows";
  * paso obligaría a pagar todo otra vez, que es la diferencia entre reintentar y
  * no reintentar.
  *
- * ## Y por qué en serie
+ * ## Y por qué en oleadas
  *
- * `readyNow` sabe qué nodos pueden ir en paralelo, y aquí se ejecutan de uno en
- * uno igualmente. El servidor tiene dos núcleos y los proveedores limitan
- * llamadas por minuto: lanzar seis clips a la vez no los hace más rápidos, los
- * hace fallar por cupo. Cuando eso deje de ser cierto, el orden ya está
- * calculado y solo hay que agrupar.
+ * Esto iba de uno en uno por una razón que ya no es cierta: los proveedores
+ * limitan llamadas por minuto y lanzar seis clips a la vez los hacía fallar por
+ * cupo. Ahora todas las llamadas pasan por una cola que respeta ese tope
+ * **sumando lo que manda toda la plataforma** y que reenvía sola lo que choca,
+ * así que el trabajo de no pasarse ya no es de aquí.
+ *
+ * Lo que se gana: seis imágenes que no dependen entre sí tardaban seis veces lo
+ * que tarda una. Ahora tardan lo que tarde la más lenta.
  */
 
 export interface RunContext {
@@ -635,44 +638,92 @@ export async function runFlow(flow: Flow, ctx: RunContext): Promise<RunOutcome> 
 
   const results = new Map(ctx.done);
   const failed: RunOutcome["failed"] = [];
-  let done = 0;
+  const broken = new Set<string>();
 
-  for (const [index, nodeId] of sequence.entries()) {
-    const node = flow.nodes.find((item) => item.id === nodeId);
-    if (!node) continue;
+  let done = results.size;
+  let wave = 0;
 
-    // Ya hecho en una vuelta anterior: no se vuelve a pagar.
-    if (results.has(nodeId)) {
-      done += 1;
-      continue;
-    }
+  /*
+   * En oleadas, no de uno en uno.
+   *
+   * Esto iba en serie por una razón que ya no es cierta: los proveedores limitan
+   * llamadas por minuto y lanzar seis clips a la vez los hacía fallar por cupo.
+   * Ahora todas las llamadas pasan por una cola que respeta ese tope **sumando
+   * lo que manda toda la plataforma** y que reenvía sola lo que choca, así que
+   * el trabajo de no pasarse ya no es de aquí.
+   *
+   * Lo que se gana: seis imágenes que no dependen entre sí tardaban seis veces
+   * lo que tarda una. Ahora tardan lo que tarde la más lenta, y el tope lo pone
+   * quien sabe cuál es.
+   */
+  for (;;) {
+    const ready = readyNow(flow, new Set([...results.keys(), ...broken]))
+      .filter((nodeId) => !results.has(nodeId) && !broken.has(nodeId))
+      .filter((nodeId) => {
+        /*
+         * Un nodo cuyo padre falló no se intenta.
+         *
+         * Sin esto se lanza igualmente, falla por falta de entrada y suma un
+         * error más que confunde: el que importa es el primero, y los demás son
+         * su eco.
+         */
+        const parents = [...inputsOf(flow, nodeId).values()].flat();
+        const orphan = parents.some((parent) => !results.has(parent));
+
+        if (orphan) {
+          broken.add(nodeId);
+          failed.push({ nodeId, problem: "No se intentó: falló algo de lo que depende." });
+        }
+
+        return !orphan;
+      });
+
+    if (ready.length === 0) break;
+
+    wave += 1;
+
+    await ctx.report(
+      ready.length > 1
+        ? `Paso ${done + 1} y ${ready.length - 1} más a la vez (${ready.join(", ")})`
+        : `Paso ${done + 1} de ${sequence.length}`,
+    );
 
     /*
-     * Un nodo cuyo padre falló no se intenta.
+     * Se lanzan todas y se espera a todas.
      *
-     * Sin esto se lanza igualmente, falla por falta de entrada y suma un error
-     * más que confunde: el que importa es el primero, y los demás son su eco.
+     * `Promise.all` cortaría en el primer fallo y dejaría las demás corriendo
+     * sin recoger: pagadas y tiradas. Con `allSettled` se recogen todas y cada
+     * una guarda lo suyo.
      */
-    const parents = [...inputsOf(flow, nodeId).values()].flat();
-    if (parents.some((parent) => !results.has(parent))) {
-      failed.push({ nodeId, problem: "No se intentó: falló algo de lo que depende." });
-      continue;
-    }
+    const outcomes = await Promise.allSettled(
+      ready.map(async (nodeId) => {
+        const node = flow.nodes.find((item) => item.id === nodeId)!;
+        const result = await runNode(node, gather(flow, nodeId, results), ctx);
 
-    await ctx.report(`Paso ${index + 1} de ${sequence.length}`);
+        return { nodeId, result };
+      }),
+    );
 
-    try {
-      const result = await runNode(node, gather(flow, nodeId, results), ctx);
+    for (const [index, outcome] of outcomes.entries()) {
+      const nodeId = ready[index];
 
-      results.set(nodeId, result);
-      await saveOutput({ runId: ctx.runId, nodeId, ...result });
-      done += 1;
-    } catch (error) {
-      const problem = error instanceof Error ? error.message : "falló";
+      if (outcome.status === "fulfilled") {
+        results.set(nodeId, outcome.value.result);
+        await saveOutput({ runId: ctx.runId, nodeId, ...outcome.value.result });
+        done += 1;
+        continue;
+      }
 
+      const problem =
+        outcome.reason instanceof Error ? outcome.reason.message : "falló";
+
+      broken.add(nodeId);
       failed.push({ nodeId, problem });
       await saveOutput({ runId: ctx.runId, nodeId, kind: "texto", error: problem });
     }
+
+    // Un flujo con un ciclo que se coló no puede dar oleadas infinitas.
+    if (wave > flow.nodes.length + 1) break;
   }
 
   return { done, total: sequence.length, failed };
