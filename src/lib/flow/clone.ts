@@ -9,13 +9,15 @@
  * producto, cómo cierra, cada cuánto corta. Eso es lo que hace que un anuncio
  * funcione y es lo que el análisis ya guarda.
  *
- * No se clona el vídeo ni su texto. Está decidido así en la migración de
- * `video_references` y no es una limitación técnica: se sube el anuncio ajeno,
- * se le sacan fotogramas, se analiza y se borra. Lo que se reutiliza es cómo
- * está hecho, no la obra.
+ * El vídeo ajeno y su texto no se conservan: se sube, se le sacan fotogramas y
+ * audio, se analiza y se borra. **Los fotogramas sí**, por decisión explícita:
+ * describir un plano con palabras pierde justo lo que se quería copiar —el
+ * encuadre, la luz, dónde cae el sujeto—, y con el fotograma delante la escena
+ * nueva se genera con él de referencia.
  *
- * Así que cada escena se **rehace** desde su descripción con mi producto y mi
- * cara, no se calca. Es la diferencia entre copiar la estructura de un anuncio y
+ * Aun así cada escena se **rehace**, no se recorta y se pega: el fotograma entra
+ * como referencia de un generador que dibuja otra cosa, con mi producto y mi
+ * cara. Es la diferencia entre copiar la construcción de un anuncio y
  * republicar el de otro.
  *
  * ## La voz es una decisión aparte
@@ -24,6 +26,71 @@
  */
 
 import type { Flow } from "./graph.ts";
+
+/* ------------------------------ Los fotogramas ------------------------------ */
+
+export interface ReferenceFrame {
+  url: string;
+  /** El segundo del vídeo del que salió. */
+  at: number;
+}
+
+/**
+ * Pone la dirección de cada fotograma en el nodo que la pidió.
+ *
+ * ## Por qué el modelo pide segundos y no direcciones
+ *
+ * Porque una dirección de setenta caracteres copiada a mano por un modelo sale
+ * mal una de cada pocas veces, y una dirección mal copiada no da error: da un
+ * nodo que al ejecutar dice «no se pudo descargar la referencia», con el resto
+ * del flujo ya montado.
+ *
+ * Así que el modelo dice **de qué segundo** quiere el fotograma —un número que
+ * ya tiene delante, en la línea de tiempo— y aquí se busca el más cercano. Es
+ * el mismo reparto de siempre: el modelo decide, el código resuelve.
+ */
+export function attachFrames(
+  flow: Flow,
+  frames: ReferenceFrame[],
+): { flow: Flow; missing: string[] } {
+  const missing: string[] = [];
+
+  if (frames.length === 0) {
+    const asked = flow.nodes.filter(
+      (node) => node.type === "archivo" && Number.isFinite(Number(node.settings.frameAt)),
+    );
+
+    for (const node of asked) {
+      missing.push(`${node.id} pedía un fotograma y ese análisis no guardó ninguno.`);
+    }
+
+    return { flow, missing };
+  }
+
+  const nodes = flow.nodes.map((node) => {
+    if (node.type !== "archivo") return node;
+
+    const wanted = Number(node.settings.frameAt);
+    if (!Number.isFinite(wanted)) return node;
+
+    // El más cercano en el tiempo. Con empate gana el primero, que en un
+    // anuncio es el que abre el plano y no el que lo cierra.
+    const nearest = frames.reduce((best, frame) =>
+      Math.abs(frame.at - wanted) < Math.abs(best.at - wanted) ? frame : best,
+    );
+
+    return {
+      ...node,
+      settings: {
+        ...node.settings,
+        url: nearest.url,
+        name: `Fotograma del segundo ${Math.round(nearest.at)}`,
+      },
+    };
+  });
+
+  return { flow: { nodes, edges: flow.edges }, missing };
+}
 
 /* ---------------------------------- La voz ---------------------------------- */
 
@@ -239,6 +306,8 @@ export function buildClonePrompt(options: {
   aspectRatio?: string;
   /** Si hay caras guardadas que se puedan usar de avatar. */
   avatars?: number;
+  /** Cuántos fotogramas del original se guardaron. */
+  frames?: number;
 }): string {
   const { analysis } = options;
 
@@ -250,10 +319,10 @@ export function buildClonePrompt(options: {
     "Se copia la **construcción**: cuántas tomas, qué hace cada una, cada cuánto",
     "corta, dónde entra el producto y cómo cierra.",
     "",
-    "No se copia el texto del original ni sus imágenes. Cada toma se **rehace**",
-    "desde cero con mi producto y mi gente: mismo papel en la historia, contenido",
-    "propio. Si el original decía una cifra, un nombre de marca o un testimonio,",
-    "no los repitas — escribe el equivalente para mi producto.",
+    "No se copia el texto del original. Cada toma se **rehace** con mi producto y",
+    "mi gente: mismo papel en la historia, contenido propio. Si el original decía",
+    "una cifra, un nombre de marca o un testimonio, no los repitas — escribe el",
+    "equivalente para mi producto.",
     "",
     `## Cómo está hecho «${options.referenceName}»`,
     "",
@@ -326,6 +395,34 @@ export function buildClonePrompt(options: {
     );
   } else {
     lines.push("No lleva voz. Ni nodo de `voz`, ni sonido del generador. Música y ya.");
+  }
+
+  /*
+   * Los fotogramas del original, para que cada toma parta del encuadre que tenía.
+   *
+   * El modelo pide **el segundo**, no la dirección: una dirección de setenta
+   * caracteres copiada a mano sale mal de vez en cuando y no da error — da un
+   * nodo que al ejecutar no puede descargar su referencia, con el flujo entero
+   * ya montado. El número ya lo tiene delante, en la línea de tiempo.
+   */
+  if (options.frames && options.frames > 0) {
+    lines.push(
+      "",
+      "## Los fotogramas del original",
+      "",
+      `Se guardaron ${options.frames}, uno por momento aproximadamente.`,
+      "",
+      "Para partir del encuadre que tenía una toma, añade un nodo `archivo` con",
+      "`settings.frameAt` = el segundo de esa toma, y conéctalo a las referencias",
+      "del nodo que la genera. La plataforma pone sola la dirección del fotograma",
+      "más cercano a ese segundo — **no escribas direcciones**.",
+      "",
+      "Úsalo donde el encuadre importe: el gancho, el plano del producto, el",
+      "antes y después. En las tomas donde solo importe la idea, no hace falta.",
+      "",
+      "El fotograma es **referencia de composición**, no de contenido: el prompt",
+      "de esa toma tiene que describir mi producto y mi gente, no los suyos.",
+    );
   }
 
   if (options.avatars && options.avatars > 0) {

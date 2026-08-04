@@ -773,6 +773,8 @@ type VideoReferenceRow = {
   /** La construcción descrita, nunca el guion. */
   analysis: unknown;
   warnings: unknown;
+  /** Los fotogramas guardados: `[{url, at}]`. El vídeo sigue sin conservarse. */
+  frames: unknown;
   created_at: string;
 };
 

@@ -169,6 +169,7 @@ export default async function FlujosPage(props: {
               seconds: item.durationSeconds,
               beats: item.analysis.beats.length,
               hadAudio: item.hadAudio,
+              frames: item.frames.length,
             }))}
           />
 

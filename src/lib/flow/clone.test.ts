@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   VOICE_CHOICES,
+  attachFrames,
   buildClonePrompt,
   describeBeats,
   voicePlan,
@@ -246,4 +247,96 @@ test("la forma cambia lo que se pide", () => {
 
 test("el encargo no sale con agujeros de líneas en blanco", () => {
   assert.ok(!/\n\n\n/.test(encargo()));
+});
+
+/* ------------------------------ Los fotogramas ------------------------------ */
+
+const FRAMES = [
+  { url: "https://cdn/0.jpg", at: 0 },
+  { url: "https://cdn/3.jpg", at: 3 },
+  { url: "https://cdn/9.jpg", at: 9 },
+];
+
+const conFrameAt = (at: unknown): Flow => ({
+  nodes: [{ id: "archivo-1", type: "archivo", x: 0, y: 0, settings: { frameAt: at } }],
+  edges: [],
+});
+
+/*
+ * El modelo pide el segundo y no la dirección: una dirección de setenta
+ * caracteres copiada a mano sale mal de vez en cuando, y no da error — da un
+ * nodo que al ejecutar no puede descargar su referencia.
+ */
+test("cada nodo se queda con el fotograma más cercano a su segundo", () => {
+  const { flow } = attachFrames(conFrameAt(8), FRAMES);
+
+  assert.equal(flow.nodes[0].settings.url, "https://cdn/9.jpg");
+  assert.match(String(flow.nodes[0].settings.name), /segundo 9/);
+});
+
+test("un segundo exacto coge el suyo", () => {
+  assert.equal(attachFrames(conFrameAt(3), FRAMES).flow.nodes[0].settings.url, "https://cdn/3.jpg");
+});
+
+test("un segundo más allá del vídeo coge el último", () => {
+  assert.equal(attachFrames(conFrameAt(90), FRAMES).flow.nodes[0].settings.url, "https://cdn/9.jpg");
+});
+
+test("un nodo de imagen sin fotograma pedido no se toca", () => {
+  const flow: Flow = {
+    nodes: [{ id: "archivo-1", type: "archivo", x: 0, y: 0, settings: { url: "https://mia/1.jpg" } }],
+    edges: [],
+  };
+
+  assert.equal(attachFrames(flow, FRAMES).flow.nodes[0].settings.url, "https://mia/1.jpg");
+});
+
+test("lo que no es un número no se interpreta como el segundo cero", () => {
+  const { flow } = attachFrames(conFrameAt("el gancho"), FRAMES);
+  assert.equal(flow.nodes[0].settings.url, undefined);
+});
+
+/*
+ * Un análisis viejo no guardó fotogramas. Dejar los nodos vacíos en silencio da
+ * un flujo que falla al ejecutar, a mitad y con lo anterior pagado.
+ */
+test("sin fotogramas guardados se dice, no se deja el nodo vacío", () => {
+  const { flow, missing } = attachFrames(conFrameAt(3), []);
+
+  assert.equal(flow.nodes[0].settings.url, undefined);
+  assert.equal(missing.length, 1);
+  assert.match(missing[0], /no guardó ninguno/);
+});
+
+test("sin fotogramas y sin nodos que los pidan no se avisa de nada", () => {
+  assert.deepEqual(attachFrames({ nodes: [], edges: [] }, []).missing, []);
+});
+
+test("las conexiones no se tocan al poner los fotogramas", () => {
+  const flow: Flow = {
+    nodes: [
+      { id: "archivo-1", type: "archivo", x: 0, y: 0, settings: { frameAt: 0 } },
+      { id: "imagen-1", type: "imagen", x: 0, y: 0, settings: {} },
+    ],
+    edges: [{ from: "archivo-1", to: "imagen-1", port: 1 }],
+  };
+
+  assert.deepEqual(attachFrames(flow, FRAMES).flow.edges, flow.edges);
+});
+
+test("con fotogramas se le explica cómo pedirlos, sin direcciones", () => {
+  const prompt = encargo({ frames: 12 });
+
+  assert.match(prompt, /se guardaron 12/i);
+  assert.match(prompt, /frameAt/);
+  assert.match(prompt, /no escribas direcciones/i);
+});
+
+/* El fotograma dice cómo se encuadra, no qué sale dentro. */
+test("se aclara que el fotograma es composición y no contenido", () => {
+  assert.match(encargo({ frames: 5 }), /referencia de composición/);
+});
+
+test("sin fotogramas no se habla de ellos", () => {
+  assert.ok(!encargo({ frames: 0 }).includes("frameAt"));
 });

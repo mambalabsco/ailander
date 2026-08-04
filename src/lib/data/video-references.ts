@@ -21,6 +21,15 @@ export interface SavedVideoReference {
   framesAnalyzed: number;
   analysis: VideoAnalysis;
   warnings: string[];
+  /**
+   * Los fotogramas guardados, con el segundo del que salió cada uno.
+   *
+   * El vídeo sigue sin conservarse. Estos existen por el modo clonador: rehacer
+   * una escena solo desde su descripción pierde justo lo que se quería copiar
+   * —el encuadre, la luz, dónde cae el sujeto—, y con el fotograma delante la
+   * escena nueva se genera con él de referencia.
+   */
+  frames: { url: string; at: number }[];
   createdAt: string;
 }
 
@@ -67,6 +76,23 @@ function parseBeats(value: unknown): VideoBeat[] {
   });
 }
 
+/** Los fotogramas, validados uno a uno como los momentos. */
+function parseFrames(value: unknown): { url: string; at: number }[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const record = item as Record<string, unknown>;
+
+    const url = text(record.url);
+    const at = Number(record.at);
+
+    // Sin dirección no hay fotograma, y sin segundo no se puede emparejar con
+    // ningún momento: las dos cosas o ninguna.
+    return url && Number.isFinite(at) ? [{ url, at }] : [];
+  });
+}
+
 function parseAnalysis(value: unknown): VideoAnalysis {
   if (typeof value !== "object" || value === null) return EMPTY;
   const record = value as Record<string, unknown>;
@@ -107,6 +133,7 @@ export async function listVideoReferences(): Promise<SavedVideoReference[]> {
     framesAnalyzed: row.frames_analyzed,
     analysis: parseAnalysis(row.analysis),
     warnings: Array.isArray(row.warnings) ? row.warnings.map(text).filter(Boolean) : [],
+    frames: parseFrames(row.frames),
     createdAt: row.created_at,
   }));
 }
@@ -121,6 +148,7 @@ export async function saveVideoReference(input: {
   framesAnalyzed: number;
   analysis: VideoAnalysis;
   warnings: string[];
+  frames?: { url: string; at: number }[];
 }): Promise<string> {
   const { supabase, userId } = await requireContext();
 
@@ -137,6 +165,7 @@ export async function saveVideoReference(input: {
       frames_analyzed: input.framesAnalyzed,
       analysis: input.analysis,
       warnings: input.warnings,
+      frames: input.frames ?? [],
     })
     .select("id")
     .single();

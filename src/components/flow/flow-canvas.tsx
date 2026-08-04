@@ -69,7 +69,15 @@ export interface FlowCanvasProps {
   /** Las del producto del flujo, para usarlas de referencia sin subirlas otra vez. */
   productImages: { url: string; name: string; primary: boolean }[];
   /** Los anuncios ya analizados, para poder clonar su construcción. */
-  references: { id: string; name: string; seconds: number; beats: number; hadAudio: boolean }[];
+  references: {
+    id: string;
+    name: string;
+    seconds: number;
+    beats: number;
+    hadAudio: boolean;
+    /** Cuántos fotogramas guardó: sin ellos se clona la estructura, no los encuadres. */
+    frames: number;
+  }[];
   /** Los copys que ya funcionaron y los ángulos investigados de este producto. */
   copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
 }
@@ -724,7 +732,14 @@ function AutoBuild({
   onBuilt,
 }: {
   flowId: string;
-  references: { id: string; name: string; seconds: number; beats: number; hadAudio: boolean }[];
+  references: {
+    id: string;
+    name: string;
+    seconds: number;
+    beats: number;
+    hadAudio: boolean;
+    frames: number;
+  }[];
   busy: boolean;
   /** Devuelve si se aplicó: puede rechazarse para no pisar lo que ya hay. */
   onBuilt: (graph: Flow, message: string) => boolean;
@@ -803,6 +818,7 @@ function AutoBuild({
               {references.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} · {Math.round(item.seconds)} s · {item.beats} momento(s)
+                  {item.frames > 0 ? ` · ${item.frames} fotogramas` : " · sin fotogramas"}
                   {item.hadAudio ? "" : " · sin voz"}
                 </option>
               ))}
@@ -936,6 +952,9 @@ function AutoBuild({
           {Math.round(reference.seconds)} segundos y {reference.beats} momentos. Por defecto el
           clon dura lo mismo: el mismo anuncio en la mitad de tiempo tendría que cortar el doble
           de rápido, y entonces ya no es el mismo anuncio.
+          {reference.frames > 0
+            ? ` Sus ${reference.frames} fotogramas entran como referencia de encuadre en las tomas donde importe.`
+            : " Este análisis es anterior a que se guardaran los fotogramas: se clona su construcción, no sus encuadres. Vuelve a analizarlo si quieres también los encuadres."}
         </p>
       ) : null}
 

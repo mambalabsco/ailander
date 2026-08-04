@@ -47,7 +47,8 @@ const SETTINGS_HINT: Record<string, string> = {
   voz: "tone (narrador | cercano | intenso | calmado)",
   musica: "prompt (cómo suena, en español), seconds, level (suave | normal | presente)",
   montaje: "subtitles (el id de un estilo de subtítulos, o vacío)",
-  archivo: "url (solo si ya tienes la dirección de una imagen)",
+  archivo:
+    "url (si ya tienes la dirección), frameAt (el segundo del anuncio de referencia del que quieres el fotograma)",
   referencia: "text (el copy o el ángulo, literal), label (de dónde salió)",
   avatar: "avatarId (vacío = la cara de cada vuelta)",
   producto: "ninguno",

@@ -164,6 +164,44 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
 
       const review = reviewAnalysis(analysis, duration);
 
+      /*
+       * Los fotogramas se quedan; el vídeo no.
+       *
+       * Es para el modo clonador. Rehacer una escena solo desde su descripción
+       * pierde justo lo que se quería copiar —el encuadre, la luz, dónde cae el
+       * sujeto—; con el fotograma delante, la escena nueva se genera con él de
+       * referencia y sale la misma toma con otro producto.
+       *
+       * Si la subida falla, el análisis se guarda igual: sin fotogramas se
+       * clona peor, pero perder el análisis entero por una subida es perder lo
+       * que costó dinero.
+       */
+      const saved: { url: string; at: number }[] = [];
+
+      try {
+        const { requireContext } = await import("@/lib/supabase/session");
+        const { supabase, userId } = await requireContext();
+        const folder = `${userId}/referencias/${crypto.randomUUID()}`;
+
+        for (const [index, frame] of files.entries()) {
+          const extension = frame.type.split("/")[1] || "jpg";
+          const path = `${folder}/${String(index).padStart(2, "0")}.${extension}`;
+
+          const { error } = await supabase.storage
+            .from("studio")
+            .upload(path, Buffer.from(await frame.arrayBuffer()), { contentType: frame.type });
+
+          if (error) continue;
+
+          saved.push({
+            url: supabase.storage.from("studio").getPublicUrl(path).data.publicUrl,
+            at: marks[index] ?? 0,
+          });
+        }
+      } catch {
+        // Sin fotogramas guardados. El análisis sigue valiendo para escribir.
+      }
+
       await saveVideoReference({
         name,
         sourceUrl,
@@ -174,6 +212,7 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
         framesAnalyzed: frames.length,
         analysis,
         warnings: review.warnings,
+        frames: saved,
       });
 
       return {
@@ -181,6 +220,9 @@ export async function analyzeVideoAction(form: FormData): Promise<LaunchResult> 
           `${frames.length} fotogramas de ${duration.toFixed(0)} s`,
           transcript ? " con voz transcrita" : audio ? " (no se pudo transcribir)" : " sin voz",
           `. ${analysis.beats.length} momentos, corte cada ${analysis.averageShotSeconds.toFixed(1)} s.`,
+          saved.length > 0
+            ? ` ${saved.length} fotograma(s) guardados para poder clonarlo.`
+            : " No se guardó ningún fotograma: se podrá clonar su estructura, no sus encuadres.",
           review.warnings.length > 0 ? ` ${review.warnings.length} aviso(s) que mirar.` : "",
         ].join(""),
         inputTokens,

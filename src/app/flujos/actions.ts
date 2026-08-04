@@ -618,7 +618,9 @@ export async function cloneFlowAction(input: unknown): Promise<{
 
     const { generateStructured } = await import("@/lib/generators");
     const { flowFromPlan, FLOW_PLAN_SCHEMA, describeNodeMenu } = await import("@/lib/flow/build");
-    const { buildClonePrompt, voicePlan, voiceProblems } = await import("@/lib/flow/clone");
+    const { attachFrames, buildClonePrompt, voicePlan, voiceProblems } = await import(
+      "@/lib/flow/clone"
+    );
     const { VIDEO_GENERATORS } = await import("@/lib/video/catalog");
     const { SUBTITLE_PRESETS } = await import("@/lib/video/captions");
 
@@ -665,6 +667,7 @@ export async function cloneFlowAction(input: unknown): Promise<{
         seconds,
         aspectRatio: readText(raw.aspectRatio) || "9:16",
         avatars: avatars.length,
+        frames: reference.frames.length,
       }),
       schema: FLOW_PLAN_SCHEMA as unknown as Record<string, unknown>,
       role: "copy",
@@ -678,17 +681,30 @@ export async function cloneFlowAction(input: unknown): Promise<{
     }
 
     /*
+     * Y se ponen las direcciones de los fotogramas que pidió.
+     *
+     * El modelo pide **el segundo**, no la dirección: una de setenta caracteres
+     * copiada a mano sale mal de vez en cuando y no da error — da un nodo que al
+     * ejecutar no puede descargar su referencia, con el flujo entero montado.
+     */
+    const withFrames = attachFrames(built.flow, reference.frames);
+
+    /*
      * Y se repasa que el flujo haga lo que se decidió de la voz.
      *
      * Lo que se le pide a un modelo no siempre es lo que devuelve, y un flujo
      * mudo se descubre al reproducirlo con todo generado y pagado.
      */
-    const problems = validate(built.flow);
+    const problems = validate(withFrames.flow);
 
     return {
       ok: true,
-      graph: built.flow,
-      dropped: [...built.dropped, ...voiceProblems(built.flow, voice)],
+      graph: withFrames.flow,
+      dropped: [
+        ...built.dropped,
+        ...withFrames.missing,
+        ...voiceProblems(withFrames.flow, voice),
+      ],
       voice,
       message: [
         outcome.data.explicacion?.trim(),
