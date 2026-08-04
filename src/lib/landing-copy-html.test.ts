@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   buildCopyPrompt,
+  closeOpenTags,
   hasSubstance,
   isChrome,
   keepsShape,
@@ -269,4 +270,57 @@ test("una sección que se quedó en nada no se guarda", () => {
 test("una sección con texto o con imagen sí", () => {
   assert.equal(hasSubstance("<p>Volver a caminar sin pensarlo</p>"), true);
   assert.equal(hasSubstance('<div><img src="/a.jpg" alt=""></div>'), true);
+});
+
+/*
+ * El segundo fallo del copiador. El recorte por tamaño cae donde cae: a veces en
+ * mitad de un atributo, dejando `<div data-x style="--jc:` sin su `>`. El
+ * limpiador solo reconoce etiquetas completas, así que eso pasaba como texto — y
+ * como texto se pintaba, escrito en mitad de la página.
+ */
+test("una etiqueta cortada a mitad de un atributo no queda escrita", () => {
+  const cortado = '<div class="a">Hola</div><div data-same-height style="--jc:';
+  const limpio = sanitizeHtml(cortado);
+
+  assert.equal(limpio, '<div class="a">Hola</div>');
+  assert.ok(!limpio.includes("--jc"));
+});
+
+test("un `<` que es texto de verdad no se lleva la página por delante", () => {
+  assert.equal(sanitizeHtml("<p>5 < 10 y ya</p>"), "<p>5 < 10 y ya</p>");
+});
+
+/* ---------------------------- Cerrar lo abierto ----------------------------- */
+
+/*
+ * El navegador cierra solo lo que quedó abierto **al final del documento**, así
+ * que el resto de la página acaba metido dentro: hereda su ancho, su fondo y su
+ * relleno. No da error; da una página que se ve mal por un motivo que no está en
+ * las secciones que se ven mal.
+ */
+test("lo que el recorte dejó abierto se cierra", () => {
+  assert.equal(closeOpenTags('<div class="a"><p>Hola'), '<div class="a"><p>Hola</p></div>');
+});
+
+test("lo que ya estaba equilibrado no se toca", () => {
+  const html = "<div><p>Hola</p></div>";
+  assert.equal(closeOpenTags(html), html);
+});
+
+test("las que no llevan cierre no cuentan", () => {
+  assert.equal(closeOpenTags("<p>Uno<br>Dos</p>"), "<p>Uno<br>Dos</p>");
+  assert.equal(closeOpenTags('<div><img src="a.jpg">'), '<div><img src="a.jpg"></div>');
+});
+
+test("una autocerrada tampoco", () => {
+  assert.equal(closeOpenTags("<div><br/></div>"), "<div><br/></div>");
+});
+
+/* Un cierre de más no puede cerrar lo que no abrió. */
+test("un cierre suelto no descuadra el resto", () => {
+  assert.equal(closeOpenTags("</span><div>Hola"), "</span><div>Hola</div>");
+});
+
+test("se cierran en orden inverso, que es el único que vale", () => {
+  assert.equal(closeOpenTags("<section><div><p>x"), "<section><div><p>x</p></div></section>");
 });

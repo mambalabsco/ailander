@@ -765,6 +765,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
       const { readReferenceSections } = await import("@/lib/reference-page");
       const {
         buildCopyPrompt,
+        closeOpenTags,
         hasSubstance,
         isChrome,
         keepsShape,
@@ -811,8 +812,17 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
          * tal cual da una página tuya cuyo «Comprar» convierte para él. Y no
          * falla en ningún sitio, la página se ve perfecta.
          */
+        /*
+         * Limpiar, desactivar enlaces y **cerrar lo que el recorte dejó
+         * abierto**, en ese orden.
+         *
+         * Lo último importa tanto como lo primero: una sección recortada se
+         * queda con tres o cuatro `<div>` abiertos, y el navegador los cierra al
+         * final del documento — con el resto de la página metida dentro,
+         * heredando su ancho y su fondo.
+         */
         const clean = neutralizeLinks(sanitizeHtml(section.html));
-        const original = clean.html;
+        const original = closeOpenTags(clean.html);
         const css = sanitizeCss(section.css);
 
         links += clean.changed;
@@ -856,7 +866,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           inputTokens += outcome.inputTokens;
           outputTokens += outcome.outputTokens;
 
-          const rewritten = neutralizeLinks(sanitizeHtml(outcome.data.html)).html;
+          const rewritten = closeOpenTags(neutralizeLinks(sanitizeHtml(outcome.data.html)).html);
           const verdict = keepsShape(original, rewritten);
 
           if (!verdict.ok) {
