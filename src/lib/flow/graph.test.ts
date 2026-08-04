@@ -7,8 +7,10 @@ import {
   inputsOf,
   NODE_TYPES,
   order,
+  progressOf,
   readyNow,
   removeNode,
+  runStates,
   validate,
   type Flow,
 } from "./graph.ts";
@@ -250,4 +252,120 @@ test("quitar un nodo se lleva sus conexiones", () => {
   assert.equal(next.nodes.length, 2);
   assert.deepEqual(next.edges, []);
   assert.ok(order(next));
+});
+
+/* ------------------------------- El avance --------------------------------- */
+
+const cadena = (): Flow => ({
+  nodes: [
+    { id: "producto-1", type: "producto", x: 0, y: 0, settings: {} },
+    { id: "guion-1", type: "guion", x: 0, y: 0, settings: {} },
+    { id: "voz-1", type: "voz", x: 0, y: 0, settings: {} },
+  ],
+  edges: [
+    { from: "producto-1", to: "guion-1", port: 0 },
+    { from: "guion-1", to: "voz-1", port: 0 },
+  ],
+});
+
+test("sin nada hecho, el primero está en marcha y los demás esperan", () => {
+  const states = runStates(cadena(), {}, true);
+
+  assert.equal(states.get("producto-1"), "ahora");
+  assert.equal(states.get("guion-1"), "espera");
+  assert.equal(states.get("voz-1"), "espera");
+});
+
+test("lo que ya produjo está hecho y el turno pasa al siguiente", () => {
+  const states = runStates(cadena(), { "producto-1": { url: "x" } }, true);
+
+  assert.equal(states.get("producto-1"), "hecho");
+  assert.equal(states.get("guion-1"), "ahora");
+});
+
+/* Solo uno: el ejecutor va de uno en uno y pintar tres es decir que se paga el triple. */
+test("solo hay un nodo en marcha a la vez", () => {
+  const flow: Flow = {
+    nodes: [
+      { id: "a", type: "archivo", x: 0, y: 0, settings: {} },
+      { id: "b", type: "archivo", x: 0, y: 0, settings: {} },
+      { id: "c", type: "archivo", x: 0, y: 0, settings: {} },
+    ],
+    edges: [],
+  };
+
+  const states = [...runStates(flow, {}, true).values()];
+  assert.equal(states.filter((state) => state === "ahora").length, 1);
+});
+
+test("parado el flujo, nadie está en marcha", () => {
+  const states = runStates(cadena(), {}, false);
+  assert.ok(![...states.values()].includes("ahora"));
+});
+
+/*
+ * El que importa: un nodo cuyo padre falló no se intenta, así que no produce ni
+ * resultado ni error propio. Sin distinguirlo se queda «esperando» para siempre.
+ */
+test("lo que cuelga de un fallo se marca parado, no esperando", () => {
+  const states = runStates(cadena(), { "producto-1": { error: "sin foto" } }, true);
+
+  assert.equal(states.get("producto-1"), "fallo");
+  assert.equal(states.get("guion-1"), "parado");
+  assert.equal(states.get("voz-1"), "parado");
+});
+
+test("con todo caído no se pinta ninguno en marcha", () => {
+  const states = runStates(cadena(), { "producto-1": { error: "x" } }, true);
+  assert.ok(![...states.values()].includes("ahora"));
+});
+
+test("una rama que falla no para la otra", () => {
+  const flow: Flow = {
+    nodes: [
+      { id: "a", type: "archivo", x: 0, y: 0, settings: {} },
+      { id: "b", type: "archivo", x: 0, y: 0, settings: {} },
+      { id: "musica-1", type: "musica", x: 0, y: 0, settings: {} },
+    ],
+    edges: [],
+  };
+
+  const states = runStates(flow, { a: { error: "x" }, b: { url: "y" } }, true);
+
+  assert.equal(states.get("a"), "fallo");
+  assert.equal(states.get("b"), "hecho");
+  assert.equal(states.get("musica-1"), "ahora");
+});
+
+test("el recuento separa lo hecho de lo que se cayó", () => {
+  const states = runStates(cadena(), { "producto-1": { error: "x" } }, true);
+  const progress = progressOf(states);
+
+  assert.deepEqual(progress, { done: 0, failed: 3, total: 3 });
+});
+
+test("un flujo terminado cuenta todo hecho", () => {
+  const states = runStates(
+    cadena(),
+    { "producto-1": { url: "a" }, "guion-1": { url: "b" }, "voz-1": { url: "c" } },
+    false,
+  );
+
+  assert.deepEqual(progressOf(states), { done: 3, failed: 0, total: 3 });
+});
+
+/* Un círculo no tiene orden; quedarse sin pintar el avance sería peor. */
+test("un círculo no deja el avance en blanco", () => {
+  const flow: Flow = {
+    nodes: [
+      { id: "a", type: "prompt", x: 0, y: 0, settings: {} },
+      { id: "b", type: "prompt", x: 0, y: 0, settings: {} },
+    ],
+    edges: [
+      { from: "a", to: "b", port: 0 },
+      { from: "b", to: "a", port: 0 },
+    ],
+  };
+
+  assert.equal(runStates(flow, {}, true).size, 2);
 });

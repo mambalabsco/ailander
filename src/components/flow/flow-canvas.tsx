@@ -20,7 +20,16 @@ import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { FlowNodeBox } from "@/components/flow/flow-node";
 import { NodeSettings } from "@/components/flow/node-settings";
-import { NODE_TYPES, canConnect, findNodeType, removeNode, validate, type Flow } from "@/lib/flow/graph";
+import {
+  NODE_TYPES,
+  canConnect,
+  findNodeType,
+  progressOf,
+  removeNode,
+  runStates,
+  validate,
+  type Flow,
+} from "@/lib/flow/graph";
 import { buildFlowAction, flowProgressAction, runFlowAction, saveFlowAction } from "@/app/flujos/actions";
 
 /**
@@ -79,6 +88,16 @@ export function FlowCanvas({
   /** Si hay una ejecución viva: mientras la haya, se sondea. */
   const [running, setRunning] = useState(false);
   const [faces, setFaces] = useState(avatars);
+  /** Lo que ha producido cada nodo. Aparte de las cajas, para poder deducir el avance. */
+  const [outputs, setOutputs] = useState(results);
+  /*
+   * El grafo que está corriendo, congelado al lanzarlo.
+   *
+   * No vale el que se está editando: mover una caja o añadir un nodo mientras
+   * corre cambiaría el orden y con él quién es «el que va ahora». Y tampoco vale
+   * el guardado que llegó con la página, que para entonces ya es viejo.
+   */
+  const [ranGraph, setRanGraph] = useState<Flow>(graph);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(
     graph.nodes.map((node) => ({
@@ -146,13 +165,7 @@ export function FlowCanvas({
       if (!alive) return;
 
       setFaces(progress.avatars);
-
-      setNodes((current) =>
-        current.map((node) => {
-          const result = progress.outputs[node.id];
-          return result ? { ...node, data: { ...node.data, result } } : node;
-        }),
-      );
+      setOutputs(progress.outputs);
 
       if (progress.status && progress.status !== "corriendo") {
         setRunning(false);
@@ -168,6 +181,32 @@ export function FlowCanvas({
       clearInterval(timer);
     };
   }, [running, flowId, setNodes]);
+
+  /**
+   * En qué anda cada nodo, deducido de lo que ya ha producido.
+   *
+   * Se calcula sobre el grafo congelado y no sobre el que se edita: si no, cada
+   * arrastre recalcularía el avance y el efecto de abajo entraría en bucle.
+   */
+  const states = useMemo(() => runStates(ranGraph, outputs, running), [ranGraph, outputs, running]);
+  const progress = useMemo(() => progressOf(states), [states]);
+
+  /*
+   * Lo que ha salido y en qué anda, en cada caja.
+   *
+   * Va en un efecto y no en el sondeo porque son dos cosas distintas: el sondeo
+   * trae datos y esto los reparte. Antes solo se repartía el resultado, así que
+   * un flujo de doce nodos ejecutándose se veía **igual** que uno parado hasta
+   * que empezaban a aparecer imágenes.
+   */
+  useEffect(() => {
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        data: { ...node.data, result: outputs[node.id], state: states.get(node.id) },
+      })),
+    );
+  }, [outputs, states, setNodes]);
 
   /*
    * La conexión la autoriza el modelo, no el lienzo.
@@ -304,7 +343,12 @@ export function FlowCanvas({
             await saveFlowAction(flowId, asFlow);
 
             const launched = await runFlowAction({ flowId, variants });
-            if (launched.started) setRunning(true);
+
+            if (launched.started) {
+              // Lo que corre es esto, no lo que se edite a partir de ahora.
+              setRanGraph(asFlow);
+              setRunning(true);
+            }
 
             return launched;
           }}
@@ -381,6 +425,86 @@ export function FlowCanvas({
           return true;
         }}
       />
+
+      {/*
+        La barra, mientras corre y también al acabar.
+
+        Al acabar sigue en pantalla a propósito: es donde se lee cuántos se
+        cayeron sin tener que buscar caja por caja cuál tiene el borde rojo.
+      */}
+      {progress.total > 0 && (running || progress.done + progress.failed > 0) ? (
+        <div className="rounded-2xl border border-slate-200 p-2 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-medium">
+              {running ? "Ejecutando" : "Última ejecución"} · {progress.done + progress.failed} de{" "}
+              {progress.total}
+              {progress.failed > 0 ? ` · ${progress.failed} sin salir` : ""}
+            </span>
+
+            <span className="text-slate-500 dark:text-slate-400">
+              {[...states.entries()].find(([, state]) => state === "ahora")?.[0] ?? ""}
+              {note && running ? ` · ${note}` : ""}
+            </span>
+          </div>
+
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                progress.failed > 0 ? "bg-amber-500" : "bg-violet-600"
+              }`}
+              style={{
+                width: `${Math.round(((progress.done + progress.failed) / progress.total) * 100)}%`,
+              }}
+            />
+          </div>
+
+          {/*
+            La lista de pasos, que es lo que se pidió: ver por dónde va sin
+            tener que buscar la caja que late en un lienzo de veinte.
+          */}
+          <ol className="mt-2 space-y-0.5 text-[11px]">
+            {ranGraph.nodes.map((node) => {
+              const state = states.get(node.id);
+              const type = findNodeType(node.type);
+
+              return (
+                <li key={node.id} className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={`inline-block size-1.5 shrink-0 rounded-full ${
+                      state === "hecho"
+                        ? "bg-emerald-500"
+                        : state === "fallo"
+                          ? "bg-rose-500"
+                          : state === "ahora"
+                            ? "animate-pulse bg-violet-600"
+                            : "bg-slate-300 dark:bg-slate-700"
+                    }`}
+                  />
+
+                  <span
+                    className={
+                      state === "ahora"
+                        ? "font-medium"
+                        : state === "espera" || state === "parado"
+                          ? "text-slate-400 dark:text-slate-500"
+                          : "text-slate-600 dark:text-slate-300"
+                    }
+                  >
+                    {type?.label ?? node.type} · {node.id}
+                  </span>
+
+                  {outputs[node.id]?.error ? (
+                    <span className="truncate text-rose-700 dark:text-rose-400">
+                      {outputs[node.id]?.error}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
 
       {note ? (
         <p className="rounded-2xl border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">

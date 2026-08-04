@@ -396,3 +396,96 @@ export function removeNode(flow: Flow, nodeId: string): Flow {
     edges: flow.edges.filter((edge) => edge.from !== nodeId && edge.to !== nodeId),
   };
 }
+
+/* ------------------------------- El avance --------------------------------- */
+
+/**
+ * En qué está cada nodo mientras el flujo corre.
+ *
+ * `parado` es el que importa: un nodo cuyo padre falló **no se intenta**, así
+ * que no produce ni resultado ni error propio. Sin distinguirlo, se quedaría
+ * pintado como «esperando» para siempre y el lienzo diría que sigue trabajando
+ * en algo que ya no va a pasar.
+ */
+export type NodeState = "hecho" | "fallo" | "ahora" | "espera" | "parado";
+
+/**
+ * El estado de cada nodo, deducido de lo que ya ha producido.
+ *
+ * Se deduce en vez de preguntarlo porque el ejecutor va en serie y en este mismo
+ * orden: el que está en marcha es el primero que aún no ha producido nada y
+ * tiene a todos sus padres hechos. Pedirle al servidor que además publique en
+ * qué nodo va sería un dato más que mantener sincronizado para saber lo que ya
+ * se sabe.
+ */
+export function runStates(
+  flow: Flow,
+  outputs: Record<string, { url?: string; error?: string } | undefined>,
+  running: boolean,
+): Map<string, NodeState> {
+  const states = new Map<string, NodeState>();
+  const sequence = order(flow) ?? flow.nodes.map((node) => node.id);
+
+  for (const id of sequence) {
+    const output = outputs[id];
+
+    if (output?.error) {
+      states.set(id, "fallo");
+      continue;
+    }
+
+    if (output) {
+      states.set(id, "hecho");
+      continue;
+    }
+
+    // Con un padre caído no se va a intentar: decirlo ahorra la espera.
+    const parents = flow.edges.filter((edge) => edge.to === id).map((edge) => edge.from);
+    const broken = parents.some(
+      (parent) => states.get(parent) === "fallo" || states.get(parent) === "parado",
+    );
+
+    if (broken) {
+      states.set(id, "parado");
+      continue;
+    }
+
+    states.set(id, "espera");
+  }
+
+  if (!running) return states;
+
+  /*
+   * Y cuál es el que está ahora mismo.
+   *
+   * El primero de la fila que puede correr: sin resultado, sin padres rotos y
+   * con todos sus padres ya hechos. Solo uno — el ejecutor va de uno en uno, y
+   * pintar tres a la vez sería decir que se está pagando el triple.
+   */
+  for (const id of sequence) {
+    if (states.get(id) !== "espera") continue;
+
+    const parents = flow.edges.filter((edge) => edge.to === id).map((edge) => edge.from);
+    if (parents.every((parent) => states.get(parent) === "hecho")) {
+      states.set(id, "ahora");
+      break;
+    }
+  }
+
+  return states;
+}
+
+/** Cuánto se lleva hecho, para una barra y para un «4 de 9». */
+export function progressOf(states: Map<string, NodeState>): {
+  done: number;
+  total: number;
+  failed: number;
+} {
+  const values = [...states.values()];
+
+  return {
+    done: values.filter((state) => state === "hecho").length,
+    failed: values.filter((state) => state === "fallo" || state === "parado").length,
+    total: values.length,
+  };
+}

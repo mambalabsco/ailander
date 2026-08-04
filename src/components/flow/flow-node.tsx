@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { findNodeType, type PortKind } from "@/lib/flow/graph";
+import { findNodeType, type NodeState, type PortKind } from "@/lib/flow/graph";
 
 /**
  * Una caja del lienzo.
@@ -52,7 +52,45 @@ export interface FlowNodeData extends Record<string, unknown> {
   preview?: { url: string; text: string };
   /** Lo que produjo la última ejecución, si la hubo. */
   result?: { url: string; kind: string; error: string };
+  /** En qué anda mientras el flujo corre. */
+  state?: NodeState;
 }
+
+/**
+ * Cómo se ve cada estado.
+ *
+ * El que está en marcha late, y los que esperan se apagan. Sin eso, un flujo de
+ * doce nodos ejecutándose se ve exactamente igual que uno parado: la única
+ * señal era una frase debajo del lienzo, y hay que ir a buscarla mientras se
+ * mira la caja que interesa.
+ */
+const STATE_STYLE: Record<NodeState, { ring: string; label: string; tone: string }> = {
+  ahora: {
+    ring: "border-violet-500 ring-4 ring-violet-200 dark:ring-violet-900",
+    label: "Trabajando",
+    tone: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300",
+  },
+  hecho: {
+    ring: "border-emerald-400",
+    label: "Hecho",
+    tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
+  },
+  fallo: {
+    ring: "border-rose-500",
+    label: "Falló",
+    tone: "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300",
+  },
+  parado: {
+    ring: "border-slate-300 dark:border-slate-700",
+    label: "No se intentó",
+    tone: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  },
+  espera: {
+    ring: "",
+    label: "En cola",
+    tone: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+  },
+};
 
 export function FlowNodeBox({ data, selected }: NodeProps) {
   const value = data as FlowNodeData;
@@ -67,12 +105,15 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
   }
 
   const result = value.result;
+  const state = value.state ? STATE_STYLE[value.state] : null;
 
   return (
     <div
-      className={`w-52 rounded-2xl border-2 bg-white shadow-sm dark:bg-slate-900 ${
-        selected ? "border-violet-500" : (GROUP_STYLE[type.group] ?? "border-slate-300")
-      }`}
+      className={`w-52 rounded-2xl border-2 bg-white shadow-sm transition-shadow dark:bg-slate-900 ${
+        selected
+          ? "border-violet-500"
+          : state?.ring || GROUP_STYLE[type.group] || "border-slate-300"
+      } ${value.state === "espera" || value.state === "parado" ? "opacity-60" : ""}`}
     >
       {/*
         Las entradas, repartidas por la altura y con su nombre dentro.
@@ -110,7 +151,29 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
       />
 
       <div className="px-3 py-2">
-        <p className="text-[10px] uppercase tracking-wide text-slate-400">{type.group}</p>
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-[10px] uppercase tracking-wide text-slate-400">{type.group}</p>
+
+          {state ? (
+            <span
+              className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${state.tone}`}
+            >
+              {/*
+                El punto que late solo en el que está trabajando. En los demás es
+                un punto quieto: una animación en doce cajas a la vez dice que
+                hay doce cosas pasando, y solo pasa una.
+              */}
+              {value.state === "ahora" ? (
+                <span className="relative flex size-1.5">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-violet-500 opacity-75" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-violet-600" />
+                </span>
+              ) : null}
+              {state.label}
+            </span>
+          ) : null}
+        </div>
+
         <p className="text-sm font-medium">{type.label}</p>
 
         {type.accepts.length > 0 ? (
