@@ -769,6 +769,8 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         buildCopyPrompt,
         closeOpenTags,
         cutAtTag,
+        dropHidingRules,
+        reveal,
         scopeCss,
         unlazy,
         hasSubstance,
@@ -841,12 +843,16 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
          *    la copia no lleva. Sin esto, quince huecos en blanco.
          * 2. `absolutize` — `/cdn/shop/x.jpg` servido desde otro dominio se pide
          *    a ese otro dominio y no existe.
-         * 3. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
+         * 3. `reveal` — los constructores dejan cada bloque invisible en el CSS
+         *    y su JavaScript le quita la clase al hacer scroll. Sin él, la
+         *    página entera se queda en `opacity: 0`: con su maqueta, su texto y
+         *    sus imágenes, todo bien generado y todo invisible.
+         * 4. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
          * 4. `neutralizeLinks` — que el «Comprar» no lleve a su carrito.
          * 5. `closeOpenTags` — lo que el recorte dejó abierto.
          */
         const clean = neutralizeLinks(
-          sanitizeHtml(absolutize(unlazy(cutAtTag(section.html, 150_000)), origin)),
+          sanitizeHtml(reveal(absolutize(unlazy(cutAtTag(section.html, 150_000)), origin))),
         );
 
         const original = closeOpenTags(clean.html);
@@ -946,7 +952,13 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         out.unshift({
           kind: "crudo",
           html: "",
-          css: scopeCss(absolutizeCss(sanitizeCss(page.css), origin), ".copiado"),
+          // `dropHidingRules` por el otro lado: la lista de marcas no puede
+          // estar completa —hay un constructor nuevo cada año— así que también
+          // se quitan las reglas que solo esconden esperando a ese JavaScript.
+          css: scopeCss(
+            dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)),
+            ".copiado",
+          ),
         });
       }
 

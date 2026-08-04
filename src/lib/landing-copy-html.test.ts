@@ -7,12 +7,14 @@ import {
   absolutizeCss,
   closeOpenTags,
   cutAtTag,
+  dropHidingRules,
   hasSubstance,
   isChrome,
   keepsShape,
   neutralizeLinks,
   sanitizeCss,
   sanitizeHtml,
+  reveal,
   scopeCss,
   unlazy,
 } from "./landing-copy-html.ts";
@@ -495,4 +497,60 @@ test("y tampoco al hacer absolutas las direcciones", () => {
 
   assert.match(out, /base-src="\/a\.jpg"/);
   assert.match(out, /\ssrc="https:\/\/t\.com\/b\.jpg"/);
+});
+
+/* ------------------- Lo que estaba escondido esperando JS ------------------- */
+
+/*
+ * Los constructores animan la entrada de cada bloque: lo dejan invisible en el
+ * CSS y su JavaScript le quita la clase al hacer scroll. La copia no lleva ese
+ * JavaScript, así que la página entera se queda en `opacity: 0` — con su
+ * maqueta, su texto y sus imágenes, todo bien generado y todo invisible.
+ */
+test("las clases de «sin revelar» se quitan", () => {
+  const html = '<div class="gps gpsil gps-lazy hero">Hola</div>';
+  const out = reveal(html);
+
+  assert.ok(!out.includes("gps-lazy"));
+  assert.match(out, /gps/);
+  assert.match(out, /hero/);
+});
+
+test("los atributos de animación también", () => {
+  assert.ok(!reveal('<div data-aos="fade-up" class="a">x</div>').includes("data-aos"));
+  assert.ok(!reveal('<div display-init="hide">x</div>').includes("display-init"));
+});
+
+/* Palabra entera: `reveal` dentro de `revealed-box` es otra clase. */
+test("no se lleva por delante una clase que solo se parece", () => {
+  assert.match(reveal('<div class="revealed-box">x</div>'), /revealed-box/);
+});
+
+test("lo que no lleva marcas no se toca", () => {
+  const html = '<div class="hero grande">Hola</div>';
+  assert.equal(reveal(html), html);
+});
+
+/* ------------------------- Y las reglas que esconden ------------------------ */
+
+test("la regla que esconde esperando JS se cae", () => {
+  const css = ".gpsil .gps-lazy{opacity:0!important} .hero{color:red}";
+  const out = dropHidingRules(css);
+
+  assert.ok(!out.includes("opacity:0"));
+  assert.match(out, /\.hero\{color:red\}/);
+});
+
+/*
+ * Esconder es legítimo: un menú cerrado, un aviso de cookies, media carrusel.
+ * Quitarlas todas dejaría la página con todo abierto encima de todo.
+ */
+test("una regla que esconde sin marca de animación se queda", () => {
+  const css = ".menu-cerrado{display:none} .aviso{visibility:hidden}";
+  assert.equal(dropHidingRules(css), css);
+});
+
+test("una regla con marca que no esconde tampoco se cae", () => {
+  const css = ".gps-lazy{transition:opacity .3s}";
+  assert.equal(dropHidingRules(css), css);
 });
