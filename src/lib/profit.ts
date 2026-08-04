@@ -809,3 +809,21 @@ export function bucketRows(rows: DayRow[], grain: Grain): { label: string; rows:
 
   return buckets;
 }
+
+/**
+ * La diferencia entre dos porcentajes, en **puntos**.
+ *
+ * ## Por qué no vale la variación normal
+ *
+ * Porque comparar dos porcentajes en porcentaje engaña. Un margen que pasa del
+ * 10% al 12% con `change()` sale como «+20%», y eso se lee como que el margen
+ * subió veinte puntos — cuando subió dos. Es el mismo número diciendo dos cosas
+ * muy distintas, y la que se entiende es la mala.
+ *
+ * En puntos, «+2,0 pts» solo se puede leer de una forma.
+ */
+export function pointsChange(current: number | null, previous: number | null): number | null {
+  if (current === null || previous === null) return null;
+
+  return current - previous;
+}

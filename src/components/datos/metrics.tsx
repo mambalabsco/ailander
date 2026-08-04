@@ -35,7 +35,22 @@ export function times(value: number | null): string {
   return value === null ? "—" : value.toFixed(2);
 }
 
-function Change({ value, invert = false }: { value: number | null; invert?: boolean }) {
+function Change({
+  value,
+  invert = false,
+  unit = "%",
+}: {
+  value: number | null;
+  invert?: boolean;
+  /**
+   * Cómo se lee la variación.
+   *
+   * En puntos para los indicadores que **ya son un porcentaje**: un margen que
+   * pasa del 10% al 12% subió dos puntos, y escribir «+20%» se lee como que subió
+   * veinte. El mismo número diciendo dos cosas, y la que se entiende es la mala.
+   */
+  unit?: "%" | " pts";
+}) {
   if (value === null) {
     return (
       <span className="text-xs text-slate-400 dark:text-slate-500" title="No hubo datos en el periodo anterior">
@@ -60,7 +75,8 @@ function Change({ value, invert = false }: { value: number | null; invert?: bool
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${className}`}
     >
       <span aria-hidden>{rounded === 0 ? "=" : up ? "↑" : "↓"}</span>
-      {Math.abs(rounded).toFixed(rounded === 0 ? 0 : 1)}%
+      {Math.abs(rounded).toFixed(rounded === 0 ? 0 : 1)}
+      {unit}
     </span>
   );
 }
@@ -72,12 +88,15 @@ export function MetricCard({
   invert = false,
   hint,
   hero = false,
+  changeUnit,
 }: {
   label: string;
   value: string;
   change?: number | null;
   /** Para los costos: subir es malo. */
   invert?: boolean;
+  /** `" pts"` cuando el indicador ya es un porcentaje. */
+  changeUnit?: "%" | " pts";
   hint?: string;
   hero?: boolean;
 }) {
@@ -91,7 +110,9 @@ export function MetricCard({
       <p className={`mt-2 font-semibold ${hero ? "text-4xl" : "text-2xl"}`}>{value}</p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {change === undefined ? null : <Change value={change} invert={invert} />}
+        {change === undefined ? null : (
+          <Change value={change} invert={invert} unit={changeUnit ?? "%"} />
+        )}
         {hint ? <span className="text-xs text-slate-500 dark:text-slate-400">{hint}</span> : null}
       </div>
     </div>

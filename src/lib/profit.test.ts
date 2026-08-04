@@ -11,6 +11,8 @@ import {
   kpis,
   shippingCostFor,
   spreadFixedCost,
+  change,
+  pointsChange,
   sumRows,
   zoneFor,
   type CostSettings,
@@ -571,4 +573,31 @@ test("un cambio aproximado en un día marca el total entero", () => {
 
 test("sin nada raro el total no se marca", () => {
   assert.equal(sumRows([row({ adSpend: 10 })]).adSpendApprox, false);
+});
+
+/* ------------------------------ Puntos, no % -------------------------------- */
+
+/*
+ * Un margen que pasa del 10% al 12% subió **dos puntos**. Con la variación
+ * normal sale «+20%», que se lee como que subió veinte — el mismo número
+ * diciendo dos cosas, y la que se entiende es la mala.
+ */
+test("la variación de un porcentaje va en puntos", () => {
+  assert.equal(pointsChange(12, 10), 2);
+  assert.equal(change(12, 10), 20);
+});
+
+test("bajar da negativo", () => {
+  assert.equal(pointsChange(8, 10), -2);
+});
+
+test("sin dato en alguno de los dos lados no se inventa una variación", () => {
+  assert.equal(pointsChange(null, 10), null);
+  assert.equal(pointsChange(10, null), null);
+});
+
+/* Cero es un margen legítimo: no es «no hay dato». */
+test("un margen de cero se compara igual", () => {
+  assert.equal(pointsChange(0, 5), -5);
+  assert.equal(pointsChange(5, 0), 5);
 });

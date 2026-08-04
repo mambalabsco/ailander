@@ -4,7 +4,7 @@ import { ProfitChart } from "@/components/datos/profit-chart";
 import { DataWarning, MetricCard, money, pct, times } from "@/components/datos/metrics";
 import { DatosHeader } from "@/app/datos/header";
 import { bucketRows, grainFrom, loadReport, reportContext } from "@/app/datos/report";
-import { change, sumRows } from "@/lib/profit";
+import { change, pointsChange, sumRows } from "@/lib/profit";
 import { daysIn } from "@/lib/date-range";
 import { gatewaysInUse, lastSyncedOrderDate, variantsSold } from "@/lib/data/analytics";
 import { listJobsByKind } from "@/lib/data/jobs";
@@ -145,7 +145,31 @@ export default async function DatosPage({ searchParams }: PageProps) {
           label="Beneficio neto"
           value={money(now.netProfit, currency)}
           change={change(now.netProfit, previous.netProfit)}
-          hint={`margen ${pct(now.netMargin)} · ROI ${pct(now.roi)}`}
+        />
+
+        {/*
+          El margen y el ROI, con su propia tarjeta.
+
+          Estaban de nota pequeña bajo el beneficio, y son las dos cifras que
+          contestan «¿esto va bien?» — el beneficio en euros no lo dice sin saber
+          cuánto se vendió para sacarlo.
+
+          Su variación va en **puntos**, no en porcentaje: un margen que pasa del
+          10% al 12% subió dos puntos, y «+20%» se lee como que subió veinte.
+        */}
+        <MetricCard
+          label="Margen neto"
+          value={pct(now.netMargin, 1)}
+          change={pointsChange(now.netMargin, previous.netMargin)}
+          changeUnit=" pts"
+          hint="beneficio ÷ ingresos"
+        />
+        <MetricCard
+          label="ROI"
+          value={pct(now.roi, 1)}
+          change={pointsChange(now.roi, previous.roi)}
+          changeUnit=" pts"
+          hint="beneficio ÷ lo que costó"
         />
         <MetricCard
           label="Ingresos"
@@ -153,15 +177,16 @@ export default async function DatosPage({ searchParams }: PageProps) {
           change={change(now.revenue, previous.revenue)}
           hint={`brutas ${money(now.grossSales, currency)}`}
         />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Costos totales"
           value={money(now.totalCosts, currency)}
           change={change(now.totalCosts, previous.totalCosts)}
           invert
         />
-      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/*
           Ya convertido a la moneda del panel. Antes se sumaban dólares y pesos
           como si fueran lo mismo: 23,77 USD salía escrito «23,77 CLP».
