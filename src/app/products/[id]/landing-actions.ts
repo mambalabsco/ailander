@@ -762,10 +762,15 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
     work: async (report, cancelled) => {
       await report("Descargando la página y separando sus secciones");
 
-      const { readReferenceSections } = await import("@/lib/reference-page");
+      const { readPageForCopy } = await import("@/lib/reference-page");
       const {
+        absolutize,
+        absolutizeCss,
         buildCopyPrompt,
         closeOpenTags,
+        cutAtTag,
+        scopeCss,
+        unlazy,
         hasSubstance,
         isChrome,
         keepsShape,
@@ -774,7 +779,9 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         sanitizeHtml,
       } = await import("@/lib/landing-copy-html");
 
-      const sections = await readReferenceSections(url);
+      const page = await readPageForCopy(url);
+      const sections = page.sections;
+      const origin = new URL(url).origin;
 
       if (sections.length === 0) {
         throw new Error(
@@ -821,9 +828,28 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
          * final del documento — con el resto de la página metida dentro,
          * heredando su ancho y su fondo.
          */
-        const clean = neutralizeLinks(sanitizeHtml(section.html));
+        /*
+         * Se corta por el final de una etiqueta, no por un número de
+         * caracteres: cortar en medio deja `<div style="--jc:` sin su `>`, y eso
+         * el navegador lo pinta como texto en mitad de la página.
+         */
+        /*
+         * El orden importa y cada paso arregla algo que se veía:
+         *
+         * 1. `unlazy` — el `src` de una imagen no es la imagen: es un hueco, y
+         *    la dirección real está en `data-src` esperando a un JavaScript que
+         *    la copia no lleva. Sin esto, quince huecos en blanco.
+         * 2. `absolutize` — `/cdn/shop/x.jpg` servido desde otro dominio se pide
+         *    a ese otro dominio y no existe.
+         * 3. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
+         * 4. `neutralizeLinks` — que el «Comprar» no lleve a su carrito.
+         * 5. `closeOpenTags` — lo que el recorte dejó abierto.
+         */
+        const clean = neutralizeLinks(
+          sanitizeHtml(absolutize(unlazy(cutAtTag(section.html, 150_000)), origin)),
+        );
+
         const original = closeOpenTags(clean.html);
-        const css = sanitizeCss(section.css);
 
         links += clean.changed;
 
@@ -839,7 +865,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         const words = original.replace(/<[^>]*>/g, " ").trim();
 
         if (words.length < 20) {
-          out.push({ kind: "crudo", html: original, css });
+          out.push({ kind: "crudo", html: original });
           continue;
         }
 
@@ -878,16 +904,16 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
              * venía a copiar, y eso no se ve hasta abrir las dos páginas juntas.
              */
             warnings.push(`Sección ${index + 1}: ${verdict.why} Se dejó la original.`);
-            out.push({ kind: "crudo", html: original, css });
+            out.push({ kind: "crudo", html: original });
             continue;
           }
 
-          out.push({ kind: "crudo", html: rewritten, css });
+          out.push({ kind: "crudo", html: rewritten });
         } catch (error) {
           warnings.push(
             `Sección ${index + 1}: ${error instanceof Error ? error.message : "falló"}. Se dejó la original.`,
           );
-          out.push({ kind: "crudo", html: original, css });
+          out.push({ kind: "crudo", html: original });
         }
       }
 
@@ -904,9 +930,29 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         );
       }
 
+      /*
+       * El CSS va **una vez y entero**, delante de todo.
+       *
+       * Repartirlo por secciones con un tope por sección era el fallo: en una
+       * página de constructor, ese tope se gastaba en las variables de color del
+       * tema y la clase que lleva la maqueta no llegaba a entrar. Salía el texto
+       * correcto sin una sola regla aplicada — la página desmaquetada.
+       *
+       * Y atado al contenedor de la copia, porque si no repinta la plataforma:
+       * un `.grid` o un `h2` del tema ajeno cambiando los botones del panel, sin
+       * que nada falle y sin ninguna pista de por qué.
+       */
+      if (page.css.trim()) {
+        out.unshift({
+          kind: "crudo",
+          html: "",
+          css: scopeCss(absolutizeCss(sanitizeCss(page.css), origin), ".copiado"),
+        });
+      }
+
       await report("Guardando la página");
 
-      const page = await saveLanding({
+      const saved = await saveLanding({
         productId,
         title: `Copia de ${new URL(url).hostname}`,
         slug: `copia-${new URL(url).hostname.replace(/[^a-z0-9]+/gi, "-")}-${Date.now()}`,
@@ -929,7 +975,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           links > 0 ? ` ${links} enlaces apuntaban a su tienda y se han desactivado.` : "",
           " Las imágenes siguen siendo las suyas: cámbialas antes de publicar.",
         ].join(""),
-        result: { landingId: page.id, warnings },
+        result: { landingId: saved.id, warnings },
         inputTokens,
         outputTokens,
       };

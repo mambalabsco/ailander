@@ -3,13 +3,18 @@ import { test } from "node:test";
 
 import {
   buildCopyPrompt,
+  absolutize,
+  absolutizeCss,
   closeOpenTags,
+  cutAtTag,
   hasSubstance,
   isChrome,
   keepsShape,
   neutralizeLinks,
   sanitizeCss,
   sanitizeHtml,
+  scopeCss,
+  unlazy,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -323,4 +328,171 @@ test("un cierre suelto no descuadra el resto", () => {
 
 test("se cierran en orden inverso, que es el único que vale", () => {
   assert.equal(closeOpenTags("<section><div><p>x"), "<section><div><p>x</p></div></section>");
+});
+
+/* ---------------------------- Recortar sin romper --------------------------- */
+
+/*
+ * El corte por número de caracteres cae donde cae, y en una página real cayó a
+ * mitad de un atributo. Cortando por el último `>` que quepa, lo que queda
+ * siempre es marcado entero.
+ */
+test("se corta por el final de una etiqueta, no en medio", () => {
+  const html = '<div class="a">Hola</div><div data-x style="--jc:centro">Adiós</div>';
+
+  assert.equal(cutAtTag(html, 30), '<div class="a">Hola</div>');
+});
+
+test("lo que cabe entero no se toca", () => {
+  const html = "<p>Corto</p>";
+  assert.equal(cutAtTag(html, 500), html);
+});
+
+/* Un trozo de atributo suelto es peor que nada: se pinta como texto. */
+test("sin ninguna etiqueta completa no se devuelve el trozo", () => {
+  assert.equal(cutAtTag('<div data-muy-largo="' + "x".repeat(50) + '">', 20), "");
+});
+
+/* ------------------------------- Atar el CSS -------------------------------- */
+
+/*
+ * El CSS de una página entera trae `.grid`, `.button`, `h2`. Metido tal cual en
+ * la plataforma repinta **la plataforma**, sin que nada falle y sin ninguna
+ * pista de por qué.
+ */
+test("cada selector queda dentro del contenedor", () => {
+  const css = scopeCss(".hero { color: red } h2 { font-size: 20px }", ".copiado");
+
+  assert.match(css, /\.copiado \.hero\{/);
+  assert.match(css, /\.copiado h2\{/);
+});
+
+test("una lista de selectores se ata entera, no solo el primero", () => {
+  const css = scopeCss(".a, .b { color: red }", ".copiado");
+
+  assert.match(css, /\.copiado \.a, \.copiado \.b\{/);
+});
+
+/*
+ * Las variables de `:root` son las que usa el marcado copiado: quitarlas dejaría
+ * la página sin ninguno de sus colores.
+ */
+test("las variables de :root se quedan, atadas al contenedor", () => {
+  const css = scopeCss(":root { --color: red }", ".copiado");
+
+  assert.match(css, /\.copiado\{ --color: red \}/);
+  assert.ok(!css.includes(":root"));
+});
+
+test("html y body se convierten en el contenedor en vez de repintar la página", () => {
+  assert.match(scopeCss("body { background: black }", ".copiado"), /\.copiado\{/);
+});
+
+test("las reglas de arroba no se rompen", () => {
+  const css = scopeCss("@media (max-width: 600px) { .hero { display: none } }", ".copiado");
+
+  assert.match(css, /@media \(max-width: 600px\)/);
+  assert.match(css, /\.copiado \.hero/);
+});
+
+test("los keyframes siguen siendo suyos", () => {
+  const css = scopeCss("@keyframes girar { from { opacity: 0 } }", ".copiado");
+  assert.match(css, /@keyframes girar/);
+});
+
+/* --------------------------- Las imágenes perezosas ------------------------- */
+
+/*
+ * En una página moderna el `src` de una imagen **no es la imagen**: es un hueco
+ * transparente y la dirección real está en `data-src`, esperando al JavaScript
+ * de la página. La copia no lleva ese JavaScript, así que se quedaban los quince
+ * huecos — con su tamaño y su `alt`, sin dar ningún error.
+ */
+test("la dirección real sale de data-src", () => {
+  const html = '<img src="data:image/svg+xml;base64,AAA" data-src="/cdn/foto.jpg" alt="x">';
+
+  assert.match(unlazy(html), /src="\/cdn\/foto\.jpg"/);
+  assert.ok(!unlazy(html).includes("base64"));
+});
+
+test("también el srcset perezoso", () => {
+  const html = '<img src="data:image/gif;base64,A" data-srcset="/a.jpg 1x, /b.jpg 2x">';
+  assert.match(unlazy(html), /srcset="\/a\.jpg 1x, \/b\.jpg 2x"/);
+});
+
+/* Un `data-src` que también es un hueco no sirve de nada. */
+test("un data-src que es otro hueco no se asciende", () => {
+  const html = '<img src="/real.jpg" data-src="data:image/gif;base64,AAA">';
+  assert.match(unlazy(html), /src="\/real\.jpg"/);
+});
+
+test("una imagen normal no se toca", () => {
+  const html = '<img src="/foto.jpg" alt="x">';
+  assert.equal(unlazy(html), html);
+});
+
+/* ------------------------------ Las direcciones ----------------------------- */
+
+/*
+ * `/cdn/shop/files/x.jpg` servido desde otro dominio se pide **a ese otro
+ * dominio** y no existe: la página sale con quince huecos y un 404 por cada uno.
+ */
+test("las direcciones de raíz se atan a su tienda", () => {
+  const html = '<img src="/cdn/shop/x.jpg"><a href="/products/y">Ver</a>';
+  const out = absolutize(html, "https://tienda.com");
+
+  assert.match(out, /src="https:\/\/tienda\.com\/cdn\/shop\/x\.jpg"/);
+  assert.match(out, /href="https:\/\/tienda\.com\/products\/y"/);
+});
+
+test("las de protocolo relativo también", () => {
+  assert.match(absolutize('<img src="//cdn.shopify.com/x.jpg">', "https://t.com"), /https:\/\/cdn\.shopify\.com/);
+});
+
+test("las que ya son absolutas y los datos incrustados se quedan", () => {
+  const html = '<img src="https://otro.com/x.jpg"><img src="data:image/png;base64,AA">';
+  assert.equal(absolutize(html, "https://t.com"), html);
+});
+
+test("un ancla no se convierte en una dirección", () => {
+  assert.equal(absolutize('<a href="#oferta">x</a>', "https://t.com"), '<a href="#oferta">x</a>');
+});
+
+test("cada trozo del srcset se ata por separado", () => {
+  const out = absolutize('<img srcset="/a.jpg 1x, /b.jpg 2x">', "https://t.com");
+
+  assert.match(out, /https:\/\/t\.com\/a\.jpg 1x/);
+  assert.match(out, /https:\/\/t\.com\/b\.jpg 2x/);
+});
+
+test("los fondos del CSS también", () => {
+  assert.match(absolutizeCss(".a{background:url(/f/x.png)}", "https://t.com"), /url\(https:\/\/t\.com\/f\/x\.png\)/);
+});
+
+/* `url(#algo)` apunta a una máscara del propio documento: hacerla absoluta la rompe. */
+test("una referencia interna del SVG no se toca", () => {
+  const css = ".a{fill:url(#Shape-Arch)}";
+  assert.equal(absolutizeCss(css, "https://t.com"), css);
+});
+
+/*
+ * El fallo que dejó la copia sin imágenes aunque `unlazy` "funcionaba": `\b`
+ * también encaja **dentro** de otro atributo. Esta página trae `base-src`, así
+ * que se leía y se escribía ese en vez del de verdad — la imagen seguía siendo
+ * el hueco y todo parecía correcto.
+ */
+test("un atributo que acaba en src no se confunde con src", () => {
+  const html = '<img base-src="/pequena.jpg" src="data:image/gif;base64,A" data-src="/grande.jpg">';
+  const out = unlazy(html);
+
+  assert.match(out, /\ssrc="\/grande\.jpg"/);
+  assert.match(out, /base-src="\/pequena\.jpg"/);
+  assert.ok(!out.includes("base64"));
+});
+
+test("y tampoco al hacer absolutas las direcciones", () => {
+  const out = absolutize('<img base-src="/a.jpg" src="/b.jpg">', "https://t.com");
+
+  assert.match(out, /base-src="\/a\.jpg"/);
+  assert.match(out, /\ssrc="https:\/\/t\.com\/b\.jpg"/);
 });

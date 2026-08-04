@@ -166,9 +166,24 @@ export function LandingViewer({
          * Fondo blanco fijo y no el del tema: la página vivirá en Shopify sobre
          * blanco, y verla en oscuro daría una idea equivocada de cómo se lee.
          */
-        <div className="max-h-[32rem] overflow-y-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-700">
-          <div dangerouslySetInnerHTML={{ __html: preview }} />
-        </div>
+        <iframe
+          title="Vista previa de la página"
+          /*
+            En un marco y no dentro de la página.
+
+            Una página copiada trae el CSS de otro tema entero: metido aquí
+            repinta **la plataforma** —los botones del panel, las tablas de otra
+            pantalla— sin que nada falle y sin ninguna pista de por qué. Dentro
+            del marco, sus reglas no salen y las nuestras no entran, que es la
+            única forma de verla como se va a ver de verdad.
+
+            `sandbox` sin `allow-scripts`: es marcado ajeno y no tiene por qué
+            ejecutar nada para enseñarse.
+          */
+          sandbox=""
+          srcDoc={`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>html,body{margin:0;padding:0;background:#fff}</style></head><body>${preview}</body></html>`}
+          className="h-[32rem] w-full rounded-2xl border border-slate-200 bg-white dark:border-slate-700"
+        />
       ) : null}
 
       {tab === "html" ? (
