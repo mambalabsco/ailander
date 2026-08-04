@@ -16,12 +16,22 @@
  *
  * ## Lo que se hace
  *
- * Se parte el anuncio en tramos que el generador sí acepta y **se encadenan por
- * el último fotograma**: cada tramo empieza exactamente donde acabó el anterior,
- * así que el sitio, la luz y la persona siguen siendo los mismos. La historia se
- * reparte entre los tramos con su principio y su final, no se repite en cada uno.
+ * Se parte el anuncio en tramos que el generador sí acepta y se le pasa a cada
+ * uno **el último fotograma del anterior**. La historia se reparte entre ellos
+ * con su principio y su final, no se repite en cada uno.
  *
  * Es la diferencia entre cortar un anuncio y trocearlo.
+ *
+ * ## El fotograma es continuidad, no una cadena
+ *
+ * Sirve para que sea el mismo anuncio: el mismo producto, el mismo estilo, la
+ * misma luz, y la misma persona **cuando vuelve a salir**. No para obligar a que
+ * cada tramo siga el plano anterior.
+ *
+ * Un anuncio corta. Hay partes que son el envase solo, unas manos, un detalle,
+ * otro sitio — y pedir que la persona esté en todos los planos porque estaba en
+ * el primero da un anuncio en el que alguien mira a cámara durante cincuenta
+ * segundos. Eso estaba en la primera versión de esto y era un error.
  */
 
 export interface Segment {
@@ -131,22 +141,39 @@ export function segmentInstruction(segment: Segment): string {
   if (segment.index > 1) {
     lines.push(
       "",
-      "Ya se ha visto lo anterior, así que no presentes otra vez a la persona ni",
-      "el problema. Esto continúa una toma que ya estaba en marcha: la primera",
-      "imagen que te mando es **el último fotograma del tramo anterior** y este",
-      "empieza exactamente ahí. Mismo sitio, misma ropa, misma luz, misma cara.",
+      "Ya se ha visto lo anterior, así que no vuelvas a presentar a nadie ni a",
+      "replantear el problema desde cero.",
+      "",
+      "La primera imagen que te mando es **el último fotograma del tramo",
+      "anterior**. Está ahí para que el anuncio sea el mismo: el mismo producto,",
+      "el mismo estilo de imagen, la misma luz y el mismo sitio cuando se vuelva a",
+      "él; y si sale una persona que ya salía, que sea **la misma persona**.",
+      "",
+      "Lo que **no** es: una obligación de seguir ese plano. Esto es un anuncio y",
+      "un anuncio corta. Si esta parte pide otro encuadre —el envase solo, unas",
+      "manos, un detalle, otro sitio, otro momento del día—, córtalo y ya está. No",
+      "metas a la persona en el plano solo porque estaba en el anterior: si lo que",
+      "toca contar aquí no la necesita, no sale.",
     );
   }
 
   if (segment.index < segment.total) {
     lines.push(
       "",
-      "Y no cierres: después viene más. Nada de plano final del envase, nada de",
-      "llamada a la acción, nada de fundido a negro. Acaba en movimiento, con la",
-      "escena todavía viva, porque el siguiente tramo arranca de este fotograma.",
+      "Y no cierres el anuncio: después viene más. Nada de plano final del envase",
+      "quieto, nada de llamada a la acción, nada de fundido a negro. Acaba con la",
+      "escena todavía viva.",
     );
   } else {
-    lines.push("", "Este es el último: aquí sí se cierra el anuncio.");
+    lines.push(
+      "",
+      "Este es el último tramo: aquí se cierra.",
+      "",
+      "Lo que se dice abajo es **el final del texto** y tiene que oírse entero,",
+      "hasta la última frase. Si hay llamada a la acción, va aquí. Un anuncio que",
+      "se corta antes de acabar la frase no sirve para nada, así que ajusta la",
+      "imagen al texto y no al revés.",
+    );
   }
 
   return lines.join("\n");

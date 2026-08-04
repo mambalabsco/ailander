@@ -106,19 +106,38 @@ test("el primero no continúa nada", () => {
   assert.ok(!segmentInstruction(primero).includes("último fotograma del tramo anterior"));
 });
 
-test("los siguientes arrancan del último fotograma del anterior", () => {
+test("los siguientes reciben el último fotograma del anterior", () => {
   const [, segundo] = planSegments({ seconds: 45, maxSeconds: 15 });
+  const texto = segmentInstruction(segundo);
 
-  assert.match(segmentInstruction(segundo), /último fotograma del tramo anterior/);
-  assert.match(segmentInstruction(segundo), /no presentes otra vez/);
+  assert.match(texto, /último fotograma del tramo\nanterior/);
+  assert.match(texto, /no vuelvas a presentar a nadie/);
+});
+
+/*
+ * El error de la primera versión: se pedía «mismo sitio, misma ropa, misma
+ * cara», y eso da un anuncio en el que alguien mira a cámara cincuenta segundos.
+ * Un anuncio corta: hay partes que son el envase solo, unas manos, un detalle.
+ */
+test("el fotograma no obliga a que salga la persona", () => {
+  const [, segundo] = planSegments({ seconds: 45, maxSeconds: 15 });
+  const texto = segmentInstruction(segundo);
+
+  assert.match(texto, /\*\*no\*\* es: una obligación de seguir ese plano/);
+  assert.match(texto, /si lo que\ntoca contar aquí no la necesita, no sale/);
+});
+
+test("pero si vuelve a salir tiene que ser la misma", () => {
+  const [, segundo] = planSegments({ seconds: 45, maxSeconds: 15 });
+  assert.match(segmentInstruction(segundo), /la misma persona/);
 });
 
 /* Un anuncio que acaba tres veces se lee como tres anuncios. */
 test("solo el último cierra", () => {
   const segments = planSegments({ seconds: 45, maxSeconds: 15 });
 
-  assert.match(segmentInstruction(segments[0]), /no cierres/);
-  assert.match(segmentInstruction(segments[2]), /aquí sí se cierra/);
+  assert.match(segmentInstruction(segments[0]), /no cierres el anuncio/);
+  assert.match(segmentInstruction(segments[2]), /aquí se cierra/);
   assert.ok(!segmentInstruction(segments[2]).includes("no cierres"));
 });
 
@@ -160,4 +179,18 @@ test("no se corta a media palabra", () => {
 test("un guion vacío no revienta el reparto", () => {
   const [primero] = planSegments({ seconds: 45, maxSeconds: 15 });
   assert.equal(sliceScript("   ", primero), "");
+});
+
+/*
+ * El texto tiene que acabarse. Un anuncio que se corta a media frase no sirve,
+ * y el reparto por palabras deja el final en el último tramo: hay que decirle
+ * que ese final se oye entero.
+ */
+test("el último tramo tiene que decir el texto hasta el final", () => {
+  const segments = planSegments({ seconds: 45, maxSeconds: 15 });
+  const ultimo = segmentInstruction(segments[segments.length - 1]);
+
+  assert.match(ultimo, /el final del texto/);
+  assert.match(ultimo, /hasta la última frase/);
+  assert.match(ultimo, /ajusta la\nimagen al texto y no al revés/);
 });

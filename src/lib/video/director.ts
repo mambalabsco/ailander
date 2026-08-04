@@ -270,7 +270,7 @@ export function directorBrief(options: {
       "La primera es el envase real del producto. Cópialo exactamente: forma,",
       "color, tipografía y etiqueta. No lo rediseñes ni le cambies el nombre.",
       options.references > 1
-        ? "Las demás son la persona y el sitio. Mantén la misma cara en todo el anuncio."
+        ? "Las demás son la persona y el sitio. Si sale la persona, que sea siempre la misma cara — pero no tiene que salir en todos los planos."
         : "",
     );
   }
@@ -281,7 +281,8 @@ export function directorBrief(options: {
     "",
     "- Un movimiento de cámara por plano, despacio. Nada de zooms rápidos.",
     "- Luz natural, con dirección clara. La misma temperatura en todo el anuncio.",
-    "- La cara de la persona no cambia entre planos.",
+    "- Si sale una persona, es la misma en todos los planos donde salga. No tiene",
+    "  que estar en todos: un anuncio corta al envase, a unas manos, a un detalle.",
     "",
     "## Lo que no puede pasar",
     "",
