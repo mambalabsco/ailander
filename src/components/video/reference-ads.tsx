@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import {
   analyzeVideoAction,
+  analyzeVideoUrlAction,
   deleteVideoReferenceAction,
 } from "@/app/products/[id]/video-analysis-actions";
 
@@ -66,8 +67,9 @@ export function ReferenceAds({
         <div>
           <p className="text-sm font-medium">Anuncios de referencia</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Sube un anuncio que funcione y se analiza cómo está construido: el gancho, el ritmo,
-            cuándo aparece el producto. Después se puede escribir un guion que lo siga.
+            Sube un anuncio que funcione —o pega su enlace— y se analiza cómo está construido: el
+            gancho, el ritmo, cuándo aparece el producto. Después se puede escribir un guion que lo
+            siga, o clonarlo entero desde Flujos.
           </p>
         </div>
         <Button variant="secondary" onClick={() => setOpen((value) => !value)}>
@@ -84,9 +86,11 @@ export function ReferenceAds({
                 type="file"
                 name="video"
                 accept="video/mp4,video/quicktime,video/webm,video/x-m4v,video/x-matroska"
-                required
                 className="w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
               />
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                O déjalo vacío y pega abajo la dirección: lo baja el servidor.
+              </span>
             </label>
 
             <label className="text-sm">
@@ -99,10 +103,10 @@ export function ReferenceAds({
             </label>
 
             <label className="text-sm">
-              <span className="mb-1 block">De dónde salió (opcional)</span>
+              <span className="mb-1 block">De dónde salió</span>
               <input
                 name="sourceUrl"
-                placeholder="https://…"
+                placeholder="https://www.tiktok.com/@…/video/…"
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
               />
             </label>
@@ -137,8 +141,36 @@ export function ReferenceAds({
 
               const data = new FormData(form);
               const video = data.get("video");
-              if (!(video instanceof File) || video.size === 0) {
-                throw new Error("Elige un vídeo antes de analizar.");
+              const sourceUrl = String(data.get("sourceUrl") ?? "").trim();
+
+              /*
+               * Sin archivo pero con enlace, lo baja el servidor.
+               *
+               * El navegador solo puede con lo que está en este ordenador: un
+               * anuncio en TikTok o en la biblioteca de Meta está en otro dominio
+               * y no lo puede ni descargar ni decodificar. Hasta ahora había que
+               * bajarlo a mano y volver a subirlo.
+               */
+              const hasFile = video instanceof File && video.size > 0;
+
+              if (!hasFile && !sourceUrl) {
+                throw new Error("Elige un vídeo o pega su dirección.");
+              }
+
+              if (!hasFile) {
+                setProgress("Mandándolo al servidor…");
+
+                try {
+                  return await analyzeVideoUrlAction({
+                    productId,
+                    sourceUrl,
+                    name: String(data.get("name") ?? ""),
+                    context: String(data.get("context") ?? ""),
+                    language: String(data.get("language") ?? ""),
+                  });
+                } finally {
+                  setProgress("");
+                }
               }
 
               /*
@@ -186,7 +218,7 @@ export function ReferenceAds({
               }
             }}
             label="Analizar el anuncio"
-            hint="Los fotogramas y la voz se sacan en tu navegador: el vídeo no se sube a ningún sitio."
+            hint="Con el archivo delante, los fotogramas y la voz se sacan en tu navegador y el vídeo no se sube a ningún sitio. Con solo el enlace, lo baja el servidor."
           />
 
           {progress ? (

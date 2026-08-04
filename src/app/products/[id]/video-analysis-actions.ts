@@ -241,3 +241,156 @@ export async function deleteVideoReferenceAction(id: unknown, productId: unknown
   const product = readText(productId);
   if (product) revalidatePath(`/products/${product}`);
 }
+
+/**
+ * Analizar un anuncio desde su enlace, sin bajarlo a mano.
+ *
+ * ## Por qué el servidor y no el navegador
+ *
+ * El otro camino —el normal— saca los fotogramas en el navegador, que ya sabe
+ * decodificar vídeo, y así el servidor no se entera. Pero el navegador solo
+ * puede con lo que está en el ordenador: un anuncio en TikTok o en la biblioteca
+ * de Meta está en otro dominio y no lo puede ni descargar ni decodificar.
+ *
+ * Así que para un enlace lo hace el servidor. No sustituye al otro: cuando el
+ * archivo está delante, sigue siendo mejor el navegador — es gratis en CPU y no
+ * necesita nada instalado.
+ *
+ * ## Lo del skill de vídeo
+ *
+ * No sirve por API. Los Skills de la API corren en un contenedor **sin acceso a
+ * red y sin poder instalar paquetes**, y bajar un vídeo de un enlace es
+ * exactamente esas dos cosas. Lo que sí hace la plataforma —mandarle los
+ * fotogramas a Claude para que los mire— ya lo hacía; lo único que faltaba era
+ * sacarlos de un enlace, y eso es esto.
+ */
+export async function analyzeVideoUrlAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const productId = readText(raw.productId);
+  const sourceUrl = readText(raw.sourceUrl);
+  const name = readText(raw.name) || "Anuncio sin nombre";
+  const context = readText(raw.context);
+  const language = readText(raw.language);
+
+  if (!sourceUrl) throw new Error("Pega la dirección del vídeo.");
+
+  if (!isSupabaseConfigured()) {
+    throw new Error("Esto se guarda en Supabase y todavía no está configurado.");
+  }
+  if (!(await hasActiveProviderKey())) {
+    throw new Error("No hay clave de API configurada. Añádela en Configuración.");
+  }
+
+  /*
+   * Lo que falta se dice **antes** de crear el trabajo.
+   *
+   * Un trabajo en segundo plano que muere en el primer paso porque al servidor
+   * le falta ffmpeg se lee como que la plataforma no funciona. Comprobarlo aquí
+   * cuesta dos llamadas a `--version` y devuelve el comando de instalación.
+   */
+  const { videoToolsProblem } = await import("@/lib/video/fetch-video");
+  const missing = await videoToolsProblem();
+
+  if (missing) throw new Error(missing);
+
+  return runInBackground({
+    productId: productId || null,
+    kind: "imagenes",
+    label: `Analizar anuncio · ${name}`,
+    revalidate: productId ? `/products/${productId}` : "/products",
+    resume: { productId, sourceUrl, name, context, language },
+    work: async (report, cancelled) => {
+      const { fetchVideo } = await import("@/lib/video/fetch-video");
+      const video = await fetchVideo(sourceUrl, report);
+
+      if (await cancelled()) {
+        return { summary: "Cancelado tras bajar el vídeo. No se ha gastado en el análisis." };
+      }
+
+      await report("Transcribiendo la voz");
+
+      const transcript = video.audio
+        ? await transcribe(video.audio, language || undefined).catch(() => "")
+        : "";
+
+      await report(`Mirando ${video.frames.length} fotogramas`);
+
+      const frames = video.frames.map((frame) => ({
+        mediaType: "image/jpeg",
+        base64: frame.jpeg.toString("base64"),
+      }));
+
+      const { data: analysis, inputTokens, outputTokens } = await generateStructured<VideoAnalysis>({
+        prompt: buildAnalysisPrompt({
+          duration: video.seconds,
+          marks: video.frames.map((frame) => frame.at),
+          transcript,
+          context: context || undefined,
+        }),
+        schema: VIDEO_ANALYSIS_SCHEMA,
+        role: "copy",
+        maxTokens: 16_000,
+        images: frames,
+      });
+
+      await report("Guardando el análisis");
+
+      const review = reviewAnalysis(analysis, video.seconds);
+
+      /*
+       * Los fotogramas se guardan, como en el otro camino: son lo que permite
+       * clonar los encuadres y no solo la estructura.
+       */
+      const saved: { url: string; at: number }[] = [];
+
+      try {
+        const { requireContext } = await import("@/lib/supabase/session");
+        const { supabase, userId } = await requireContext();
+        const folder = `${userId}/referencias/${crypto.randomUUID()}`;
+
+        for (const [index, frame] of video.frames.entries()) {
+          const path = `${folder}/${String(index).padStart(2, "0")}.jpg`;
+
+          const { error } = await supabase.storage
+            .from("studio")
+            .upload(path, frame.jpeg, { contentType: "image/jpeg" });
+
+          if (error) continue;
+
+          saved.push({
+            url: supabase.storage.from("studio").getPublicUrl(path).data.publicUrl,
+            at: frame.at,
+          });
+        }
+      } catch {
+        // Sin fotogramas guardados. El análisis sigue valiendo para escribir.
+      }
+
+      await saveVideoReference({
+        name,
+        sourceUrl,
+        durationSeconds: video.seconds,
+        width: video.width,
+        height: video.height,
+        hadAudio: Boolean(video.audio),
+        framesAnalyzed: video.frames.length,
+        analysis,
+        warnings: review.warnings,
+        frames: saved,
+      });
+
+      return {
+        summary: [
+          `${video.frames.length} fotogramas de ${video.seconds.toFixed(0)} s`,
+          transcript ? " con voz transcrita" : video.audio ? " (no se pudo transcribir)" : " sin voz",
+          `. ${analysis.beats.length} momentos, corte cada ${analysis.averageShotSeconds.toFixed(1)} s.`,
+          saved.length > 0 ? ` ${saved.length} fotogramas guardados para poder clonarlo.` : "",
+          review.warnings.length > 0 ? ` ${review.warnings.length} aviso(s) que mirar.` : "",
+        ].join(""),
+        inputTokens,
+        outputTokens,
+      };
+    },
+  });
+}
