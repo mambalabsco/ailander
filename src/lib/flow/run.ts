@@ -118,6 +118,26 @@ function gather(
   return out;
 }
 
+/**
+ * De qué tipo de nodo viene cada entrada.
+ *
+ * Hace falta para el reparto: dos referencias pueden ser las dos «imagen» y una
+ * ser el envase y otra la cara. Sin saber de dónde vienen, la única forma de
+ * decírselo al generador sería adivinarlo por el texto.
+ */
+function sources(flow: Flow, nodeId: string): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+
+  for (const [port, ids] of inputsOf(flow, nodeId)) {
+    out.set(
+      port,
+      ids.map((id) => flow.nodes.find((node) => node.id === id)?.type ?? ""),
+    );
+  }
+
+  return out;
+}
+
 const first = (inputs: Map<number, NodeResult[]>, port: number): NodeResult | null =>
   inputs.get(port)?.[0] ?? null;
 
@@ -130,6 +150,7 @@ async function runNode(
   node: FlowNode,
   inputs: Map<number, NodeResult[]>,
   ctx: RunContext,
+  from: Map<number, string[]> = new Map(),
 ): Promise<NodeResult> {
   switch (node.type) {
     case "producto": {
@@ -354,6 +375,31 @@ async function runNode(
       const wanted = num(node.settings, "seconds", 15);
 
       /*
+       * Quién sale y dónde, descrito y repetido en todos los tramos.
+       *
+       * Es lo que hacía falta y no estaba: sin un reparto escrito, cada tramo se
+       * reimagina a la persona a partir del fotograma anterior — y por eso
+       * cambiaba de un tramo a otro. Con la descripción delante hay algo a lo
+       * que volver, y deja de depender de lo que se adivine de una imagen.
+       */
+      const refTypes = from.get(1) ?? [];
+
+      const cast = (inputs.get(1) ?? []).map((item, index) => {
+        const type = refTypes[index] ?? "";
+
+        const label =
+          type === "producto"
+            ? `El envase de ${item.value || "el producto"}`
+            : type === "avatar"
+              ? "La persona del anuncio"
+              : type === "archivo"
+                ? item.value || "Una imagen de referencia"
+                : "Un fotograma de referencia";
+
+        return { label, look: item.value || "tal y como se ve en la imagen" };
+      });
+
+      /*
        * Un anuncio largo, en un generador que solo hace piezas cortas.
        *
        * Antes se recortaba a lo que el modelo aceptaba y la dirección seguía
@@ -390,6 +436,29 @@ async function runNode(
       // El nombre solo para nombrarlo en el encargo; que falle no impide rodar.
       const product = await findProductAnywhere(ctx.productId).catch(() => null);
 
+      /*
+       * Con varios tramos, la voz **no** la pone el generador.
+       *
+       * Pone una distinta en cada llamada, así que cuatro tramos son cuatro
+       * voces dentro del mismo anuncio: se oye saltar a mitad de frase. No da
+       * error y no se ve en la miniatura — se descubre reproduciéndolo entero,
+       * con los cuatro tramos pagados.
+       *
+       * Se puede forzar marcando el sonido a mano, pero entonces se avisa.
+       */
+      const wantsSound = node.settings.sound !== false;
+      const nativeAudio = wantsSound && (segments.length === 1 || node.settings.sound === true);
+
+      if (segments.length > 1 && nativeAudio) {
+        await ctx.report(
+          `Ojo: son ${segments.length} llamadas y el generador pone una voz distinta en cada una. La voz va a cambiar dentro del anuncio; para que sea la misma, quítale el sonido propio y móntale una locución.`,
+        );
+      } else if (segments.length > 1 && wantsSound) {
+        await ctx.report(
+          `Sin sonido del generador: en ${segments.length} tramos pondría una voz distinta en cada uno. Móntale una locución y quedará la misma de principio a fin.`,
+        );
+      }
+
       const pieces: string[] = [];
       /** El último fotograma del tramo anterior, que abre el siguiente. */
       let carry = "";
@@ -403,6 +472,7 @@ async function runNode(
           seconds: segment.seconds,
           aspectRatio,
           references: references.length + (carry ? 1 : 0),
+          cast: carry ? [{ label: "El último plano del tramo anterior", look: "de ahí venimos" }, ...cast] : cast,
           continuity: segmentInstruction(segment),
         });
 
@@ -429,8 +499,7 @@ async function runNode(
           seconds: segment.seconds,
           model: model.slug,
           aspectRatio,
-          // Con sonido propio salvo que se diga: es la gracia de este nodo.
-          sound: node.settings.sound !== false,
+          sound: nativeAudio,
         });
 
         pieces.push(piece);
@@ -698,7 +767,12 @@ export async function runFlow(flow: Flow, ctx: RunContext): Promise<RunOutcome> 
     const outcomes = await Promise.allSettled(
       ready.map(async (nodeId) => {
         const node = flow.nodes.find((item) => item.id === nodeId)!;
-        const result = await runNode(node, gather(flow, nodeId, results), ctx);
+        const result = await runNode(
+          node,
+          gather(flow, nodeId, results),
+          ctx,
+          sources(flow, nodeId),
+        );
 
         return { nodeId, result };
       }),

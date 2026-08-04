@@ -696,8 +696,31 @@ export async function cloneFlowAction(input: unknown): Promise<{
     const seconds = Number(raw.seconds) || Math.round(reference.durationSeconds) || 30;
 
     const preference = readText(raw.voice);
+    /*
+     * En cuántas llamadas se va a generar de verdad, que no es la forma.
+     *
+     * Un anuncio «de una pieza» de cincuenta segundos son cuatro llamadas — el
+     * generador hace quince por vez y el nodo lo parte—, y el generador pone una
+     * voz distinta en cada una.
+     */
+    const { findGenerator } = await import("@/lib/video/catalog");
+    const { planSegments } = await import("@/lib/video/segments");
+
+    const model = findGenerator("seedance2");
+
+    const pieces =
+      shape === "una-pieza"
+        ? planSegments({
+            seconds,
+            maxSeconds: model.maxSeconds,
+            minSeconds: model.minSeconds,
+            durations: model.durations,
+          }).length
+        : undefined;
+
     const voice = voicePlan({
       shape,
+      pieces,
       hadAudio: reference.hadAudio,
       voiceNote: reference.analysis.voice,
       preference:

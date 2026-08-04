@@ -56,6 +56,23 @@ test("de una pieza vale la del generador: una llamada, una voz", () => {
   assert.equal(voicePlan({ shape: "una-pieza", hadAudio: true }).source, "seedance");
 });
 
+/*
+ * El error que salió en el vídeo: «de una pieza» dejó de significar «una
+ * llamada» en cuanto el nodo de anuncio empezó a partir lo que no cabe. Cuatro
+ * tramos son cuatro voces distintas dentro del mismo anuncio.
+ */
+test("una sola pieza que se parte en tramos también necesita locución", () => {
+  const plan = voicePlan({ shape: "una-pieza", hadAudio: true, pieces: 4 });
+
+  assert.equal(plan.source, "elevenlabs");
+  assert.match(plan.why, /4 llamadas/);
+});
+
+test("forzar el generador con varios tramos avisa con el número", () => {
+  const plan = voicePlan({ shape: "una-pieza", hadAudio: true, pieces: 3, preference: "seedance" });
+  assert.match(plan.warning, /3 llamadas/);
+});
+
 test("si el original no llevaba voz, este tampoco", () => {
   const plan = voicePlan({ shape: "planos", hadAudio: false });
 

@@ -176,3 +176,52 @@ test("los segundos del encargo son los del tramo, no los del anuncio", () => {
   const { prompt } = directorBrief({ script: GUION, seconds: 13, continuity: TRAMO, templateId: "demo" });
   assert.match(prompt, /13 segundos/);
 });
+
+/* --------------------------------- El reparto -------------------------------- */
+
+const REPARTO = [
+  { label: "El envase", look: "bote blanco con tapa negra, etiqueta verde" },
+  { label: "Marta, 52", look: "chilena, pelo teñido, ojos cansados" },
+];
+
+/*
+ * Sin esto, cada tramo se reimagina a la persona a partir de un fotograma — y
+ * por eso cambiaba de un tramo a otro. El modelo no sabe que «la mujer» del
+ * tramo tres es la misma que la del uno.
+ */
+test("el reparto va con cada imagen y en su orden", () => {
+  const { prompt } = directorBrief({ script: GUION, templateId: "ugc", cast: REPARTO });
+
+  assert.match(prompt, /## El reparto/);
+  assert.match(prompt, /1\. \*\*El envase\*\* — bote blanco/);
+  assert.match(prompt, /2\. \*\*Marta, 52\*\* — chilena/);
+});
+
+/* Es justo lo que tiene que no cambiar, así que va en todos los tramos. */
+test("el reparto también va en los tramos que no son el primero", () => {
+  const { prompt } = directorBrief({
+    script: GUION,
+    templateId: "ugc",
+    cast: REPARTO,
+    continuity: TRAMO,
+  });
+
+  assert.match(prompt, /## El reparto/);
+  assert.match(prompt, /Marta, 52/);
+});
+
+test("el envase se copia exacto, siempre", () => {
+  const { prompt } = directorBrief({ script: GUION, templateId: "demo", cast: REPARTO });
+  assert.match(prompt, /copia \*\*exactamente\*\*/);
+});
+
+/* No obligar a que la persona esté en todos los planos: un anuncio corta. */
+test("el reparto no mete a la persona en todos los planos", () => {
+  const { prompt } = directorBrief({ script: GUION, templateId: "ugc", cast: REPARTO });
+  assert.match(prompt, /No tiene que salir en todos los planos/);
+});
+
+test("sin reparto se sigue diciendo qué es la primera imagen", () => {
+  const { prompt } = directorBrief({ script: GUION, templateId: "demo", references: 2 });
+  assert.match(prompt, /primera es el envase real/);
+});

@@ -135,8 +135,15 @@ export interface VoiceDecision {
  * de frase. No da error, no se ve en la miniatura y no se descubre hasta
  * reproducirlo entero con sonido — con los seis clips ya pagados.
  *
- * Por eso, plano a plano la voz la pone ElevenLabs: una locución para todo el
- * anuncio, la misma de principio a fin y elegida a mano.
+ * Por eso, en cuanto hay más de una llamada la voz la pone ElevenLabs: una
+ * locución para todo el anuncio, la misma de principio a fin y elegida a mano.
+ *
+ * ## Y «de una pieza» no quiere decir «una llamada»
+ *
+ * Ese fue el error. Un nodo de anuncio de cincuenta segundos son cuatro llamadas
+ * —el generador hace quince por vez y el nodo lo parte— aunque sea un solo nodo.
+ * La decisión se toma sobre **cuántas llamadas**, no sobre cómo se dibujó el
+ * flujo.
  *
  * ## Y por qué se puede forzar igual
  *
@@ -147,6 +154,15 @@ export interface VoiceDecision {
 export function voicePlan(options: {
   /** Si el anuncio se genera de una pieza o plano a plano. */
   shape: "una-pieza" | "planos";
+  /**
+   * En cuántas llamadas se va a generar de verdad.
+   *
+   * No es lo mismo que la forma, y ahí estaba el fallo. «De una pieza» dejó de
+   * significar «una llamada» en cuanto el nodo de anuncio empezó a partir lo que
+   * no cabe: un anuncio de cincuenta segundos son cuatro llamadas aunque sea un
+   * solo nodo, y el generador pone una voz distinta en cada una.
+   */
+  pieces?: number;
   /** Si el anuncio de referencia llevaba voz. */
   hadAudio: boolean;
   /** Lo que el análisis dijo de la voz, para explicarlo. */
@@ -170,13 +186,15 @@ export function voicePlan(options: {
     };
   }
 
+  const pieces = Math.max(1, Math.round(options.pieces ?? (options.shape === "planos" ? 2 : 1)));
+
   if (preference === "seedance") {
     return {
       source: "seedance",
       why: "Lo pediste con la voz del generador.",
       warning:
-        options.shape === "planos"
-          ? "Cada plano es una llamada y el generador pone una voz distinta en cada una: la voz va a cambiar a mitad del anuncio."
+        pieces > 1
+          ? `Son ${pieces} llamadas al generador y pone una voz distinta en cada una: la voz va a cambiar a mitad del anuncio.`
           : "",
     };
   }
@@ -189,11 +207,11 @@ export function voicePlan(options: {
     };
   }
 
-  if (options.shape === "planos") {
+  if (pieces > 1) {
     return {
       source: "elevenlabs",
       why: [
-        "Son varios planos y cada uno es una llamada al generador, que pone una voz distinta en cada una.",
+        `Son ${pieces} llamadas al generador y pone una voz distinta en cada una.`,
         "Con una locución aparte, la voz es la misma de principio a fin.",
         options.voiceNote?.trim() ? `El original: ${options.voiceNote.trim()}` : "",
       ]

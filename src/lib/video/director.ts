@@ -208,6 +208,18 @@ export function directorBrief(options: {
   /** Cuántas imágenes van de referencia, para decir qué es cada una. */
   references?: number;
   /**
+   * Quién sale y dónde, con su descripción, en el mismo orden que las imágenes.
+   *
+   * Es lo que convierte un encargo en un reparto. Sin esto, cada tramo se
+   * imagina de nuevo a la persona y el sitio a partir de un fotograma, y por eso
+   * cambian de uno a otro: el modelo no sabe que «la mujer» del tramo tres es la
+   * misma que la del uno, solo ve un fotograma parecido.
+   *
+   * Con el reparto escrito y repetido en **todos** los tramos hay algo a lo que
+   * volver, y deja de depender de lo que se adivine de la imagen.
+   */
+  cast?: { label: string; look: string }[];
+  /**
    * Lo que sitúa este vídeo dentro de un anuncio más largo.
    *
    * Va aparte del guion porque no es guion: dice qué tramo es, que ya se contó
@@ -255,14 +267,35 @@ export function directorBrief(options: {
     script,
   );
 
-  if (options.references && options.references > 0) {
-    /*
-     * Qué es cada referencia, y sobre todo la primera.
-     *
-     * Sin decirlo, el modelo trata las imágenes como inspiración de estilo y se
-     * dibuja su propio envase — el fallo que ya costó una tanda entera de
-     * fotogramas con botes inventados.
-     */
+  /*
+   * El reparto: quién sale, dónde, y qué imagen es cada uno.
+   *
+   * Sin esto el modelo trata las imágenes como inspiración de estilo y se dibuja
+   * su propio envase —el fallo que costó una tanda entera de fotogramas con
+   * botes inventados— y, en un anuncio por tramos, se reimagina a la persona en
+   * cada uno a partir de un fotograma.
+   *
+   * Va **en todos los tramos**, no solo en el primero. Es justo lo que tiene que
+   * no cambiar.
+   */
+  if (options.cast?.length) {
+    lines.push(
+      "",
+      "## El reparto",
+      "",
+      "Esto es fijo en todo el anuncio y no se reinventa en ningún plano. Cada",
+      "punto es una de las imágenes que te mando, en este orden:",
+      "",
+      ...options.cast.map((item, index) => `${index + 1}. **${item.label}** — ${item.look}`),
+      "",
+      "El envase se copia **exactamente**: forma, color, tipografía y etiqueta.",
+      "No lo rediseñes ni le cambies el nombre.",
+      "",
+      "Si en un plano sale una persona del reparto, es esa persona: misma cara,",
+      "misma edad, mismo pelo. No tiene que salir en todos los planos —un anuncio",
+      "corta al envase, a unas manos, a un detalle— pero cuando sale, es ella.",
+    );
+  } else if (options.references && options.references > 0) {
     lines.push(
       "",
       "## Las imágenes que te mando",
