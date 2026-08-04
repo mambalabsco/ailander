@@ -6,7 +6,20 @@ import { readAvatar } from "@/lib/data/avatars";
 import { generateStructured } from "@/lib/generators";
 import { SCRIPT_SCHEMA } from "@/lib/generation-schemas";
 import { buildScriptPrompt } from "@/lib/video/script-prompt";
-import { animate, keyframe, makeMusic, normalizeLoudness, speak } from "@/lib/video/providers";
+import {
+  animate,
+  burnSubtitles,
+  compose,
+  keyframe,
+  makeMusic,
+  mediaSeconds,
+  mergeVideos,
+  normalizeLoudness,
+  speak,
+  trimClip,
+} from "@/lib/video/providers";
+import { composeTracks, planAssembly } from "@/lib/flow/assemble";
+import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { findGenerator } from "@/lib/video/catalog";
 import { findMusicGenerator } from "@/lib/video/music";
 import { findMusicLevel } from "@/lib/video/loudness";
@@ -298,17 +311,113 @@ async function runNode(
     }
 
     case "montaje": {
+      const clips = inputs.get(0) ?? [];
+      if (clips.length === 0) throw new Error("Ese montaje no tiene ningún plano.");
+
       /*
-       * El montaje se deja para el final y **todavía no se ejecuta aquí**.
+       * Las duraciones se **preguntan**, no se suponen.
        *
-       * Pegar planos, voz, música y subtítulos ya existe en el editor de vídeo,
-       * pero espera un vídeo con sus tomas en la base de datos, no un puñado de
-       * direcciones sueltas. Enchufarlo mal daría un montaje que ignora la
-       * mitad de lo que se le pasa, y eso es peor que decir que falta.
+       * Un clip de «seis segundos» rara vez dura seis, y de uno subido a mano no
+       * se sabe nada. Con seis planos, medio segundo de error por plano son tres
+       * de desfase entre imagen y voz — que es lo que se lee como «no está
+       * sincronizado».
        */
-      throw new Error(
-        "El nodo de montaje todavía no se ejecuta desde el lienzo. Los planos quedan guardados: móntalos desde el estudio.",
+      await ctx.report("Midiendo lo que dura cada pista");
+
+      const measured = await Promise.all(
+        clips.map(async (item) => ({
+          id: item.url,
+          url: item.url,
+          seconds: Number(item.value) > 0 ? Number(item.value) : await mediaSeconds(item.url),
+        })),
       );
+
+      const audios = inputs.get(1) ?? [];
+
+      /*
+       * Cuál es la voz y cuál la música, sin preguntarlo.
+       *
+       * Los dos son audio y llegan por el mismo puerto. La voz trae sus segundos
+       * en `value` —los devuelve el generador— y la música no: es la única
+       * diferencia fiable sin añadir un puerto más que habría que explicar.
+       */
+      const voiceInput = audios.find((item) => Number(item.value) > 0) ?? null;
+      const musicInput = audios.find((item) => item !== voiceInput) ?? null;
+
+      const voice = voiceInput
+        ? { id: "voz", url: voiceInput.url, seconds: Number(voiceInput.value) || 0 }
+        : null;
+
+      const music = musicInput
+        ? { id: "musica", url: musicInput.url, seconds: await mediaSeconds(musicInput.url) }
+        : null;
+
+      const plan = planAssembly({ clips: measured, voice, music });
+
+      /*
+       * Lo que impide montar se dice **antes** de gastar en recortes.
+       *
+       * Montar cuesta céntimos, pero un montaje que sale mal cuesta la vuelta
+       * entera de mirarlo y volver a lanzarlo.
+       */
+      if (plan.blockers.length > 0) throw new Error(plan.blockers.join(" "));
+
+      /*
+       * Cada plano se recorta por separado y después se encadenan.
+       *
+       * Es el arreglo del fallo que costó varias vueltas: pasarle los planos
+       * sueltos al montador para que los colocara devolvía el último repetido de
+       * principio a fin, aunque los archivos fueran distintos.
+       */
+      const trimmed: string[] = [];
+
+      for (const [index, item] of plan.clips.entries()) {
+        await ctx.report(`Recortando plano ${index + 1} de ${plan.clips.length}`);
+        trimmed.push(item.seconds > 0 ? await trimClip(item.url, item.seconds) : item.url);
+      }
+
+      await ctx.report("Encadenando los planos");
+
+      // Con uno solo no hay nada que encadenar, y el encadenador pide dos.
+      const picture = trimmed.length > 1 ? await mergeVideos(trimmed) : trimmed[0];
+
+      await ctx.report("Pegando la voz y la música");
+
+      const result = await compose(composeTracks(plan, picture));
+
+      let url = result.videoUrl;
+      const preset = text(node.settings, "subtitles");
+
+      if (preset) {
+        await ctx.report("Transcribiendo y quemando los subtítulos");
+
+        try {
+          /*
+           * Los transcribe del vídeo ya montado. Calcular los tiempos aquí es
+           * lo que los descuadraba: describen el archivo de voz suelto, no el
+           * vídeo terminado.
+           */
+          const script = first(inputs, 2);
+
+          url = await burnSubtitles({
+            videoUrl: result.videoUrl,
+            preset,
+            language: subtitleLanguage(),
+            vocabulary: script
+              ? buildVocabulary({ shots: [{ guion: script.value }] })
+              : [],
+          });
+        } catch (error) {
+          // Un fallo aquí no tira el montaje: el vídeo ya está y se ve entero.
+          plan.warnings.push(
+            `Sin subtítulos: ${error instanceof Error ? error.message : "falló"}`,
+          );
+        }
+      }
+
+      if (plan.warnings.length > 0) await ctx.report(plan.warnings.join(" "));
+
+      return { kind: "video", url, value: plan.warnings.join(" ") };
     }
 
     default:

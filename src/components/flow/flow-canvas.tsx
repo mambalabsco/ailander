@@ -19,7 +19,8 @@ import "@xyflow/react/dist/style.css";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { FlowNodeBox } from "@/components/flow/flow-node";
-import { NODE_TYPES, canConnect, findNodeType, validate, type Flow } from "@/lib/flow/graph";
+import { NodeSettings } from "@/components/flow/node-settings";
+import { NODE_TYPES, canConnect, findNodeType, removeNode, validate, type Flow } from "@/lib/flow/graph";
 import { runFlowAction, saveFlowAction } from "@/app/flujos/actions";
 
 /**
@@ -46,6 +47,7 @@ export interface FlowCanvasProps {
   /** Lo que produjo la última ejecución, por nodo. */
   results: Record<string, { url: string; kind: string; error: string }>;
   avatars: { id: string; name: string }[];
+  voices: { id: string; name: string }[];
 }
 
 const nodeTypes = { caja: FlowNodeBox };
@@ -56,11 +58,12 @@ function nextId(nodes: Node[], type: string): string {
   return `${type}-${used + 1}`;
 }
 
-export function FlowCanvas({ flowId, graph, results, avatars }: FlowCanvasProps) {
+export function FlowCanvas({ flowId, graph, results, avatars, voices }: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [multiply, setMultiply] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<string>("");
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(
     graph.nodes.map((node) => ({
@@ -105,6 +108,7 @@ export function FlowCanvas({ flowId, graph, results, avatars }: FlowCanvasProps)
   );
 
   const problems = useMemo(() => validate(asFlow), [asFlow]);
+  const selectedNode = nodes.find((node) => node.id === selected) ?? null;
 
   /*
    * La conexión la autoriza el modelo, no el lienzo.
@@ -256,21 +260,84 @@ export function FlowCanvas({ flowId, graph, results, avatars }: FlowCanvasProps)
         </ul>
       ) : null}
 
-      <div className="h-[560px] rounded-2xl border border-slate-200 dark:border-slate-800">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          proOptions={{ hideAttribution: false }}
-        >
-          <Background />
-          <Controls />
-          <MiniMap pannable zoomable />
-        </ReactFlow>
+      <div className="grid gap-3 lg:grid-cols-[1fr_20rem]">
+        <div className="h-[560px] rounded-2xl border border-slate-200 dark:border-slate-800">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={(_, node) => setSelected(node.id)}
+            onPaneClick={() => setSelected("")}
+            nodeTypes={nodeTypes}
+            fitView
+            proOptions={{ hideAttribution: false }}
+          >
+            <Background />
+            <Controls />
+            <MiniMap pannable zoomable />
+          </ReactFlow>
+        </div>
+
+        {/*
+          Los ajustes van al lado y no dentro de la caja: seis campos dentro
+          dejan de ser un nodo y tapan las conexiones, que es justo lo que el
+          lienzo venía a aportar.
+        */}
+        <div>
+          {selectedNode ? (
+            <NodeSettings
+              nodeId={selectedNode.id}
+              type={String((selectedNode.data as { type?: string }).type ?? "")}
+              settings={
+                ((selectedNode.data as { settings?: Record<string, unknown> }).settings ?? {})
+              }
+              voices={voices}
+              avatars={avatars}
+              onChange={(settings) =>
+                setNodes((current) =>
+                  current.map((node) =>
+                    node.id === selected
+                      ? {
+                          ...node,
+                          data: {
+                            ...node.data,
+                            settings,
+                            summary: summaryOf(
+                              String((node.data as { type?: string }).type ?? ""),
+                              settings,
+                            ),
+                          },
+                        }
+                      : node,
+                  ),
+                )
+              }
+              onDelete={() => {
+                // Por el modelo, que se lleva también las conexiones: dejarlas
+                // sueltas cuenta como dependencias que nunca se cumplen.
+                const next = removeNode(asFlow, selected);
+
+                setNodes((current) => current.filter((node) => node.id !== selected));
+                setEdges(() =>
+                  next.edges.map((edge) => ({
+                    id: `${edge.from}-${edge.to}-${edge.port}`,
+                    source: edge.from,
+                    target: edge.to,
+                    targetHandle: String(edge.port),
+                  })),
+                );
+                setSelected("");
+              }}
+            />
+          ) : (
+            <p className="rounded-2xl border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              Pulsa un nodo para configurarlo. Sin ajustes, cada uno usa lo que tenga por defecto —
+              y los que necesitan algo (una voz, una cara) fallarán al ejecutar diciéndolo.
+            </p>
+          )}
+        </div>
       </div>
 
       <p className="text-xs text-slate-500 dark:text-slate-400">

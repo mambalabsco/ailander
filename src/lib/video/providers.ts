@@ -696,6 +696,49 @@ export async function normalizeLoudness(url: string, lufs: number): Promise<stri
   return payload.audio.url;
 }
 
+/**
+ * Cuánto dura de verdad un archivo, preguntándoselo a quien lo va a montar.
+ *
+ * ## Por qué no basta con lo que se pidió
+ *
+ * Un clip de «seis segundos» rara vez dura seis: los generadores entregan 5,8 o
+ * 6,2 según el modelo, y las duraciones del montaje se calculan sumando. Con
+ * seis planos, medio segundo de error por plano son tres segundos de desfase
+ * entre la imagen y la voz — que es exactamente lo que se lee como «no está
+ * sincronizado».
+ *
+ * Y hay archivos de los que **no se sabe nada**: uno subido a mano, o el
+ * resultado de un modelo que decide él la duración. Ahí no hay número que
+ * suponer.
+ *
+ * Devuelve cero si no se puede leer, y quien llama decide: cero es «no lo sé»,
+ * no «dura cero», y confundirlos deja un montaje de duración nula.
+ */
+export async function mediaSeconds(url: string): Promise<number> {
+  try {
+    const response = await fetch("https://fal.run/fal-ai/ffmpeg-api/metadata", {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${key("FAL_KEY")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ media_url: url, extract_frames: false }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) return 0;
+
+    const payload = (await response.json()) as { media?: { duration?: number } };
+    const seconds = Number(payload.media?.duration);
+
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  } catch {
+    // Un fallo aquí no puede tumbar el montaje: quien llama se apaña con lo que
+    // pidió, que es peor pero sirve.
+    return 0;
+  }
+}
+
 /* ------------------------------ Clonar una voz ----------------------------- */
 
 /**
