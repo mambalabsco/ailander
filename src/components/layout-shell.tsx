@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useState, useSyncExternalStore } from "react";
+import { NavSpinner } from "@/components/nav-spinner";
 import { THEME_STORAGE_KEY } from "@/components/theme-script";
 import { signOut } from "@/app/auth/actions";
 
@@ -38,6 +39,21 @@ const navigation: { href: string; label: string; icon: string; needs?: Capabilit
 
 function isActiveRoute(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
+/**
+ * Cómo se llama la pantalla en la que se está.
+ *
+ * La cabecera decía siempre «Plataforma de análisis publicitario», que es el
+ * nombre del producto y no dice dónde estás. Con dieciséis pantallas, el sitio
+ * donde mirar para saber dónde estás es el título.
+ */
+function titleOf(pathname: string): string {
+  const match = navigation
+    .filter((item) => item.href !== "/")
+    .find((item) => pathname.startsWith(item.href));
+
+  return match?.label ?? "Dashboard";
 }
 
 /**
@@ -98,91 +114,126 @@ export function LayoutShell({ children, userEmail, demoMode, capabilities }: Lay
    */
   if (pathname.startsWith("/auth")) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-900 transition-colors dark:bg-[#0a0a0c] dark:text-slate-100">
         {children}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-[#0a0a0c] dark:text-slate-100">
       <div className="flex min-h-screen flex-col lg:flex-row">
+        {/*
+          La barra lateral, más estrecha y más callada.
+
+          Antes cada entrada era un botón grande con sombra y el activo pintaba
+          un bloque violeta de lado a lado. Con dieciséis pantallas eso es una
+          columna de botones que compite con el contenido. Ahora el activo se
+          marca con un relleno suave y una barra fina a la izquierda: se ve de
+          reojo y no grita.
+        */}
         <aside
-          className={`border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur lg:min-h-screen lg:border-b-0 lg:border-r dark:border-slate-800 dark:bg-slate-900/80 ${collapsed ? "lg:w-24" : "lg:w-72"}`}
+          className={`shrink-0 border-b border-slate-200 bg-white/70 px-3 py-4 backdrop-blur-xl lg:min-h-screen lg:border-b-0 lg:border-r dark:border-white/8 dark:bg-white/[0.02] ${collapsed ? "lg:w-20" : "lg:w-64"}`}
         >
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-lg font-semibold text-white">
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/" className="flex min-w-0 items-center gap-2.5">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-sm font-semibold tracking-tight text-white">
                 LL
               </div>
               {!collapsed && (
-                <div>
-                  <p className="text-sm font-semibold">Lumen Lab</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Marketing IA</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold tracking-tight">Lumen Lab</p>
+                  <p className="truncate text-[11px] text-slate-500 dark:text-slate-500">
+                    Marketing IA
+                  </p>
                 </div>
               )}
             </Link>
+
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               aria-label={collapsed ? "Expandir menú" : "Contraer menú"}
-              className="hidden rounded-full border border-slate-200 p-2 text-sm transition hover:bg-slate-100 lg:inline-flex dark:border-slate-700 dark:hover:bg-slate-800"
+              className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 lg:inline-flex dark:hover:bg-white/5 dark:hover:text-slate-200"
             >
               {collapsed ? "→" : "←"}
             </button>
           </div>
 
-          <nav className="mt-8 space-y-2">
+          <nav className="mt-6 space-y-0.5">
             {visible.map((item) => {
               const active = isActiveRoute(pathname, item.href);
+
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   title={collapsed ? item.label : undefined}
                   aria-current={active ? "page" : undefined}
-                  className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition ${active ? "bg-violet-600 text-white shadow-lg" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                  className={`relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium transition-colors ${
+                    active
+                      ? "bg-violet-50 text-violet-700 dark:bg-violet-500/12 dark:text-violet-300"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100"
+                  }`}
                 >
-                  <span className="text-base">{item.icon}</span>
-                  {!collapsed && <span>{item.label}</span>}
+                  {active ? (
+                    <span
+                      aria-hidden
+                      className="absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full bg-violet-600 dark:bg-violet-400"
+                    />
+                  ) : null}
+
+                  <span className="w-4 shrink-0 text-center text-sm opacity-80">{item.icon}</span>
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+
+                  {/*
+                    El circulito, en el enlace al que se va y no en una barra
+                    arriba: con dieciséis entradas, saber **qué** se está
+                    abriendo importa tanto como saber que algo se abre.
+                  */}
+                  <NavSpinner />
                 </Link>
               );
             })}
           </nav>
         </aside>
 
-        <div className="min-w-0 flex-1">
-          <header className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-xl font-semibold">Plataforma de análisis publicitario</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">IA para copywriting y anuncios</p>
-              </div>
-              <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/70 px-4 py-2.5 backdrop-blur-xl md:px-6 dark:border-white/8 dark:bg-[#0a0a0c]/80">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h1 className="truncate text-[15px] font-semibold tracking-tight">
+                {titleOf(pathname)}
+              </h1>
+
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={toggleTheme}
-                  className="rounded-full border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                  aria-label={darkMode ? "Tema claro" : "Tema oscuro"}
+                  className="flex size-8 items-center justify-center rounded-full border border-slate-200 text-xs transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/5"
                 >
-                  {darkMode ? "☀️ Claro" : "🌙 Oscuro"}
+                  {darkMode ? "☀" : "☾"}
                 </button>
+
                 {demoMode ? (
-                  <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                    Sin conectar a Supabase
-                  </div>
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                    Sin Supabase
+                  </span>
                 ) : null}
+
                 {userEmail ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span
-                      className="max-w-40 truncate rounded-full bg-violet-100 px-4 py-2 text-sm font-medium text-violet-700 dark:bg-violet-950 dark:text-violet-200"
+                      className="max-w-36 truncate rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 dark:border-white/10 dark:text-slate-300"
                       title={userEmail}
                     >
                       {userEmail}
                     </span>
+
                     <form action={signOut}>
                       <button
                         type="submit"
-                        className="rounded-full border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                        className="rounded-full border border-slate-200 px-2.5 py-1 text-xs transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/5"
                       >
                         Salir
                       </button>
@@ -193,7 +244,14 @@ export function LayoutShell({ children, userEmail, demoMode, capabilities }: Lay
             </div>
           </header>
 
-          <main className="p-4 md:p-6">{children}</main>
+          {/*
+            La clave hace que React remonte al cambiar de ruta, que es lo que
+            dispara el desvanecido. Sin ella, el contenido nuevo aparece de golpe
+            encima del anterior y el cambio se lee como un corte.
+          */}
+          <main key={pathname} className="page-in min-w-0 flex-1 p-4 md:p-6">
+            {children}
+          </main>
         </div>
       </div>
     </div>

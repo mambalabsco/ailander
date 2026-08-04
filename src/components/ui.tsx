@@ -1,7 +1,14 @@
 import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
+/*
+ * Los campos, sobre el mismo fondo que la tarjeta y con el borde de luz.
+ *
+ * En oscuro estaban en `slate-950` dentro de una tarjeta `slate-900`: un hueco
+ * más oscuro que lo que lo rodea, que es como se dibuja un agujero y no un
+ * campo. Ahora el campo es una capa **por encima**, que es lo que es.
+ */
 const fieldClasses =
-  "w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400";
 
 export function TextField({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${fieldClasses} ${className}`} />;
@@ -27,12 +34,13 @@ export function Field({ label, children }: { label: string; children: React.Reac
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-violet-600 text-white hover:bg-violet-700 disabled:hover:bg-violet-600",
+  primary: "bg-violet-600 text-white hover:bg-violet-500 disabled:hover:bg-violet-600",
   secondary:
-    "border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800",
+    "border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/12 dark:text-slate-200 dark:hover:bg-white/[0.06]",
   danger:
-    "border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/50",
-  ghost: "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white",
+    "border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10",
+  ghost:
+    "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white",
 };
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -43,14 +51,14 @@ export function Button({ variant = "secondary", className = "", ...props }: Butt
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${buttonVariants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
     />
   );
 }
 
 export function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+    <span className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 dark:border-white/10 dark:text-slate-300">
       {children}
     </span>
   );

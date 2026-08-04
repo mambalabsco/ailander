@@ -91,3 +91,68 @@ body {
   --viz-critical: #dc4f70;
   --viz-neutral: #5c86d8;
 }
+
+/* ---------------------------------------------------------------------------
+   El circulito de carga de la navegación.
+
+   Empieza invisible y con retardo: la mayoría de las navegaciones son
+   instantáneas —la ruta ya está precargada— y un parpadeo en cada clic es más
+   ruido que información. Solo se ve si de verdad se está esperando.
+
+   `both` importa: sin él, entre el retardo y el primer fotograma el elemento
+   vuelve a su opacidad inicial y da un salto.
+--------------------------------------------------------------------------- */
+@keyframes nav-spinner-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.nav-spinner {
+  opacity: 0;
+  animation:
+    nav-spinner-in 150ms ease-out 250ms both,
+    spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   La entrada de cada pantalla.
+
+   Un desvanecido corto al montar. No es decoración: cuando la navegación tarda,
+   el contenido nuevo aparece de golpe encima del anterior y el cambio se lee
+   como un corte. Con esto se lee como una transición.
+
+   Corto a propósito —180 ms—: por encima de eso deja de sentirse instantáneo, y
+   una pantalla que tarda en aparecer es exactamente lo contrario de lo que se
+   buscaba.
+--------------------------------------------------------------------------- */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.page-in {
+  animation: page-in 180ms ease-out both;
+}
+
+/* Quien pide menos movimiento no lo recibe: los desvanecidos y los giros son
+   justo lo que marean. El circulito se queda quieto pero visible, que sigue
+   diciendo lo que tenía que decir. */
+@media (prefers-reduced-motion: reduce) {
+  .page-in {
+    animation: none;
+  }
+
+  .nav-spinner {
+    opacity: 1;
+    animation: none;
+  }
+}
