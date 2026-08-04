@@ -24,6 +24,7 @@ const navigation: { href: string; label: string; icon: string; needs?: Capabilit
   { href: "/competitors", label: "Competidores", icon: "◎" },
   { href: "/ads", label: "Biblioteca de anuncios", icon: "⬢" },
   { href: "/estudio", label: "Estudio", icon: "◈", needs: "estudio" },
+  { href: "/flujos", label: "Flujos de anuncios", icon: "⛓", needs: "estudio" },
   { href: "/imagenes", label: "Adaptador de imágenes", icon: "▦", needs: "gastar" },
   { href: "/avatares", label: "Avatares con producto", icon: "☺", needs: "gastar" },
   { href: "/analyzer", label: "Analizador", icon: "◍" },

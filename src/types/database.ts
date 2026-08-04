@@ -859,6 +859,48 @@ type MetaAppRow = {
 };
 
 /**
+ * Un flujo: el anuncio dibujado como un grafo.
+ *
+ * Es el **plano**, no el resultado: se ejecuta las veces que haga falta y cada
+ * ejecución produce lo suyo.
+ */
+type FlowRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  product_id: string;
+  /** `{ nodes, edges }`. Ver `flow/graph.ts`. */
+  graph: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+type FlowRunRow = {
+  id: string;
+  user_id: string;
+  flow_id: string;
+  status: string;
+  /** Con qué se ejecutó esta vuelta: el avatar, el ángulo, lo que varíe. */
+  variables: Json;
+  note: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Lo que produjo un nodo. Nodo a nodo, para no volver a pagar lo hecho. */
+type FlowOutputRow = {
+  id: string;
+  user_id: string;
+  run_id: string;
+  node_id: string;
+  kind: string;
+  url: string;
+  value: string;
+  error: string;
+  created_at: string;
+};
+
+/**
  * Un avatar: una cara suelta, sin producto.
  *
  * Se reutiliza en todos los productos y en todas las tandas — generar una cara
@@ -1252,6 +1294,17 @@ export type Database = {
         VideoRow,
         Insertable<VideoRow, Exclude<keyof VideoRow, "user_id" | "product_id" | "title">>,
         [Belongs<"product_id", "products">]
+      >;
+      flows: Table<FlowRow, Insertable<FlowRow, Exclude<keyof FlowRow, "user_id">>>;
+      flow_runs: Table<
+        FlowRunRow,
+        Insertable<FlowRunRow, Exclude<keyof FlowRunRow, "user_id" | "flow_id">>,
+        [Belongs<"flow_id", "flows">]
+      >;
+      flow_outputs: Table<
+        FlowOutputRow,
+        Insertable<FlowOutputRow, Exclude<keyof FlowOutputRow, "user_id" | "run_id" | "node_id">>,
+        [Belongs<"run_id", "flow_runs">]
       >;
       avatars: Table<AvatarRow, Insertable<AvatarRow, Exclude<keyof AvatarRow, "user_id" | "url">>>;
       avatar_shots: Table<

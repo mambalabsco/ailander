@@ -1,0 +1,298 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Background,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  addEdge,
+  useEdgesState,
+  useNodesState,
+  type Connection,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+
+import { Button, SelectField } from "@/components/ui";
+import { GenerateButton } from "@/components/generate-button";
+import { FlowNodeBox } from "@/components/flow/flow-node";
+import { NODE_TYPES, canConnect, findNodeType, validate, type Flow } from "@/lib/flow/graph";
+import { runFlowAction, saveFlowAction } from "@/app/flujos/actions";
+
+/**
+ * El lienzo.
+ *
+ * ## Lo que aporta y lo que no
+ *
+ * Dibuja y ordena. **Toda la regla de qué se puede conectar con qué vive en
+ * `flow/graph.ts`**, no aquí: lo que decide si un flujo tiene sentido son datos,
+ * y datos se pueden probar sin navegador. Aquí solo se pregunta.
+ *
+ * Esa separación es la que evita el fallo típico de un editor visual: que la
+ * pantalla deje hacer algo que el ejecutor no sabe hacer.
+ *
+ * ## Guardar y ejecutar son dos botones
+ *
+ * Dibujar es gratis y ejecutar cuesta. Con un solo botón, cada arrastre se
+ * arriesga a lanzar diez generaciones.
+ */
+
+export interface FlowCanvasProps {
+  flowId: string;
+  graph: Flow;
+  /** Lo que produjo la última ejecución, por nodo. */
+  results: Record<string, { url: string; kind: string; error: string }>;
+  avatars: { id: string; name: string }[];
+}
+
+const nodeTypes = { caja: FlowNodeBox };
+
+/** Un identificador corto y legible: `imagen-3`, no un UUID de treinta letras. */
+function nextId(nodes: Node[], type: string): string {
+  const used = nodes.filter((node) => node.id.startsWith(`${type}-`)).length;
+  return `${type}-${used + 1}`;
+}
+
+export function FlowCanvas({ flowId, graph, results, avatars }: FlowCanvasProps) {
+  const router = useRouter();
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [multiply, setMultiply] = useState<Set<string>>(new Set());
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(
+    graph.nodes.map((node) => ({
+      id: node.id,
+      type: "caja",
+      position: { x: node.x, y: node.y },
+      data: {
+        type: node.type,
+        summary: summaryOf(node.type, node.settings),
+        settings: node.settings,
+        result: results[node.id],
+      },
+    })),
+  );
+
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(
+    graph.edges.map((edge) => ({
+      id: `${edge.from}-${edge.to}-${edge.port}`,
+      source: edge.from,
+      target: edge.to,
+      targetHandle: String(edge.port),
+    })),
+  );
+
+  /** El grafo tal y como lo entiende el modelo, para preguntarle y para guardar. */
+  const asFlow = useMemo<Flow>(
+    () => ({
+      nodes: nodes.map((node) => ({
+        id: node.id,
+        type: String((node.data as { type?: string }).type ?? ""),
+        x: Math.round(node.position.x),
+        y: Math.round(node.position.y),
+        settings: ((node.data as { settings?: Record<string, unknown> }).settings ?? {}),
+      })),
+      edges: edges.map((edge) => ({
+        from: edge.source,
+        to: edge.target,
+        port: Number(edge.targetHandle ?? 0),
+      })),
+    }),
+    [nodes, edges],
+  );
+
+  const problems = useMemo(() => validate(asFlow), [asFlow]);
+
+  /*
+   * La conexión la autoriza el modelo, no el lienzo.
+   *
+   * Es lo que impide dibujar algo que el ejecutor no sabe hacer: conectar música
+   * a la entrada de referencias de un generador no daría error al ejecutar,
+   * mandaría un campo que el modelo ignora.
+   */
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const port = Number(connection.targetHandle ?? 0);
+      const verdict = canConnect(asFlow, connection.source, connection.target, port);
+
+      if (!verdict.ok) {
+        setNote(verdict.why);
+        return;
+      }
+
+      setNote("");
+      setEdges((current) => addEdge({ ...connection, id: `${connection.source}-${connection.target}-${port}` }, current));
+    },
+    [asFlow, setEdges],
+  );
+
+  const addNode = (type: string) => {
+    const id = nextId(nodes, type);
+
+    setNodes((current) => [
+      ...current,
+      {
+        id,
+        type: "caja",
+        // En diagonal desde el último: apilarlos en el mismo punto obliga a
+        // separarlos a mano antes de poder trabajar.
+        position: { x: 80 + current.length * 40, y: 80 + current.length * 30 },
+        data: { type, summary: "", settings: {} },
+      },
+    ]);
+  };
+
+  const save = () => {
+    setSaving(true);
+
+    void saveFlowAction(flowId, asFlow)
+      .then((result) => setNote(result.message))
+      .finally(() => setSaving(false));
+  };
+
+  /** Un juego de variables por avatar marcado: eso es «varios anuncios». */
+  const variants = [...multiply].map((id) => ({ avatar: id }));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <SelectField
+          value=""
+          onChange={(event) => {
+            if (event.target.value) addNode(event.target.value);
+          }}
+          className="min-w-48"
+        >
+          <option value="">Añadir un nodo…</option>
+          {NODE_TYPES.map((type) => (
+            <option key={type.id} value={type.id}>
+              {type.label} — {type.note.slice(0, 50)}
+            </option>
+          ))}
+        </SelectField>
+
+        <Button disabled={saving} onClick={save}>
+          {saving ? "Guardando…" : "Guardar el flujo"}
+        </Button>
+
+        <GenerateButton
+          variant="primary"
+          action={() => runFlowAction({ flowId, variants })}
+          label={variants.length > 1 ? `Ejecutar ${variants.length} veces` : "Ejecutar"}
+          disabled={problems.length > 0}
+          disabledReason={problems.length > 0 ? problems[0].problem : undefined}
+          hint="Guarda antes: se ejecuta lo guardado, no lo que hay en pantalla. Lo ya hecho no se vuelve a pagar."
+        />
+
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {nodes.length} nodo(s) · {edges.length} conexión(es)
+        </span>
+      </div>
+
+      {/*
+        Multiplicar: el mismo flujo con otra cara.
+
+        Es lo que convierte un flujo en varios anuncios. Las vueltas van en serie
+        porque cada una lanza sus generaciones y el proveedor limita llamadas por
+        minuto: seis a la vez no acaban antes, fallan por cupo.
+      */}
+      {avatars.length > 0 ? (
+        <div className="rounded-2xl border border-slate-200 p-2 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Una vuelta por cada cara marcada {multiply.size > 0 ? `· ${multiply.size}` : "· ninguna"}
+          </p>
+
+          <ul className="mt-1 flex flex-wrap gap-1">
+            {avatars.map((avatar) => {
+              const on = multiply.has(avatar.id);
+
+              return (
+                <li key={avatar.id}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMultiply((current) => {
+                        const next = new Set(current);
+                        if (next.has(avatar.id)) next.delete(avatar.id);
+                        else next.add(avatar.id);
+                        return next;
+                      })
+                    }
+                    className={`rounded-lg border px-2 py-1 text-xs ${
+                      on
+                        ? "border-violet-500 bg-violet-50 dark:bg-violet-950/40"
+                        : "border-slate-300 dark:border-slate-700"
+                    }`}
+                  >
+                    {avatar.name}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {note ? (
+        <p className="rounded-2xl border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          {note}
+        </p>
+      ) : null}
+
+      {/*
+        Lo que falta, mientras se monta y no al ejecutar.
+
+        Un flujo incompleto falla en el nodo que necesita la entrada, no en el
+        primero: descubrirlo a mitad son cinco generaciones pagadas para nada.
+      */}
+      {problems.length > 0 ? (
+        <ul className="rounded-2xl border border-slate-200 p-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
+          {problems.map((problem, index) => (
+            <li key={index}>· {problem.problem}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="h-[560px] rounded-2xl border border-slate-200 dark:border-slate-800">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          fitView
+          proOptions={{ hideAttribution: false }}
+        >
+          <Background />
+          <Controls />
+          <MiniMap pannable zoomable />
+        </ReactFlow>
+      </div>
+
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Arrastra desde el punto de la derecha de un nodo hasta la entrada de otro. Los colores
+        dicen qué encaja: solo se unen dos puntos del mismo color. Borra un nodo seleccionándolo y
+        pulsando Supr.
+      </p>
+
+      <Button variant="ghost" onClick={() => router.refresh()}>
+        Ver los resultados de la última ejecución
+      </Button>
+    </div>
+  );
+}
+
+/** Una línea que diga qué hay dentro sin abrirlo. */
+function summaryOf(type: string, settings: Record<string, unknown>): string {
+  const node = findNodeType(type);
+  if (!node) return "";
+
+  const text = typeof settings.text === "string" ? settings.text : "";
+  const model = typeof settings.model === "string" ? settings.model : "";
+
+  return [text.slice(0, 40), model].filter(Boolean).join(" · ");
+}
