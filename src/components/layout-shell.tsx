@@ -112,9 +112,20 @@ export function LayoutShell({ children, userEmail, demoMode, capabilities }: Lay
    * Un menú lateral con enlaces a páginas que no se pueden abrir sin sesión
    * solo sirve para ofrecer callejones sin salida.
    */
-  if (pathname.startsWith("/auth")) {
+  /*
+   * Las pantallas de acceso y las legales no llevan el armazón.
+   *
+   * Las legales las abre casi siempre alguien **sin sesión** —el revisor de Meta,
+   * o quien pulsa el enlace del diálogo de inicio de sesión—, y un menú lateral
+   * con quince pantallas que no puede abrir solo estorba.
+   */
+  if (pathname.startsWith("/auth") || pathname.startsWith("/privacidad")) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-900 transition-colors dark:bg-[#0a0a0c] dark:text-slate-100">
+      <div
+        className={`min-h-screen bg-white text-slate-900 transition-colors dark:bg-[#0a0a0c] dark:text-slate-100 ${
+          pathname.startsWith("/auth") ? "flex items-center justify-center p-4" : ""
+        }`}
+      >
         {children}
       </div>
     );
