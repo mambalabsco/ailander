@@ -131,6 +131,8 @@ export interface LandingPage {
   title: string;
   slug: string;
   methodId?: string;
+  /** La forma editorial: publirreportaje, carta, caso, comparativa, diario… */
+  shapeId?: string;
   header?: LandingHeader;
   author?: LandingAuthor;
   sections: LandingSection[];

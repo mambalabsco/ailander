@@ -487,6 +487,8 @@ type LandingPageRow = {
   /** Colores, letra y ancho. `null` es el aspecto de siempre. */
   theme: unknown;
   created_at: string;
+  /** La forma editorial con la que se escribió. Vacío en las anteriores. */
+  shape_id: string;
 };
 
 /** Un copy que ya se probó, guardado como referencia para escribir más. */

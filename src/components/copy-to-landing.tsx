@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { generateLandingAction } from "@/app/products/[id]/landing-actions";
+import { LANDING_SHAPES } from "@/lib/landing-shapes";
 
 /**
  * Convertir un copy ya escrito en una página de Shopify.
@@ -54,6 +55,11 @@ export function CopyToLanding({
   const [commentStyle, setCommentStyle] = useState<"facebook" | "testimonios">("facebook");
   const [referenceId, setReferenceId] = useState("");
   const [fidelity, setFidelity] = useState<"calcado" | "inspirado">("calcado");
+  /*
+   * Vacío es «la que toque»: se propone una que este producto no haya usado.
+   * Sin esto salían todas iguales, porque la única forma posible era una.
+   */
+  const [shapeId, setShapeId] = useState("");
 
   if (!open) {
     return (
@@ -140,6 +146,28 @@ export function CopyToLanding({
           </label>
         ) : null}
 
+        {/*
+          Qué forma tiene la página.
+
+          Una página de venta no tiene una forma. Un caso clínico no se parece a
+          una carta personal, y una comparativa no se parece a un diario de
+          treinta días — y hasta ahora salían las tres iguales.
+        */}
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Qué forma tiene
+          </span>
+
+          <SelectField value={shapeId} onChange={(event) => setShapeId(event.target.value)}>
+            <option value="">La que toque — una que no hayas usado aún</option>
+            {LANDING_SHAPES.map((shape) => (
+              <option key={shape.id} value={shape.id}>
+                {shape.label} — {shape.note}
+              </option>
+            ))}
+          </SelectField>
+        </label>
+
         {referenceId ? (
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -169,6 +197,7 @@ export function CopyToLanding({
             commentStyle,
             referenceId,
             fidelity,
+            shapeId,
           })
         }
         label="Crear la página con este copy"

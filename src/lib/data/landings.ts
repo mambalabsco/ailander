@@ -32,6 +32,8 @@ function toLanding(row: {
   published_at: string | null;
   theme: unknown;
   created_at: string;
+  /** Vacío en las páginas anteriores a que existieran las formas. */
+  shape_id?: string;
 }): LandingPage {
   return {
     id: row.id,
@@ -49,6 +51,7 @@ function toLanding(row: {
     title: row.title,
     slug: row.slug,
     methodId: row.method_id ?? undefined,
+    shapeId: row.shape_id || undefined,
     header: (row.header as LandingHeader) ?? undefined,
     author: (row.author as LandingAuthor) ?? undefined,
     sections: (row.sections as LandingSection[]) ?? [],
@@ -69,6 +72,7 @@ export async function saveLanding(input: {
   title: string;
   slug: string;
   methodId?: string;
+  shapeId?: string;
   header?: LandingHeader;
   author?: LandingAuthor;
   sections: LandingSection[];
@@ -87,6 +91,7 @@ export async function saveLanding(input: {
       title: input.title,
       slug: input.slug,
       method_id: input.methodId ?? null,
+      shape_id: input.shapeId ?? "",
       header: (input.header ?? null) as never,
       author: (input.author ?? null) as never,
       sections: input.sections as never,

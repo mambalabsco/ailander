@@ -1,6 +1,7 @@
 import "server-only";
 
 import { buildProductContext } from "@/lib/copy-prompts";
+import { findShape, shapeRules } from "@/lib/landing-shapes";
 import {
   NEVER_CARRIED,
   houseRules,
@@ -43,6 +44,8 @@ export function buildLandingPrompt(options: {
   angle?: { name: string; problemMechanism: string; solutionMechanism: string } | null;
   commentStyle: "facebook" | "testimonios";
   countryName: string;
+  /** Qué forma tiene la página. Sin esto salían todas iguales. */
+  shapeId?: string;
 }): string {
   const { product, research, store, method, baseCopy, angle, commentStyle } = options;
 
@@ -109,6 +112,8 @@ Monta un **publirreportaje completo como página web**, con el marco **${method.
 - \`author.name\`: nombre y apellido creíbles de ${options.countryName}. Con «Dra.» o «Dr.» solo si el marco es de autoridad.
 - \`author.credentials\`: especialidad y años de experiencia, en una línea. «Endocrinóloga · Especialista en tiroides · 16 años de práctica clínica».
 - \`author.updatedAt\`: una fecha reciente escrita en largo, «12 de marzo de 2026».
+
+${shapeRules(findShape(options.shapeId ?? "publirreportaje"))}
 
 ### Las secciones
 

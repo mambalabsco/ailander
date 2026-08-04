@@ -143,6 +143,22 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
   const { readFidelity } = await import("@/lib/landing-fidelity");
   const fidelity = readFidelity(raw.fidelity);
 
+  /*
+   * Qué forma tiene la página.
+   *
+   * Sin elegir, se propone una que este producto no haya usado todavía: la
+   * segunda página no debería salir igual que la primera solo porque nadie se
+   * acordó de cambiarlo.
+   */
+  const { nextShape } = await import("@/lib/landing-shapes");
+  const { listLandings } = await import("@/lib/data/landings");
+
+  const usedShapes = await listLandings(productId)
+    .then((pages) => pages.map((page) => page.shapeId ?? "").filter(Boolean))
+    .catch(() => []);
+
+  const shapeId = nextShape(usedShapes, readText(raw.shapeId) || undefined).id;
+
   const prompt = buildLandingPrompt({
     product,
     research,
@@ -153,6 +169,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
     commentStyle,
     reference,
     fidelity,
+    shapeId,
     countryName: product.country || "México",
   });
 
@@ -185,6 +202,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
       const page = await saveLanding({
         productId,
         theme,
+        shapeId,
         copyId: copyId || undefined,
         title: data.title,
         slug: data.slug,

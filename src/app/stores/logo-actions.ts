@@ -122,3 +122,79 @@ export async function setStoreLogoAction(
 
   return { ok: true, message: logo ? "Logo guardado." : "Logo quitado." };
 }
+
+/**
+ * Subir el logo desde el ordenador.
+ *
+ * ## Por qué hacía falta además de pegar una dirección
+ *
+ * Porque un logo casi nunca está ya en internet. Está en el ordenador de quien
+ * lo encargó, y pegar una dirección obligaba a subirlo antes a otro sitio —o a
+ * generar uno nuevo teniendo el bueno delante—.
+ *
+ * Y las direcciones ajenas caducan. Un logo enlazado a un Drive o a un enlace de
+ * mensajería deja de cargar un mes después, y entonces las landings y las
+ * creatividades salen sin él sin que nada falle.
+ *
+ * ## PNG antes que JPEG
+ *
+ * Un logo se pone sobre fondos de todos los colores, así que necesita
+ * transparencia — y JPEG no la tiene: lo que era transparente sale blanco, y se
+ * ve como un rectángulo blanco encima de una página oscura. Se acepta igual,
+ * porque a veces es lo único que hay, pero se dice.
+ */
+export async function uploadStoreLogoAction(
+  form: FormData,
+): Promise<{ ok: boolean; message: string; url?: string }> {
+  try {
+    const id = readText(form.get("storeId"));
+    if (!id) return { ok: false, message: "Falta la tienda." };
+
+    const file = form.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, message: "No llegó ningún archivo." };
+    }
+
+    const allowed = ["image/png", "image/webp", "image/svg+xml", "image/jpeg"];
+
+    if (!allowed.includes(file.type)) {
+      return {
+        ok: false,
+        message: `«${file.type || "sin tipo"}» no vale. Sube un PNG, un WebP, un SVG o un JPG.`,
+      };
+    }
+
+    // Un logo que pesa más de cinco megas no es un logo, es una foto.
+    if (file.size > 5 * 1024 * 1024) {
+      return { ok: false, message: "Pesa más de 5 MB: eso no es un logo, es una foto." };
+    }
+
+    const { requireContext } = await import("@/lib/supabase/session");
+    const { supabase, userId } = await requireContext();
+
+    const extension = file.type === "image/svg+xml" ? "svg" : (file.type.split("/")[1] ?? "png");
+    const path = `${userId}/logos/${id}-${crypto.randomUUID()}.${extension}`;
+
+    const { error } = await supabase.storage
+      .from("studio")
+      .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type });
+
+    if (error) return { ok: false, message: `No se pudo subir: ${error.message}` };
+
+    const url = supabase.storage.from("studio").getPublicUrl(path).data.publicUrl;
+
+    await updateStore(id, { logoUrl: url });
+    revalidatePath("/stores");
+
+    return {
+      ok: true,
+      url,
+      message:
+        file.type === "image/jpeg"
+          ? "Subido. Ojo: un JPG no tiene transparencia, así que sobre fondo oscuro se verá su recuadro blanco."
+          : "Subido y guardado.",
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo subir." };
+  }
+}
