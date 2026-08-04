@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { deleteMetaLoginAction, setDefaultMetaLoginAction } from "@/app/datos/actions";
@@ -41,6 +42,9 @@ export function MetaLoginsPanel({
   justConnected?: string;
 }) {
   const router = useRouter();
+  /** Cuál se está desconectando, y qué contestó Facebook. */
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
 
   return (
     <div className="space-y-3">
@@ -102,23 +106,48 @@ export function MetaLoginsPanel({
                   </Button>
                 )}
 
-                <button
-                  type="button"
-                  aria-label={`Borrar la sesión de ${login.name}`}
-                  onClick={() => {
-                    if (!window.confirm(`¿Borrar la sesión de «${login.name}»?`)) return;
+                {/*
+                  «Desconectar» y no una ✕.
 
-                    void deleteMetaLoginAction(login.id).then(() => router.refresh());
+                  Una aspa se lee como «quitar de la lista» y esto hace algo más
+                  grande: borra el token y **revoca el permiso en Facebook**. Una
+                  acción que sale del producto merece decir su nombre.
+                */}
+                <Button
+                  variant="danger"
+                  disabled={busy === login.id}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `¿Desconectar «${login.name}»? Se borra el token y se le pide a Facebook que revoque el permiso. Las tiendas que lo usaran dejarán de leer su gasto.`,
+                      )
+                    ) {
+                      return;
+                    }
+
+                    setBusy(login.id);
+
+                    void deleteMetaLoginAction(login.id)
+                      .then((result) => {
+                        setNote(result.message);
+                        router.refresh();
+                      })
+                      .finally(() => setBusy(""));
                   }}
-                  className="rounded-full px-2 py-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                 >
-                  ✕
-                </button>
+                  {busy === login.id ? "Desconectando…" : "Desconectar"}
+                </Button>
               </li>
             );
           })}
         </ul>
       )}
+
+      {note ? (
+        <p className="rounded-2xl border border-slate-200 p-2 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-300">
+          {note}
+        </p>
+      ) : null}
 
       {canConnect ? (
         <a

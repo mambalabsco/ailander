@@ -346,3 +346,52 @@ export async function checkMetaApp(appId: string, appSecret: string): Promise<Ap
     };
   }
 }
+
+/**
+ * Decirle a Meta que se olvide del permiso.
+ *
+ * ## Por qué no basta con borrar el token
+ *
+ * Borrarlo de la base de datos deja de darnos acceso, sí. Pero el permiso sigue
+ * concedido en Facebook: la app sigue apareciendo en «Aplicaciones y sitios web»
+ * del perfil, y el token sigue siendo válido hasta que caduque —dos meses— por
+ * si alguien lo hubiera copiado antes.
+ *
+ * Desconectar de verdad es las dos cosas: revocar allí y borrar aquí.
+ *
+ * ## Y por qué el fallo no impide borrar
+ *
+ * Si Meta no contesta —el token ya caducó, la app está restringida, la red se
+ * cayó— el borrado local tiene que ocurrir igual. Dejar la conexión puesta porque
+ * no se pudo avisar sería atar el poder desconectarse a que el otro lado
+ * funcione, y el caso más normal de querer desconectarse es justo que no
+ * funciona.
+ */
+export async function revokeMetaToken(token: string): Promise<{ ok: boolean; message: string }> {
+  if (!token.trim()) return { ok: false, message: "No había token que revocar." };
+
+  try {
+    const url = new URL(`https://graph.facebook.com/${version()}/me/permissions`);
+    url.searchParams.set("access_token", token);
+
+    const response = await fetch(url, { method: "DELETE", cache: "no-store" });
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean;
+      error?: { message?: string };
+    };
+
+    if (response.ok && data.success) {
+      return { ok: true, message: "Permiso revocado en Facebook." };
+    }
+
+    return {
+      ok: false,
+      message: data.error?.message ?? "Meta no confirmó la revocación.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo avisar a Meta.",
+    };
+  }
+}

@@ -784,6 +784,50 @@ export async function credentialsStatus(storeId: string): Promise<CredentialsSta
   return status;
 }
 
+/**
+ * El token guardado de una tienda, para poder revocarlo antes de borrarlo.
+ *
+ * Solo el servidor y solo para esto: revocar necesita el token, y desconectar
+ * sin revocar deja el permiso concedido en Facebook.
+ */
+export async function readStoreToken(
+  storeId: string,
+  provider: "facebook" | "google",
+): Promise<string> {
+  const { supabase } = await requireContext();
+
+  const { data } = await supabase
+    .from("ad_credentials")
+    .select("access_token")
+    .eq("store_id", storeId)
+    .eq("provider", provider)
+    .maybeSingle();
+
+  return data?.access_token ?? "";
+}
+
+/**
+ * Quita la conexión de una tienda con un proveedor.
+ *
+ * Se borra la fila entera y no solo el token: es única por tienda y proveedor,
+ * así que la de Facebook no se lleva por delante nada de Google. Y dejarla con
+ * el token vacío haría que «conectado» dependiera de qué campo se mire.
+ */
+export async function clearAdCredentials(
+  storeId: string,
+  provider: "facebook" | "google",
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("ad_credentials")
+    .delete()
+    .eq("store_id", storeId)
+    .eq("provider", provider);
+
+  if (error) throw new Error(`No se pudo desconectar: ${error.message}`);
+}
+
 /** El identificador de la cuenta administradora de Google, que no viene del login. */
 export async function setLoginCustomerId(storeId: string, value: string): Promise<void> {
   const { supabase } = await requireContext();

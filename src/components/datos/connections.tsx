@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, SelectField, TextField } from "@/components/ui";
 import {
+  disconnectProviderAction,
   importAccountsAction,
   setFiltersAction,
   setStoreMetaAppAction,
@@ -59,6 +60,72 @@ export interface ProviderState {
   loginCustomerId: string | null;
 }
 
+/* ------------------------------ Desconectar -------------------------------- */
+
+/**
+ * Quitar la conexión de esta tienda con este proveedor.
+ *
+ * ## Por qué es un botón con nombre y no una aspa
+ *
+ * Porque hace algo más grande que quitar una fila de una lista: borra el token
+ * **y le pide a Facebook que revoque el permiso**. Sin revocar, la app sigue
+ * apareciendo en «Aplicaciones y sitios web» del perfil y el token sigue siendo
+ * válido dos meses más.
+ *
+ * ## Y por qué hacía falta
+ *
+ * No había forma de deshacerlo desde la pantalla. La única salida era volver a
+ * conectar encima —que sustituye el token pero no quita nada— o entrar a la base
+ * de datos. Una conexión que no se puede quitar es una que estorba justo cuando
+ * se está intentando arreglar otra cosa.
+ */
+function Disconnect({
+  storeId,
+  provider,
+}: {
+  storeId: string;
+  provider: "facebook" | "google";
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  const label = provider === "facebook" ? "Meta" : "Google";
+
+  return (
+    <div className="mt-2 space-y-1">
+      <Button
+        variant="danger"
+        disabled={busy}
+        onClick={() => {
+          if (
+            !window.confirm(
+              `¿Desconectar ${label} de esta tienda? Se borra el token${
+                provider === "facebook" ? " y se le pide a Facebook que revoque el permiso" : ""
+              }. Su gasto dejará de leerse y contará cero hasta que vuelvas a conectar.`,
+            )
+          ) {
+            return;
+          }
+
+          setBusy(true);
+
+          void disconnectProviderAction(storeId, provider)
+            .then((result) => {
+              setNote(result.message);
+              router.refresh();
+            })
+            .finally(() => setBusy(false));
+        }}
+      >
+        {busy ? "Desconectando…" : `Desconectar ${label}`}
+      </Button>
+
+      {note ? <p className="text-xs text-slate-500 dark:text-slate-400">{note}</p> : null}
+    </div>
+  );
+}
+
 /* ------------------------------ Estado común ------------------------------- */
 
 /**
@@ -72,9 +139,12 @@ export interface ProviderState {
 function ConnectionState({
   state,
   provider,
+  storeId,
 }: {
   state: ProviderState;
   provider: "facebook" | "google";
+  /** Sin él no se puede desconectar: es la mitad del par que identifica la fila. */
+  storeId?: string;
 }) {
   if (!state.connected) {
     return (
@@ -103,6 +173,8 @@ function ConnectionState({
         {expired ? "El permiso caducó" : "Conectado"}
         {state.accountName ? ` como ${state.accountName}` : ""}
       </p>
+
+      {storeId ? <Disconnect storeId={storeId} provider={provider} /> : null}
 
       {days === null ? (
         <p className="text-slate-500 dark:text-slate-400">El permiso no caduca.</p>
@@ -156,7 +228,7 @@ export function MetaConnect({
   return (
     <div className="space-y-3">
       {usable ? (
-        <ConnectionState state={state} provider="facebook" />
+        <ConnectionState state={state} provider="facebook" storeId={storeId} />
       ) : (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <p className="font-medium">No hay ninguna app de Meta</p>
@@ -339,7 +411,7 @@ export function GoogleConnect({
 
   return (
     <div className="space-y-3">
-      <ConnectionState state={state} provider="google" />
+      <ConnectionState state={state} provider="google" storeId={storeId} />
 
       <a
         href={`/api/google/instalar?tienda=${storeId}`}

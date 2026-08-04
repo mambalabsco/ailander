@@ -299,3 +299,21 @@ export async function refreshLoginToken(
 
   if (error) throw new Error(`No se pudo guardar el token renovado: ${error.message}`);
 }
+
+/**
+ * El token de una sesión, para poder revocarlo antes de borrarla.
+ *
+ * Solo el servidor y solo para eso: borrar la fila sin avisar a Facebook deja el
+ * permiso concedido allí y el token válido hasta que caduque.
+ */
+export async function readMetaLoginToken(id: string): Promise<string> {
+  const { supabase } = await requireContext();
+
+  const { data } = await supabase
+    .from("meta_logins")
+    .select("access_token")
+    .eq("id", id)
+    .maybeSingle();
+
+  return data?.access_token ?? "";
+}

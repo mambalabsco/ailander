@@ -494,14 +494,44 @@ export async function setDefaultMetaLoginAction(id: string): Promise<{ ok: boole
  * dejan de leer gasto de Meta —y la pantalla lo dice— en vez de quedarse
  * apuntando a un token que ya no existe.
  */
-export async function deleteMetaLoginAction(id: string): Promise<{ ok: boolean }> {
+export async function deleteMetaLoginAction(
+  id: string,
+): Promise<{ ok: boolean; message: string }> {
   await requireCapability("secretos");
+
+  /*
+   * Se avisa a Facebook antes de borrar.
+   *
+   * Borrar la fila quita **nuestro** acceso, pero el permiso sigue concedido
+   * allí: la app sigue en «Aplicaciones y sitios web» del perfil y el token
+   * sigue valiendo hasta que caduque. Desconectar de verdad son las dos cosas.
+   *
+   * Y si Meta no contesta, se borra igual: no poder avisar no puede impedir
+   * desconectarse, porque el caso normal de querer hacerlo es que algo falla.
+   */
+  const { readMetaLoginToken } = await import("@/lib/data/meta-logins");
+  const token = await readMetaLoginToken(id).catch(() => "");
+
+  let revoked = { ok: false, message: "" };
+
+  if (token) {
+    const { revokeMetaToken } = await import("@/lib/meta-oauth");
+    revoked = await revokeMetaToken(token);
+  }
+
   await deleteMetaLogin(id);
 
   revalidatePath("/settings");
   revalidatePath("/datos/conexiones");
 
-  return { ok: true };
+  return {
+    ok: true,
+    message: revoked.ok
+      ? "Sesión borrada y permiso revocado en Facebook."
+      : token
+        ? `Sesión borrada. No se pudo avisar a Facebook (${revoked.message}): quítala también desde Configuración → Aplicaciones y sitios web.`
+        : "Sesión borrada.",
+  };
 }
 
 /** Con qué sesión de Facebook lee su gasto esta tienda. */
@@ -817,5 +847,72 @@ export async function checkMetaAppAction(
       roles: [],
       message: error instanceof Error ? error.message : "No se pudo comprobar.",
     };
+  }
+}
+
+/**
+ * Desconectar una tienda de un proveedor, de verdad.
+ *
+ * ## Las dos mitades
+ *
+ * Borrar el token de aquí quita **nuestro** acceso. Pero el permiso sigue
+ * concedido en Facebook: la app sigue saliendo en «Aplicaciones y sitios web»
+ * del perfil y el token sigue valiendo hasta que caduque, dos meses después.
+ *
+ * Así que se hacen las dos: se revoca allí y se borra aquí.
+ *
+ * ## Y el borrado no depende de que Meta conteste
+ *
+ * Si el token ya caducó, o la app está restringida, o la red falla, el borrado
+ * ocurre igual y se cuenta que no se pudo avisar. Atar el poder desconectarse a
+ * que el otro lado funcione es lo contrario de lo que hace falta — el caso más
+ * normal de querer desconectarse es justo que algo no funciona.
+ */
+export async function disconnectProviderAction(
+  storeId: unknown,
+  provider: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireCapability("dinero");
+
+    const id = typeof storeId === "string" ? storeId.trim() : "";
+    const kind = provider === "google" ? "google" : "facebook";
+
+    if (!id) return { ok: false, message: "Falta la tienda." };
+
+    const { clearAdCredentials, readStoreToken } = await import("@/lib/data/analytics");
+
+    // Se lee **antes** de borrar: después ya no hay con qué revocar.
+    const token = kind === "facebook" ? await readStoreToken(id, kind).catch(() => "") : "";
+
+    let revoked = { ok: false, message: "" };
+
+    if (token) {
+      const { revokeMetaToken } = await import("@/lib/meta-oauth");
+      revoked = await revokeMetaToken(token);
+    }
+
+    await clearAdCredentials(id, kind);
+
+    revalidatePath("/datos/conexiones");
+    revalidatePath("/settings");
+
+    return {
+      ok: true,
+      message: [
+        "Desconectada.",
+        kind === "facebook"
+          ? revoked.ok
+            ? "El permiso también se ha revocado en Facebook."
+            : token
+              ? `No se pudo avisar a Facebook (${revoked.message}), así que quítalo también desde Configuración → Aplicaciones y sitios web.`
+              : ""
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo desconectar." };
   }
 }
