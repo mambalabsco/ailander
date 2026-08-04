@@ -20,6 +20,7 @@ import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { FlowNodeBox } from "@/components/flow/flow-node";
 import { NodeSettings } from "@/components/flow/node-settings";
+import { CloneGuide } from "@/components/flow/clone-guide";
 import {
   NODE_TYPES,
   canConnect,
@@ -30,6 +31,7 @@ import {
   validate,
   type Flow,
 } from "@/lib/flow/graph";
+import { costLabel, flowCost } from "@/lib/flow/cost";
 import {
   buildFlowAction,
   cloneFlowAction,
@@ -80,6 +82,8 @@ export interface FlowCanvasProps {
   }[];
   /** Los copys que ya funcionaron y los ángulos investigados de este producto. */
   copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
+  /** El producto del flujo, para enlazar a su ficha desde la guía. */
+  productId?: string;
 }
 
 const nodeTypes = { caja: FlowNodeBox };
@@ -100,12 +104,14 @@ export function FlowCanvas({
   productImages,
   references,
   copyReferences,
+  productId,
 }: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [multiply, setMultiply] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string>("");
+  const [showCost, setShowCost] = useState(false);
   /** Si hay una ejecución viva: mientras la haya, se sondea. */
   const [running, setRunning] = useState(false);
   const [faces, setFaces] = useState(avatars);
@@ -166,6 +172,20 @@ export function FlowCanvas({
   const problems = useMemo(() => validate(asFlow), [asFlow]);
   /** Cuántos pasos hay hechos de la última vuelta, para saber qué ofrecer. */
   const done = Object.values(outputs).filter((output) => output && !output.error).length;
+
+  /*
+   * Lo que cuesta lo que falta, y lo que costaría todo.
+   *
+   * Los dos, porque son los dos botones: continuar paga lo que queda y empezar
+   * de cero lo paga todo otra vez. Enseñar solo uno deja el otro a ciegas.
+   */
+  const hechos = useMemo(
+    () => new Set(Object.entries(outputs).filter(([, o]) => o && !o.error).map(([id]) => id)),
+    [outputs],
+  );
+
+  const pending = useMemo(() => flowCost(asFlow, hechos), [asFlow, hechos]);
+  const whole = useMemo(() => flowCost(asFlow), [asFlow]);
   const selectedNode = nodes.find((node) => node.id === selected) ?? null;
 
   /*
@@ -425,6 +445,67 @@ export function FlowCanvas({
       </div>
 
       {/*
+        Lo que cuesta, antes de pulsar.
+
+        Un lienzo de doce nodos puede costar unos céntimos o varios dólares según
+        qué generador tenga cada caja, y eso no se ve mirando el dibujo. Pulsar
+        «ejecutar» sin saberlo es descubrir el precio en la factura.
+      */}
+      {pending.steps > 0 || whole.steps > 0 ? (
+        <div className="rounded-2xl border border-slate-200 p-2 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs">
+              <span className="font-medium">{costLabel(pending)}</span>
+              {done > 0 && whole.usd !== pending.usd ? (
+                <span className="text-slate-500 dark:text-slate-400">
+                  {" "}
+                  De cero serían {whole.usd.toFixed(2)} USD.
+                </span>
+              ) : null}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowCost((value) => !value)}
+              className="text-xs font-medium text-violet-700 dark:text-violet-300"
+            >
+              {showCost ? "Ocultar el desglose" : "Ver el desglose"}
+            </button>
+          </div>
+
+          {/*
+            La barra compara lo que falta con el flujo entero: es la forma de ver
+            de un vistazo cuánto se está ahorrando por continuar en vez de
+            empezar de cero.
+          */}
+          {whole.usd > 0 ? (
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.round((pending.usd / whole.usd) * 100))}%` }}
+              />
+            </div>
+          ) : null}
+
+          {showCost ? (
+            <ul className="mt-2 space-y-0.5 text-[11px]">
+              {pending.items.map((item) => (
+                <li key={item.nodeId} className="flex justify-between gap-2">
+                  <span className="truncate text-slate-600 dark:text-slate-300">
+                    {item.nodeId} · {item.what}
+                  </span>
+
+                  <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
+                    {item.usd === null ? "sin confirmar" : `${item.usd.toFixed(2)} USD`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/*
         Multiplicar: el mismo flujo con otra cara.
 
         Es lo que convierte un flujo en varios anuncios. Las vueltas van en serie
@@ -467,6 +548,8 @@ export function FlowCanvas({
           </ul>
         </div>
       ) : null}
+
+      <CloneGuide productId={productId} />
 
       <AutoBuild
         flowId={flowId}

@@ -163,6 +163,7 @@ export default async function FlujosPage(props: {
             cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
             productImages={productImages}
             copyReferences={copyReferences}
+            productId={current.productId || undefined}
             references={references.map((item) => ({
               id: item.id,
               name: item.name,
