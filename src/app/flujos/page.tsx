@@ -7,6 +7,8 @@ import { listFlows, listOutputs, listRuns } from "@/lib/data/flows";
 import { listVideoReferences } from "@/lib/data/video-references";
 import { listAvatars } from "@/lib/data/avatars";
 import { readProductImages } from "@/lib/image-store";
+import { listSwipeCopies } from "@/lib/data/swipe";
+import { readAngles } from "@/lib/copy-store";
 import { listOwnProducts } from "@/lib/store";
 import { listVoices } from "@/lib/video/providers";
 import { listCliModels } from "@/lib/higgsfield-cli";
@@ -74,6 +76,35 @@ export default async function FlujosPage(props: {
         .catch(() => [])
     : [];
 
+  /*
+   * Los copys guardados y los ángulos investigados de ese producto.
+   *
+   * Se traen aquí y no con una acción aparte porque son dos lecturas cortas y
+   * el lienzo ya carga con la página: una acción más sería otra ida y vuelta
+   * para lo que cabe en la misma.
+   */
+  const copyReferences = current?.productId
+    ? await Promise.all([
+        listSwipeCopies(current.productId).catch(() => []),
+        readAngles(current.productId).catch(() => []),
+      ]).then(([copies, angles]) => [
+        ...copies.map((copy) => ({
+          id: copy.id,
+          kind: "copy" as const,
+          label: copy.title || copy.source || "Copy sin título",
+          text: copy.body,
+        })),
+        ...angles.map((angle) => ({
+          id: angle.id,
+          kind: "angulo" as const,
+          label: angle.name,
+          text: [angle.desire, `Para ${angle.targetAudience}.`, angle.problemMechanism]
+            .filter(Boolean)
+            .join(" "),
+        })),
+      ])
+    : [];
+
   const runs = current ? await listRuns(current.id).catch(() => []) : [];
   const outputs = runs[0] ? await listOutputs(runs[0].id).catch(() => []) : [];
 
@@ -131,6 +162,7 @@ export default async function FlujosPage(props: {
             voices={voices.map((voice) => ({ id: voice.id, name: voice.name }))}
             cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
             productImages={productImages}
+            copyReferences={copyReferences}
             references={references.map((item) => ({
               id: item.id,
               name: item.name,

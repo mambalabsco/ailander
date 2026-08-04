@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Button, SelectField } from "@/components/ui";
 import { findNodeType } from "@/lib/flow/graph";
-import { VIDEO_GENERATORS } from "@/lib/video/catalog";
+import { VIDEO_GENERATORS, durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
 import { MUSIC_GENERATORS } from "@/lib/video/music";
 import { MUSIC_LEVELS } from "@/lib/video/loudness";
 import { VOICE_PRESETS } from "@/lib/video/voice-settings";
@@ -43,6 +43,8 @@ export interface NodeSettingsProps {
   productImages: { url: string; name: string; primary: boolean }[];
   /** Los modelos del CLI, para poder crear una cara sin salir del lienzo. */
   cliModels: { slug: string; name: string }[];
+  /** Los copys que ya funcionaron y los ángulos investigados del producto. */
+  copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
   onChange: (settings: Record<string, unknown>) => void;
   onDelete: () => void;
   /** Varias fotos de golpe: cada una entra como su propio nodo de imagen. */
@@ -67,6 +69,7 @@ export function NodeSettings({
   avatars,
   productImages,
   cliModels,
+  copyReferences,
   onChange,
   onDelete,
   onAddImages,
@@ -233,6 +236,15 @@ export function NodeSettings({
         </div>
       ) : null}
 
+      {type === "referencia" ? (
+        <PickReference
+          items={copyReferences}
+          text={text(settings, "text")}
+          label={text(settings, "label")}
+          onPick={(label, value) => onChange({ ...settings, label, text: value })}
+        />
+      ) : null}
+
       {type === "copy" ? (
         <div className="space-y-2">
           {field(
@@ -264,6 +276,31 @@ export function NodeSettings({
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
             />,
           )}
+
+          {/*
+            Los ángulos ya investigados, sin salir del lienzo.
+
+            Estaban en la ficha del producto y aquí no llegaban: había que
+            abrirla en otra pestaña y copiarlos a mano, y al volver el lienzo
+            había perdido lo no guardado.
+          */}
+          {copyReferences.some((item) => item.kind === "angulo") ? (
+            <SelectField
+              value=""
+              onChange={(event) => {
+                if (event.target.value) set("angle", event.target.value);
+              }}
+            >
+              <option value="">Traer un ángulo investigado…</option>
+              {copyReferences
+                .filter((item) => item.kind === "angulo")
+                .map((item) => (
+                  <option key={item.id} value={item.text}>
+                    {item.label}
+                  </option>
+                ))}
+            </SelectField>
+          ) : null}
 
           {/*
             Los segundos solo cuando se va a locutar: en un texto de Meta no
@@ -320,7 +357,19 @@ export function NodeSettings({
           </p>
 
           <div className="grid grid-cols-2 gap-2">
-            {seconds("seconds", type === "anuncio" ? 15 : 6)}
+            {/*
+              Los segundos que ese generador vende, no un campo libre.
+
+              Aquí estaba el fallo que sacó un anuncio acelerado: se tecleó 50 en
+              Seedance, que llega a 15. El proveedor recorta sin decir nada y la
+              dirección seguía pidiendo 50 segundos de historia, así que salió
+              todo el guion metido en un tercio del tiempo.
+            */}
+            <ClipSeconds
+              model={text(settings, "model") || (type === "anuncio" ? "seedance2" : "")}
+              value={number(settings, "seconds", type === "anuncio" ? 15 : 6)}
+              onChange={(next) => set("seconds", next)}
+            />
             {aspect()}
           </div>
 
@@ -761,6 +810,160 @@ function WriteWithClaude({
       ) : null}
 
       {note ? <p className="text-xs text-slate-600 dark:text-slate-300">{note}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Cuántos segundos, dentro de lo que ese generador vende.
+ *
+ * ## Por qué no es un campo libre
+ *
+ * Porque pasarse **no da error**. Se pidieron cincuenta segundos a Seedance, que
+ * llega a quince: el proveedor recortó a quince sin decir nada y la dirección
+ * siguió pidiendo cincuenta segundos de historia, así que el modelo metió todo
+ * el guion en un tercio del tiempo. El anuncio salió acelerado y no falló nada
+ * en ningún sitio.
+ *
+ * Con lista cerrada se elige de una lista —Wan solo vende 5, 10 o 15— y con
+ * rango libre el número se ajusta al salir del campo, diciendo a qué se ajustó.
+ * Y cuando lo que se pide no cabe, se dice cuál es la salida: encadenar planos.
+ */
+function ClipSeconds({
+  model,
+  value,
+  onChange,
+}: {
+  model: string;
+  value: number;
+  onChange: (seconds: number) => void;
+}) {
+  const generator = findGenerator(model);
+  const fits = nearestDuration(generator, value);
+  const short = fits < Math.round(value);
+
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        Segundos · {durationLabel(generator)}
+      </span>
+
+      {generator.durations.length > 0 ? (
+        <SelectField value={String(fits)} onChange={(event) => onChange(Number(event.target.value))}>
+          {generator.durations.map((option) => (
+            <option key={option} value={option}>
+              {option} s
+            </option>
+          ))}
+        </SelectField>
+      ) : (
+        <input
+          type="number"
+          min={generator.minSeconds}
+          max={generator.maxSeconds}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          // Se ajusta al salir y no al teclear: corregirlo mientras se escribe
+          // impide llegar a un número de dos cifras.
+          onBlur={() => onChange(fits)}
+          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+      )}
+
+      {short ? (
+        <span className="text-xs text-amber-700 dark:text-amber-400">
+          {generator.label} no llega a {Math.round(value)} s: va a durar {fits}. Para más largo,
+          monta el anuncio plano a plano y encadénalo con un montaje.
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+/**
+ * Traer un copy que ya funcionó o un ángulo investigado.
+ *
+ * ## Por qué se copia el texto al nodo en vez de guardar el identificador
+ *
+ * Porque un flujo es un plano que se ejecuta meses después. Guardando solo el
+ * identificador, borrar ese copy de la biblioteca deja el flujo apuntando a algo
+ * que ya no existe — y eso no falla al guardar, falla al ejecutar, a mitad de la
+ * cadena y con lo anterior pagado.
+ *
+ * Con el texto dentro, el flujo sigue diciendo lo mismo pase lo que pase con la
+ * biblioteca. Se pierde que se actualice solo, que aquí no se quiere: un guion
+ * aprobado no debería cambiar porque alguien editó el copy del que salió.
+ */
+function PickReference({
+  items,
+  text,
+  label,
+  onPick,
+}: {
+  items: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
+  text: string;
+  label: string;
+  onPick: (label: string, text: string) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-xs text-amber-800 dark:text-amber-300">
+        Este producto no tiene copys guardados ni ángulos investigados todavía. Se guardan en su
+        ficha; aquí aparecerán solos.
+      </p>
+    );
+  }
+
+  const copies = items.filter((item) => item.kind === "copy");
+  const angles = items.filter((item) => item.kind === "angulo");
+
+  return (
+    <div className="space-y-2">
+      <SelectField
+        value=""
+        onChange={(event) => {
+          const picked = items.find((item) => item.id === event.target.value);
+          if (picked) onPick(picked.label, picked.text);
+        }}
+      >
+        <option value="">Elige uno…</option>
+
+        {copies.length > 0 ? (
+          <optgroup label="Copys guardados">
+            {copies.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
+
+        {angles.length > 0 ? (
+          <optgroup label="Ángulos investigados">
+            {angles.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
+      </SelectField>
+
+      {/*
+        El texto queda editable: casi siempre se trae uno y se le quita el
+        nombre de la otra marca o el precio que no es el tuyo.
+      */}
+      <textarea
+        value={text}
+        onChange={(event) => onPick(label, event.target.value)}
+        rows={6}
+        placeholder="O pega aquí el copy directamente"
+        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+
+      {label ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">De: {label}</p>
+      ) : null}
     </div>
   );
 }

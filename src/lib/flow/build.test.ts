@@ -30,11 +30,46 @@ test("el catálogo que se le enseña lleva entradas, salida y ajustes", () => {
 test("los generadores van por su id", () => {
   const prompt = buildFlowPrompt({
     context: "Producto: Naturox",
-    videoModels: [{ id: "seedance2", label: "Seedance 2", note: "Hasta 4K" }],
+    videoModels: [{ id: "seedance2", label: "Seedance 2", note: "Hasta 4K", maxSeconds: 15 }],
   });
 
   assert.match(prompt, /`seedance2`/);
   assert.match(prompt, /id literal/);
+});
+
+/*
+ * El fallo que salió en producción: se pidieron 50 segundos, Seedance recorta a
+ * 15 sin decir nada y mete el guion de 50 dentro. Sale un anuncio acelerado, y
+ * no da error en ningún sitio.
+ */
+test("lo que no cabe en una pieza se dice, no se recorta", () => {
+  const prompt = buildFlowPrompt({
+    context: "x",
+    seconds: 50,
+    videoModels: [{ id: "seedance2", label: "Seedance 2", note: "", maxSeconds: 15 }],
+  });
+
+  assert.match(prompt, /no caben en un solo nodo de anuncio/);
+  assert.match(prompt, /acelerado/);
+});
+
+test("lo que sí cabe no lleva advertencia", () => {
+  const prompt = buildFlowPrompt({
+    context: "x",
+    seconds: 12,
+    videoModels: [{ id: "seedance2", label: "Seedance 2", note: "", maxSeconds: 15 }],
+  });
+
+  assert.ok(!prompt.includes("no caben en un solo nodo"));
+});
+
+test("cuánto dura cada generador se le dice", () => {
+  const prompt = buildFlowPrompt({
+    context: "x",
+    videoModels: [{ id: "seedance2", label: "Seedance 2", note: "", maxSeconds: 15 }],
+  });
+
+  assert.match(prompt, /Hasta 15 s por pieza/);
 });
 
 test("la forma pedida cambia lo que se le pide", () => {

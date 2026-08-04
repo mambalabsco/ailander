@@ -30,7 +30,7 @@ import {
 } from "@/lib/video/providers";
 import { composeTracks, planAssembly } from "@/lib/flow/assemble";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
-import { findGenerator } from "@/lib/video/catalog";
+import { durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
 import { findMusicGenerator } from "@/lib/video/music";
 import { findMusicLevel } from "@/lib/video/loudness";
 import { findVoicePreset } from "@/lib/video/voice-settings";
@@ -169,6 +169,21 @@ async function runNode(
       return { kind: "imagen", url, value: text(node.settings, "name") };
     }
 
+    case "referencia": {
+      /*
+       * El texto vive en el nodo, no se vuelve a leer de la biblioteca.
+       *
+       * Un flujo es un plano que se ejecuta meses después: si guardara solo el
+       * identificador, borrar ese copy dejaría el flujo apuntando a algo que ya
+       * no existe — y eso falla al ejecutar, a mitad de la cadena y con lo
+       * anterior pagado.
+       */
+      const value = text(node.settings, "text");
+      if (!value) throw new Error("Ese nodo de referencia está vacío: elige un copy o un ángulo.");
+
+      return { kind: "guion", url: "", value };
+    }
+
     case "prompt": {
       const own = text(node.settings, "text");
       const upstream = first(inputs, 0);
@@ -271,12 +286,28 @@ async function runNode(
       if (!prompt) throw new Error("Ese nodo de clip no tiene prompt.");
 
       const model = findGenerator(text(node.settings, "model"));
+
+      /*
+       * La duración que el modelo acepta, no la que se pidió.
+       *
+       * Se calcula **aquí** y no dentro del proveedor porque hay que decirlo:
+       * pedir treinta segundos a uno que vende diez no da error, devuelve diez.
+       */
+      const wanted = num(node.settings, "seconds", 6);
+      const seconds = nearestDuration(model, wanted);
+
+      if (seconds !== Math.round(wanted)) {
+        await ctx.report(
+          `${model.label} no hace ${Math.round(wanted)} s: va de ${seconds}. ${durationLabel(model)}.`,
+        );
+      }
+
       await ctx.report(`Animando con ${model.label}`);
 
       const url = await animate({
         prompt: prompt.value,
         references: urls(inputs, 1),
-        seconds: num(node.settings, "seconds", 6),
+        seconds,
         model: model.slug,
         aspectRatio: text(node.settings, "aspectRatio", "9:16"),
         sound: node.settings.sound === true,
@@ -301,7 +332,22 @@ async function runNode(
       // Hasta nueve, que es su tope: pasarse rechaza la petición entera.
       const references = urls(inputs, 1).slice(0, 9);
       const aspectRatio = text(node.settings, "aspectRatio", "9:16");
-      const seconds = num(node.settings, "seconds", 15);
+
+      /*
+       * Los segundos que el generador va a dar, no los que se pidieron.
+       *
+       * Aquí estaba el fallo que sacó un anuncio acelerado: se pedían cincuenta
+       * segundos, el proveedor recortaba a quince sin decir nada **y la
+       * dirección seguía diciendo «anuncio de 50 segundos»**. Así que el modelo
+       * metía cincuenta segundos de historia en quince: todo el guion, el triple
+       * de rápido, y ni un error en ningún sitio.
+       *
+       * El número se ajusta antes de escribir el encargo, así que lo que se pide
+       * y lo que se genera son lo mismo. Y se dice, porque un anuncio que dura un
+       * tercio de lo planeado es otro anuncio.
+       */
+      const wanted = num(node.settings, "seconds", 15);
+      const seconds = nearestDuration(model, wanted);
 
       // El nombre solo para nombrarlo en el encargo; que falle no impide rodar.
       const product = await findProductAnywhere(ctx.productId).catch(() => null);
@@ -315,6 +361,13 @@ async function runNode(
         aspectRatio,
         references: references.length,
       });
+
+      if (seconds !== Math.round(wanted)) {
+        await ctx.report(
+          `${model.label} no hace ${Math.round(wanted)} s de una pieza: este anuncio va a durar ${seconds}. ` +
+            `${durationLabel(model)}. Para más largo, móntalo plano a plano y encadénalo con un montaje.`,
+        );
+      }
 
       if (brief.trimmed > 0) {
         await ctx.report(`El encargo no cabía: se recortaron ${brief.trimmed} caracteres.`);

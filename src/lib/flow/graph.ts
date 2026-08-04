@@ -72,6 +72,21 @@ export const NODE_TYPES: NodeType[] = [
     note: "Una foto del producto, una tuya subida o una dirección pegada.",
   },
   {
+    /*
+     * Lo que ya existe y funciona, dentro del lienzo.
+     *
+     * Sin esto, la entrada de «copy de referencia» del guion y el ángulo de un
+     * copy no se podían llenar con nada: había que copiar el texto a mano en un
+     * nodo de prompt, y entonces deja de estar atado a lo que se guardó.
+     */
+    id: "referencia",
+    label: "Copy o ángulo guardado",
+    group: "fuente",
+    accepts: [],
+    produces: "guion",
+    note: "Un copy que ya funcionó o un ángulo investigado, para partir de ahí.",
+  },
+  {
     id: "guion",
     label: "Guion",
     group: "idea",

@@ -70,6 +70,8 @@ export interface FlowCanvasProps {
   productImages: { url: string; name: string; primary: boolean }[];
   /** Los anuncios ya analizados, para poder clonar su construcción. */
   references: { id: string; name: string; seconds: number; beats: number; hadAudio: boolean }[];
+  /** Los copys que ya funcionaron y los ángulos investigados de este producto. */
+  copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
 }
 
 const nodeTypes = { caja: FlowNodeBox };
@@ -89,6 +91,7 @@ export function FlowCanvas({
   cliModels,
   productImages,
   references,
+  copyReferences,
 }: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
@@ -574,6 +577,7 @@ export function FlowCanvas({
               avatars={faces}
               cliModels={cliModels}
               productImages={productImages}
+              copyReferences={copyReferences}
               onFacesChanged={() => setRunning(true)}
               onAddImages={addImages}
               onChange={(settings) =>
@@ -661,6 +665,8 @@ function summaryOf(type: string, settings: Record<string, unknown>): string {
       ? [get("name") || (get("url") ? "imagen puesta" : "")]
       : type === "avatar"
         ? [get("avatarId") ? "cara fijada" : "la de cada vuelta"]
+        : type === "referencia"
+          ? [get("label") || (get("text") ? "texto puesto" : "")]
         : type === "copy"
           ? [get("format") || "anuncio"]
           : type === "anuncio"
@@ -687,6 +693,7 @@ function previewOf(
   if (type === "archivo" && get("url")) return { url: get("url"), text: "" };
   if (type === "avatar" && get("avatarUrl")) return { url: get("avatarUrl"), text: "" };
   if (type === "prompt" && get("text")) return { url: "", text: get("text") };
+  if (type === "referencia" && get("text")) return { url: "", text: get("text") };
   if (type === "copy" && get("angle")) return { url: "", text: get("angle") };
   if (type === "musica" && get("prompt")) return { url: "", text: get("prompt") };
 

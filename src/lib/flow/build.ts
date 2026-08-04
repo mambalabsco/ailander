@@ -48,6 +48,7 @@ const SETTINGS_HINT: Record<string, string> = {
   musica: "prompt (cómo suena, en español), seconds, level (suave | normal | presente)",
   montaje: "subtitles (el id de un estilo de subtítulos, o vacío)",
   archivo: "url (solo si ya tienes la dirección de una imagen)",
+  referencia: "text (el copy o el ángulo, literal), label (de dónde salió)",
   avatar: "avatarId (vacío = la cara de cada vuelta)",
   producto: "ninguno",
 };
@@ -139,8 +140,8 @@ export function buildFlowPrompt(options: {
   idea?: string;
   /** Los ángulos ya investigados, para no reinventarlos. */
   angles?: string[];
-  /** Los ids de los generadores de vídeo que existen. */
-  videoModels?: { id: string; label: string; note: string }[];
+  /** Los ids de los generadores de vídeo que existen, con lo que dura cada uno. */
+  videoModels?: { id: string; label: string; note: string; maxSeconds: number }[];
   /** Los ids de los estilos de subtítulos. */
   subtitleStyles?: string[];
   seconds?: number;
@@ -204,7 +205,10 @@ export function buildFlowPrompt(options: {
       "",
       "## Los generadores de vídeo que existen",
       "",
-      ...options.videoModels.map((model) => `- \`${model.id}\` — ${model.label}. ${model.note}`),
+      ...options.videoModels.map(
+        (model) =>
+          `- \`${model.id}\` — ${model.label}. Hasta ${model.maxSeconds} s por pieza. ${model.note}`,
+      ),
       "",
       "Usa el id literal. Cualquier otro nombre se ignora.",
     );
@@ -216,6 +220,27 @@ export function buildFlowPrompt(options: {
 
   if (options.seconds && options.seconds > 0) {
     lines.push("", `El anuncio dura unos ${Math.round(options.seconds)} segundos en total.`);
+
+    /*
+     * Lo que ningún generador puede hacer de una vez.
+     *
+     * Ninguno pasa de quince segundos por pieza. Pedirle cincuenta a uno solo no
+     * da error: recorta a quince y le mete cincuenta segundos de guion dentro, y
+     * sale el anuncio acelerado. Si no cabe se dice aquí — la salida es encadenar
+     * planos, no comprimir la historia.
+     */
+    const longest = Math.max(0, ...(options.videoModels ?? []).map((model) => model.maxSeconds));
+
+    if (longest > 0 && options.seconds > longest) {
+      lines.push(
+        "",
+        `Ningún generador pasa de ${longest} s por pieza, así que ${Math.round(options.seconds)} s`,
+        "**no caben en un solo nodo de anuncio**. Móntalo plano a plano con",
+        "`montaje`, o reparte la historia en varios nodos de anuncio encadenados.",
+        "Nunca pidas más segundos de los que un generador acepta: los recorta sin",
+        "avisar y el anuncio sale acelerado.",
+      );
+    }
   }
 
   if (options.aspectRatio) lines.push(`Formato ${options.aspectRatio}.`);
