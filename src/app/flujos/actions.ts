@@ -869,3 +869,34 @@ export async function flowFromReferenceAction(input: unknown): Promise<{
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo montar." };
   }
 }
+
+/**
+ * El último fotograma de un vídeo, para seguir desde donde se quedó.
+ *
+ * Es lo que convierte «tengo un plano» en «tengo por dónde seguir»: el
+ * fotograma final entra como imagen de partida del siguiente clip y la persona,
+ * la ropa y el sitio se mantienen. Sin él, el plano siguiente empieza de cero y
+ * sale otra persona en otra habitación.
+ *
+ * Devuelve el motivo en vez de lanzar: quien llama es un botón de la pantalla,
+ * y ahí un error sin texto se ve como un botón que no hace nada.
+ */
+export async function lastFrameAction(
+  videoUrl: unknown,
+): Promise<{ url: string; message: string }> {
+  try {
+    await requireCapability("estudio");
+
+    const url = readText(videoUrl);
+    if (!url) return { url: "", message: "Ese nodo todavía no tiene vídeo." };
+
+    const { lastFrame } = await import("@/lib/video/providers");
+
+    return { url: await lastFrame(url), message: "" };
+  } catch (error) {
+    return {
+      url: "",
+      message: error instanceof Error ? error.message : "No se pudo sacar el fotograma.",
+    };
+  }
+}

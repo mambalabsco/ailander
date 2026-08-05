@@ -55,6 +55,10 @@ export interface NodeSettingsProps {
   onDelete: () => void;
   /** Copiar este nodo con sus ajustes, sin sus conexiones. */
   onDuplicate: () => void;
+  /** Seguir desde el final del vídeo que produjo este nodo. */
+  onContinue: (mode: "mas" | "voz" | "traducir") => void;
+  /** Si este nodo ya produjo un vídeo. */
+  hasVideo: boolean;
   /** Varias fotos de golpe: cada una entra como su propio nodo de imagen. */
   onAddImages: (images: { url: string; name: string }[]) => void;
   /** Se avisa al lanzar caras nuevas, para que el lienzo empiece a sondear. */
@@ -88,6 +92,8 @@ export function NodeSettings({
   onChange,
   onDelete,
   onDuplicate,
+  onContinue,
+  hasVideo,
   onAddImages,
   onFacesChanged,
   onRedo,
@@ -404,6 +410,46 @@ export function NodeSettings({
           )}
 
           {aspect()}
+        </div>
+      ) : null}
+
+      {/*
+        El conector del final.
+
+        Un vídeo terminado no es el final del trabajo: casi siempre hay que
+        seguir la escena, cambiarle la voz o sacarlo en otro idioma. Antes eso
+        eran cinco nodos colocados y conectados a mano, y el que más se olvidaba
+        —el ancla del fotograma final— es justo el que evita que en el plano
+        siguiente salga otra persona.
+
+        Solo aparece cuando hay vídeo: enseñarlo antes ofrecería continuar algo
+        que todavía no existe.
+      */}
+      {hasVideo ? (
+        <div className="space-y-2 rounded-xl border border-slate-200 p-2 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Seguir desde el final de este vídeo
+          </p>
+
+          <div className="flex flex-wrap gap-1">
+            <Button variant="ghost" onClick={() => onContinue("mas")}>
+              Más vídeo
+            </Button>
+
+            <Button variant="ghost" onClick={() => onContinue("voz")}>
+              Cambiar la voz
+            </Button>
+
+            <Button variant="ghost" onClick={() => onContinue("traducir")}>
+              Traducir
+            </Button>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            «Más vídeo» saca el último fotograma y lo deja de ancla, para que no
+            cambie la persona. Los otros dos no regeneran el vídeo: le cambian la
+            boca con lipsync.
+          </p>
         </div>
       ) : null}
 

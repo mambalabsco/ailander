@@ -21,6 +21,7 @@ import { GenerateButton } from "@/components/generate-button";
 import { FlowNodeBox } from "@/components/flow/flow-node";
 import { NodeSettings } from "@/components/flow/node-settings";
 import { previewOf, summaryOf } from "@/components/flow/node-view";
+import type { FlowNodeData } from "@/components/flow/flow-node";
 import { CloneGuide } from "@/components/flow/clone-guide";
 import {
   NODE_TYPES,
@@ -37,6 +38,7 @@ import {
   buildFlowAction,
   cloneFlowAction,
   flowProgressAction,
+  lastFrameAction,
   runFlowAction,
   saveFlowAction,
 } from "@/app/flujos/actions";
@@ -303,6 +305,102 @@ export function FlowCanvas({
         data: { type, summary: "", settings: {} },
       },
     ]);
+  };
+
+  /**
+   * Seguir desde el final de un vídeo.
+   *
+   * ## Qué construye y por qué así
+   *
+   * El fotograma final entra como **ancla**: un nodo de imagen que alimenta lo
+   * que venga después. Es lo que mantiene la misma persona, la misma ropa y el
+   * mismo sitio en el plano siguiente. Sin ancla, el clip que sigue empieza de
+   * cero y sale otra cara — es el fallo que obliga a repetir el anuncio entero.
+   *
+   * Las tres salidas montan cadenas distintas porque son tres preguntas
+   * distintas:
+   *
+   * - **Más vídeo** — ancla + prompt + clip. Se continúa la escena.
+   * - **Cambiar la voz** — voz + lipsync sobre este mismo vídeo. No hay ancla:
+   *   el vídeo no se regenera, se le cambia la boca.
+   * - **Traducir** — igual que la anterior, con el guion en otro idioma.
+   *
+   * Los nodos se dejan **sin ejecutar**: se colocan, se conectan y se editan
+   * antes de pagar nada. Un botón que además generase costaría dinero por un
+   * clic que era para ver qué pasaba.
+   */
+  const continueFrom = async (nodeId: string, mode: "mas" | "voz" | "traducir") => {
+    const source = nodes.find((node) => node.id === nodeId);
+    const url = (source?.data as FlowNodeData | undefined)?.result?.url ?? "";
+
+    if (!url) {
+      setNote("Ese nodo todavía no tiene vídeo.");
+      return;
+    }
+
+    const base = source?.position ?? { x: 80, y: 80 };
+    const made: Node[] = [];
+    const wires: Edge[] = [];
+
+    const put = (type: string, dx: number, dy: number, settings: Record<string, unknown> = {}) => {
+      const id = nextId([...nodes, ...made], type);
+
+      made.push({
+        id,
+        type: "caja",
+        position: { x: base.x + dx, y: base.y + dy },
+        data: { type, summary: summaryOf(type, settings), preview: previewOf(type, settings), settings },
+      });
+
+      return id;
+    };
+
+    const wire = (from: string, to: string, port: number) => {
+      wires.push({ id: `${from}-${to}-${port}`, source: from, target: to, targetHandle: String(port) });
+    };
+
+    if (mode === "mas") {
+      setNote("Sacando el último fotograma…");
+
+      const frame = await lastFrameAction(url);
+
+      if (!frame.url) {
+        setNote(frame.message);
+        return;
+      }
+
+      const anchor = put("archivo", 280, -60, { url: frame.url, name: "Último fotograma" });
+      const prompt = put("prompt", 280, 60, { text: "Sigue desde aquí: " });
+      const clip = put("clip", 540, 0, { seconds: 6, aspectRatio: "9:16" });
+
+      wire(prompt, clip, 0);
+      wire(anchor, clip, 1);
+
+      setNote("Listo: el fotograma final es el ancla del clip nuevo. Escribe qué pasa después.");
+    } else {
+      const guion = put("prompt", 280, 60, {
+        text:
+          mode === "traducir"
+            ? "Traduce esto y mantén el ritmo y las pausas: "
+            : "Lo que dice, con la voz nueva: ",
+      });
+
+      const voz = put("voz", 540, 60);
+      const labios = put("labios", 800, 0, { model: "lipsync-2", syncMode: "remap" });
+
+      wire(guion, voz, 0);
+      wire(nodeId, labios, 0);
+      wire(voz, labios, 1);
+
+      setNote(
+        mode === "traducir"
+          ? "Listo: escribe la traducción, elige la voz y el lipsync la pone en la boca."
+          : "Listo: escribe el texto, elige la voz y el lipsync la pone en la boca.",
+      );
+    }
+
+    setNodes((current) => [...current, ...made]);
+    setEdges((current) => [...current, ...wires]);
   };
 
   /**
@@ -743,6 +841,13 @@ export function FlowCanvas({
               cliModels={cliModels}
               cliModelsError={cliModelsError}
               cliVideoModels={cliVideoModels}
+              hasVideo={Boolean(
+                (selectedNode?.data as FlowNodeData | undefined)?.result?.url &&
+                  (selectedNode?.data as FlowNodeData | undefined)?.result?.kind === "video",
+              )}
+              onContinue={(mode) => {
+                void continueFrom(selected, mode);
+              }}
               productImages={productImages}
               copyReferences={copyReferences}
               onFacesChanged={() => setRunning(true)}
