@@ -132,7 +132,7 @@ export const NODE_TYPES: NodeType[] = [
       { kind: "imagen", label: "Referencias", required: false, many: true },
     ],
     produces: "imagen",
-    note: "Un fotograma o una foto de producto, con las referencias que le pases.",
+    note: "Un fotograma o una foto de producto, con el generador y las referencias que le pases.",
   },
   {
     id: "clip",
@@ -171,6 +171,24 @@ export const NODE_TYPES: NodeType[] = [
     accepts: [{ kind: "texto", label: "Qué suena", required: false }],
     produces: "audio",
     note: "La cama de fondo, ya al volumen que no tapa la voz.",
+  },
+  {
+    /*
+     * La locución aprobada, dentro del plano.
+     *
+     * Es el nodo que faltaba entre «tengo la voz» y «tengo el vídeo». Antes la
+     * voz se montaba encima y la boca del plano decía otra cosa: en un anuncio
+     * de una persona hablando a cámara, eso se ve a la primera.
+     */
+    id: "labios",
+    label: "Lipsync",
+    group: "produccion",
+    accepts: [
+      { kind: "video", label: "Vídeo", required: true },
+      { kind: "audio", label: "Voz", required: true },
+    ],
+    produces: "video",
+    note: "Pone la voz que elijas en la boca del vídeo, con Sync.",
   },
   {
     id: "montaje",

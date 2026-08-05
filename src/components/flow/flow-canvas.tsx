@@ -59,6 +59,14 @@ import { VOICE_CHOICES } from "@/lib/flow/clone";
  * arriesga a lanzar diez generaciones.
  */
 
+/** Los grupos, en el orden en el que se construye un flujo. */
+const GROUPS = [
+  { id: "fuente", label: "De dónde sale" },
+  { id: "idea", label: "La idea" },
+  { id: "produccion", label: "Se genera" },
+  { id: "montaje", label: "Montaje" },
+] as const;
+
 export interface FlowCanvasProps {
   flowId: string;
   graph: Flow;
@@ -68,6 +76,8 @@ export interface FlowCanvasProps {
   voices: { id: string; name: string }[];
   /** Los del CLI, para crear una cara sin salir del lienzo. */
   cliModels: { slug: string; name: string }[];
+  /** Por qué no hay modelos, si no los hay. */
+  cliModelsError: string;
   /** Las del producto del flujo, para usarlas de referencia sin subirlas otra vez. */
   productImages: { url: string; name: string; primary: boolean }[];
   /** Los anuncios ya analizados, para poder clonar su construcción. */
@@ -101,6 +111,7 @@ export function FlowCanvas({
   avatars,
   voices,
   cliModels,
+  cliModelsError,
   productImages,
   references,
   copyReferences,
@@ -358,22 +369,40 @@ export function FlowCanvas({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SelectField
-          value=""
-          onChange={(event) => {
-            if (event.target.value) addNode(event.target.value);
-          }}
-          className="min-w-48"
-        >
-          <option value="">Añadir un nodo…</option>
-          {NODE_TYPES.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.label} — {type.note.slice(0, 50)}
-            </option>
-          ))}
-        </SelectField>
+      {/*
+        Los nodos, en botones y no en una lista.
 
+        Un desplegable esconde el catálogo entero detrás de un clic y obliga a
+        leer trece líneas para encontrar una: montar un flujo son diez o doce
+        nodos, o sea diez o doce veces abrir, buscar y elegir. En botones se ve
+        todo lo que hay y se añade de un toque, que es lo que se hace de verdad.
+
+        Van agrupados por lo que son —de dónde sale el material, la idea, lo que
+        se genera, el montaje— porque ese es el orden en el que se construye.
+      */}
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-2xl border border-slate-200 p-2 dark:border-slate-800">
+        {GROUPS.map((group) => (
+          <div key={group.id} className="space-y-1">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">{group.label}</p>
+
+            <div className="flex flex-wrap gap-1">
+              {NODE_TYPES.filter((type) => type.group === group.id).map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  onClick={() => addNode(type.id)}
+                  title={type.note}
+                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 transition hover:border-violet-400 hover:bg-violet-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-violet-600 dark:hover:bg-violet-950/40"
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
         <Button disabled={saving} onClick={save}>
           {saving ? "Guardando…" : "Guardar el flujo"}
         </Button>
@@ -708,6 +737,7 @@ export function FlowCanvas({
               voices={voices}
               avatars={faces}
               cliModels={cliModels}
+              cliModelsError={cliModelsError}
               productImages={productImages}
               copyReferences={copyReferences}
               onFacesChanged={() => setRunning(true)}
@@ -760,6 +790,39 @@ export function FlowCanvas({
                   ),
                 )
               }
+              /*
+                Duplicar.
+
+                Un flujo de seis tomas son seis nodos de prompt y seis de clip
+                con los mismos ajustes: el generador, los segundos, la forma.
+                Ponerlos uno a uno es teclear doce veces lo mismo, y basta con
+                que uno salga distinto para que el anuncio no cuadre.
+
+                Se copia el nodo con sus ajustes pero **sin sus conexiones**:
+                heredarlas lo dejaría colgando de las mismas entradas, que casi
+                nunca es lo que se quiere y además se lleva la entrada única del
+                destino.
+              */
+              onDuplicate={() => {
+                const source = nodes.find((node) => node.id === selected);
+                if (!source) return;
+
+                const type = String((source.data as { type?: string }).type ?? "");
+                const id = nextId(nodes, type);
+
+                setNodes((current) => [
+                  ...current,
+                  {
+                    ...source,
+                    id,
+                    position: { x: source.position.x + 60, y: source.position.y + 60 },
+                    data: { ...source.data, result: undefined, state: undefined },
+                    selected: false,
+                  },
+                ]);
+
+                setSelected(id);
+              }}
               onDelete={() => {
                 // Por el modelo, que se lleva también las conexiones: dejarlas
                 // sueltas cuenta como dependencias que nunca se cumplen.

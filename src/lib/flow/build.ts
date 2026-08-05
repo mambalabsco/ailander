@@ -41,7 +41,7 @@ const SETTINGS_HINT: Record<string, string> = {
   guion: "shots (3-12), seconds (duración total del vídeo)",
   prompt: "text (el encargo, en inglés, describiendo plano, luz y movimiento)",
   copy: "format (anuncio | voz | gancho), angle (el ángulo en una frase), seconds",
-  imagen: "aspectRatio (9:16, 1:1, 16:9…)",
+  imagen: "model (el id del generador de imagen), aspectRatio (9:16, 1:1, 16:9…)",
   clip: "model (el id del generador), seconds, aspectRatio, sound (true/false)",
   anuncio: "model, seconds, aspectRatio, sound, director (ugc | problema-solucion | demo)",
   voz: "tone (narrador | cercano | intenso | calmado)",

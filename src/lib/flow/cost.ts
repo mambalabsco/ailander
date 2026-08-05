@@ -26,6 +26,7 @@
  */
 
 import { estimateCost, findGenerator } from "../video/catalog.ts";
+import { findLipsyncModel, lipsyncCostUsd } from "../video/lipsync.ts";
 import { findMusicGenerator, musicCost } from "../video/music.ts";
 import { planSegments } from "../video/segments.ts";
 import type { Flow, FlowNode } from "./graph.ts";
@@ -81,6 +82,23 @@ export function nodeCost(node: FlowNode): NodeCost {
   switch (node.type) {
     case "imagen":
       return { nodeId: node.id, what: "Imagen", usd: IMAGE_USD };
+
+    /*
+      El lipsync se cobra por segundo de vídeo, y aquí todavía no se sabe
+      cuántos: el vídeo lo produce el nodo de antes. Se estiman los mismos
+      segundos que el clip trae por defecto para que la barra no mienta por
+      omisión — un nodo a cero da a entender que es gratis, y no lo es.
+    */
+    case "labios": {
+      const model = findLipsyncModel(text(node.settings, "model"));
+      const seconds = num(node.settings, "seconds", 6);
+
+      return {
+        nodeId: node.id,
+        what: `Lipsync · ${model.label} · ~${seconds} s`,
+        usd: lipsyncCostUsd(model.id, seconds),
+      };
+    }
 
     case "clip": {
       const model = findGenerator(text(node.settings, "model"));

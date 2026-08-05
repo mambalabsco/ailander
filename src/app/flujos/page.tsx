@@ -40,8 +40,22 @@ export default async function FlujosPage(props: {
     // Las voces de la cuenta, para elegirlas en el nodo. Un fallo aquí deja el
     // desplegable vacío, no la página caída: lo demás del lienzo sigue sirviendo.
     listVoices().catch(() => []),
-    // Para poder crear una cara desde el propio lienzo.
-    listCliModels("image").catch(() => []),
+    /*
+      Para poder crear una cara desde el propio lienzo.
+
+      Se guarda **el motivo** del fallo, no solo la lista vacía. Tragárselo
+      dejaba el desplegable de modelos sin una sola opción y sin nada que leer:
+      en pantalla se veía como «no salen modelos disponibles», que es cierto
+      pero no dice si falta la sesión del CLI, si no está instalado o si
+      Higgsfield está caído. Con el motivo delante se arregla en un minuto.
+    */
+    listCliModels("image").then(
+      (models) => ({ models, error: "" }),
+      (error: unknown) => ({
+        models: [],
+        error: error instanceof Error ? error.message : "no se pudo listar",
+      }),
+    ),
     // Los anuncios ya analizados: se clona su construcción, no su vídeo.
     listVideoReferences().catch(() => []),
   ]);
@@ -160,7 +174,8 @@ export default async function FlujosPage(props: {
               url: avatar.url,
             }))}
             voices={voices.map((voice) => ({ id: voice.id, name: voice.name }))}
-            cliModels={cliModels.map((model) => ({ slug: model.slug, name: model.title }))}
+            cliModels={cliModels.models.map((model) => ({ slug: model.slug, name: model.title }))}
+            cliModelsError={cliModels.error}
             productImages={productImages}
             copyReferences={copyReferences}
             productId={current.productId || undefined}

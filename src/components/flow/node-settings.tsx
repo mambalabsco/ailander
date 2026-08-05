@@ -5,7 +5,8 @@ import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import type { LaunchResult } from "@/types/jobs";
 import { findNodeType } from "@/lib/flow/graph";
-import { VIDEO_GENERATORS, durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
+import { LIPSYNC_MODELS, SYNC_MODES, findLipsyncModel } from "@/lib/video/lipsync";
+import { IMAGE_GENERATORS, VIDEO_GENERATORS, durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
 import { MUSIC_GENERATORS } from "@/lib/video/music";
 import { MUSIC_LEVELS } from "@/lib/video/loudness";
 import { VOICE_PRESETS } from "@/lib/video/voice-settings";
@@ -45,10 +46,13 @@ export interface NodeSettingsProps {
   productImages: { url: string; name: string; primary: boolean }[];
   /** Los modelos del CLI, para poder crear una cara sin salir del lienzo. */
   cliModels: { slug: string; name: string }[];
+  cliModelsError: string;
   /** Los copys que ya funcionaron y los ángulos investigados del producto. */
   copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
   onChange: (settings: Record<string, unknown>) => void;
   onDelete: () => void;
+  /** Copiar este nodo con sus ajustes, sin sus conexiones. */
+  onDuplicate: () => void;
   /** Varias fotos de golpe: cada una entra como su propio nodo de imagen. */
   onAddImages: (images: { url: string; name: string }[]) => void;
   /** Se avisa al lanzar caras nuevas, para que el lienzo empiece a sondear. */
@@ -76,9 +80,11 @@ export function NodeSettings({
   avatars,
   productImages,
   cliModels,
+  cliModelsError,
   copyReferences,
   onChange,
   onDelete,
+  onDuplicate,
   onAddImages,
   onFacesChanged,
   onRedo,
@@ -142,9 +148,15 @@ export function NodeSettings({
           </p>
         </div>
 
-        <Button variant="ghost" onClick={onDelete}>
-          Quitar
-        </Button>
+        <div className="flex shrink-0 gap-1">
+          <Button variant="ghost" onClick={onDuplicate}>
+            Duplicar
+          </Button>
+
+          <Button variant="ghost" onClick={onDelete}>
+            Quitar
+          </Button>
+        </div>
       </div>
 
       {/*
@@ -255,7 +267,7 @@ export function NodeSettings({
             irse a otra pantalla es perder el hilo — y al volver, el lienzo se
             ha recargado y lo no guardado se ha ido.
           */}
-          <NewFace models={cliModels} onLaunched={onFacesChanged} />
+          <NewFace models={cliModels} error={cliModelsError} onLaunched={onFacesChanged} />
         </div>
       ) : null}
 
@@ -355,7 +367,99 @@ export function NodeSettings({
         </div>
       ) : null}
 
-      {type === "imagen" ? aspect() : null}
+      {type === "imagen" ? (
+        <div className="space-y-2">
+          {field(
+            "Con qué modelo",
+            <SelectField
+              value={text(settings, "model")}
+              onChange={(event) => set("model", event.target.value)}
+            >
+              {IMAGE_GENERATORS.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+
+              {/*
+                Los de Higgsfield, en el mismo desplegable.
+
+                Van por su CLI y no por la API, pero eso es un detalle de cómo
+                se genera, no de qué se elige: separarlos en dos listas obliga a
+                saber por dónde va cada modelo para encontrarlo.
+              */}
+              {cliModels.length > 0 ? (
+                <optgroup label="Higgsfield">
+                  {cliModels.map((model) => (
+                    <option key={model.slug} value={model.slug}>
+                      {model.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </SelectField>,
+          )}
+
+          {aspect()}
+        </div>
+      ) : null}
+
+      {type === "labios" ? (
+        <div className="space-y-2">
+          {field(
+            "Con qué modelo",
+            <SelectField
+              value={text(settings, "model") || "lipsync-2"}
+              onChange={(event) => set("model", event.target.value)}
+            >
+              {LIPSYNC_MODELS.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label} · {(model.usdPerSecond * 60).toFixed(2)} USD/min
+                </option>
+              ))}
+            </SelectField>,
+          )}
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {findLipsyncModel(text(settings, "model")).note}
+          </p>
+
+          {/*
+            El modo se elige, no se hereda.
+
+            El que trae la API por defecto recorta al más corto de los dos, y lo
+            que se pierde es el final de la locución — que es donde está la
+            llamada a la acción. Se pone «remap» delante y se explica cada uno.
+          */}
+          {field(
+            "Si el audio y el vídeo no duran lo mismo",
+            <SelectField
+              value={text(settings, "syncMode") || "remap"}
+              onChange={(event) => set("syncMode", event.target.value)}
+            >
+              {SYNC_MODES.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.label}
+                </option>
+              ))}
+            </SelectField>,
+          )}
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {SYNC_MODES.find((mode) => mode.id === (text(settings, "syncMode") || "remap"))?.note ??
+              ""}
+          </p>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.detectOcclusion === true}
+              onChange={(event) => set("detectOcclusion", event.target.checked)}
+            />
+            Hay algo que tapa la cara (una mano, el envase, un micro)
+          </label>
+        </div>
+      ) : null}
 
       {type === "clip" || type === "anuncio" ? (
         <div className="space-y-2">
@@ -549,9 +653,12 @@ export function NodeSettings({
  */
 function NewFace({
   models,
+  error,
   onLaunched,
 }: {
   models: { slug: string; name: string }[];
+  /** El motivo de que la lista venga vacía, si viene vacía. */
+  error: string;
   onLaunched: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -591,6 +698,19 @@ function NewFace({
         placeholder="a woman in her mid 40s, dark hair, tired eyes…"
         className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
       />
+
+      {/*
+        Sin modelos, se dice por qué.
+
+        Un desplegable con una sola opción vacía no es un aviso: parece que la
+        pantalla sigue cargando, y se espera a algo que no va a llegar.
+      */}
+      {models.length === 0 ? (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          No hay modelos de Higgsfield que ofrecer
+          {error ? `: ${error}` : ". Comprueba la sesión del CLI en Estudio."}
+        </p>
+      ) : null}
 
       <div className="flex gap-2">
         <SelectField value={model} onChange={(event) => setModel(event.target.value)}>

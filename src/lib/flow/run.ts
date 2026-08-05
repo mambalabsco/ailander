@@ -22,6 +22,7 @@ import {
   compose,
   keyframe,
   lastFrame,
+  lipsync,
   makeMusic,
   mediaSeconds,
   mergeVideos,
@@ -29,6 +30,8 @@ import {
   speak,
   trimClip,
 } from "@/lib/video/providers";
+import { generateWithCli } from "@/lib/higgsfield-cli";
+import { findLipsyncModel } from "@/lib/video/lipsync";
 import { composeTracks, planAssembly } from "@/lib/flow/assemble";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
 import { durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
@@ -143,6 +146,35 @@ const first = (inputs: Map<number, NodeResult[]>, port: number): NodeResult | nu
 
 const urls = (inputs: Map<number, NodeResult[]>, port: number): string[] =>
   (inputs.get(port) ?? []).map((item) => item.url).filter(Boolean);
+
+/**
+ * Las referencias, en bytes.
+ *
+ * El CLI de Higgsfield sube los ficheros él: no acepta una dirección. Y la que
+ * no se pueda descargar se cae de la lista en vez de abortar — con dos caras de
+ * referencia y una rota, generar con la que queda es mejor que no generar.
+ */
+async function downloadAll(
+  references: string[],
+): Promise<{ filename: string; bytes: Uint8Array }[]> {
+  const got = await Promise.all(
+    references.slice(0, 9).map(async (url, index) => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength === 0) return null;
+
+        return { filename: `ref-${index + 1}.png`, bytes };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return got.filter((item) => item !== null);
+}
 
 /* ------------------------------- Cada nodo --------------------------------- */
 
@@ -296,15 +328,66 @@ async function runNode(
       const prompt = first(inputs, 0);
       if (!prompt) throw new Error("Ese nodo de imagen no tiene prompt.");
 
+      const references = urls(inputs, 1);
+      const aspectRatio = text(node.settings, "aspectRatio", "9:16");
+
+      /*
+       * Con qué se genera.
+       *
+       * Vacío es el de siempre, así que los flujos ya guardados siguen dando lo
+       * mismo que daban. Cualquier otra cosa es un modelo de Higgsfield, que va
+       * por su CLI y no por la API: es la única vía que tiene, y era la razón
+       * de que Higgsfield no existiera dentro de los flujos.
+       */
+      const model = text(node.settings, "model");
+
+      if (model && model !== "nano-banana") {
+        await ctx.report(`Generando la imagen con ${model}`);
+
+        const result = await generateWithCli({
+          model,
+          prompt: prompt.value,
+          aspectRatio,
+          references: await downloadAll(references),
+        });
+
+        const image = result.imageUrls[0];
+        if (!image) throw new Error(`${model} no devolvió ninguna imagen.`);
+
+        return { kind: "imagen", url: image, value: prompt.value };
+      }
+
       await ctx.report("Generando la imagen");
 
-      const url = await keyframe({
-        prompt: prompt.value,
-        references: urls(inputs, 1),
-        aspectRatio: text(node.settings, "aspectRatio", "9:16"),
-      });
+      const url = await keyframe({ prompt: prompt.value, references, aspectRatio });
 
       return { kind: "imagen", url, value: prompt.value };
+    }
+
+    case "labios": {
+      const video = first(inputs, 0);
+      const voice = first(inputs, 1);
+
+      if (!video?.url) throw new Error("Ese nodo de lipsync no tiene vídeo.");
+      if (!voice?.url) throw new Error("Ese nodo de lipsync no tiene voz.");
+
+      const model = findLipsyncModel(text(node.settings, "model"));
+
+      await ctx.report(`Sincronizando los labios con ${model.label}`);
+
+      const done = await lipsync({
+        videoUrl: video.url,
+        audioUrl: voice.url,
+        model: model.id,
+        syncMode: text(node.settings, "syncMode", "remap"),
+        detectOcclusion: node.settings.detectOcclusion === true,
+      });
+
+      /*
+       * El valor que se arrastra es el del vídeo, no el de la voz: lo que sigue
+       * en el flujo —el montaje, los subtítulos— espera el texto de la toma.
+       */
+      return { kind: "video", url: done.url, value: video.value };
     }
 
     case "clip": {

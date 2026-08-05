@@ -365,3 +365,32 @@ export function estimateCost(model: VideoGenerator, seconds: number): number | n
 
   return Number((nearestDuration(model, seconds) * model.usdPerSecond).toFixed(2));
 }
+
+/* --------------------------- Generadores de imagen -------------------------- */
+
+export interface ImageGenerator {
+  id: string;
+  label: string;
+  note: string;
+}
+
+/**
+ * Con qué se puede generar una imagen dentro de un flujo.
+ *
+ * ## Por qué esta lista existe
+ *
+ * Porque no había ninguna: el nodo de imagen solo dejaba elegir la forma, y el
+ * generador estaba escrito a fuego. En la pantalla eso se veía como «no salen
+ * modelos disponibles», que era exactamente lo que pasaba — no es que no
+ * cargaran, es que no había de dónde elegir.
+ *
+ * Los de Higgsfield se añaden aparte al abrir la pantalla, porque su catálogo
+ * depende de la cuenta y hay que preguntárselo al CLI.
+ */
+export const IMAGE_GENERATORS: ImageGenerator[] = [
+  {
+    id: "nano-banana",
+    label: "Nano Banana",
+    note: "El de siempre. Rápido y el que mejor respeta una foto de referencia.",
+  },
+];

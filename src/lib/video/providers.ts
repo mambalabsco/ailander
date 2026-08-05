@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createQueue } from "@/lib/queue";
+import { buildLipsyncBody, isTerminal, lipsyncError, type LipsyncRequest } from "@/lib/video/lipsync";
 
 import { createCache } from "@/lib/ttl-cache";
 import { buildInput, VIDEO_GENERATORS } from "@/lib/video/catalog";
@@ -77,6 +78,7 @@ function laneFor(url: string): string {
   if (url.includes("fal.run") || url.includes("fal.ai")) return "fal";
   if (url.includes("elevenlabs.io")) return "eleven";
   if (url.includes("kie.ai")) return "kie";
+  if (url.includes("sync.so")) return "sync";
 
   return "otros";
 }
@@ -940,4 +942,87 @@ export async function cloneVoice(options: {
   voiceCache.forget("voices");
 
   return { voiceId: payload.voice_id };
+}
+
+/* --------------------------------- Lipsync --------------------------------- */
+
+/**
+ * Poner la locución aprobada en la boca del vídeo, con Sync.
+ *
+ * ## Por qué se sondea con `wait` y no con esperas a secas
+ *
+ * Porque su `GET` acepta mantener la petición abierta hasta diez segundos y
+ * contestar en cuanto termina. Con esperas ciegas, un lipsync que tarda doce
+ * segundos se entera a los quince; así se entera a los doce, y son seis planos
+ * por anuncio.
+ *
+ * Los diez segundos son su tope: pedir más lo rechaza.
+ *
+ * ## Lo que no se hace aquí
+ *
+ * No se sube nada. Sync descarga las dos direcciones él mismo, así que tienen
+ * que ser alcanzables desde fuera —lo mismo que ya hace falta para las
+ * referencias de imagen—. Si una no lo es, contesta 422 y ese mensaje se pasa
+ * tal cual: dice cuál de las dos falló, que es justo lo que hay que saber.
+ */
+export async function lipsync(
+  request: LipsyncRequest & { timeoutMs?: number },
+): Promise<{ url: string; seconds: number }> {
+  const apiKey = key("SYNC_API_KEY");
+  const headers = { "x-api-key": apiKey, "content-type": "application/json" };
+
+  const created = await queued("https://api.sync.so/v2/generate", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(buildLipsyncBody(request)),
+  });
+
+  if (!created.ok) {
+    const detail = await created.text().catch(() => "");
+    throw new Error(`Sync no aceptó el trabajo (${created.status}): ${detail.slice(0, 300)}`);
+  }
+
+  const job = (await created.json()) as { id?: string };
+  if (!job.id) throw new Error("Sync no devolvió identificador de trabajo.");
+
+  const deadline = Date.now() + (request.timeoutMs ?? 15 * 60_000);
+  const url = `https://api.sync.so/v2/generate/${encodeURIComponent(job.id)}?wait=10`;
+
+  while (Date.now() < deadline) {
+    const response = await queued(url, { method: "GET", headers });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Sync no dio el estado (${response.status}): ${detail.slice(0, 200)}`);
+    }
+
+    const state = (await response.json()) as {
+      status?: string;
+      outputUrl?: string;
+      outputDuration?: number;
+      error?: string;
+      errorCode?: string;
+    };
+
+    const status = state.status ?? "";
+
+    if (isTerminal(status)) {
+      if (status !== "COMPLETED") {
+        throw new Error(lipsyncError(status, state.error || state.errorCode || ""));
+      }
+
+      /*
+       * Sin dirección no vale con dar el trabajo por bueno.
+       *
+       * Un `COMPLETED` con `outputUrl` vacío es el fallo silencioso de siempre:
+       * el nodo se pinta en verde, el montaje coge una cadena vacía y el vídeo
+       * final sale sin ese plano.
+       */
+      if (!state.outputUrl) throw new Error("Sync terminó sin devolver el vídeo.");
+
+      return { url: state.outputUrl, seconds: state.outputDuration ?? 0 };
+    }
+  }
+
+  throw new Error("Sync tardó demasiado. El trabajo puede seguir; vuelve a ejecutar ese nodo.");
 }
