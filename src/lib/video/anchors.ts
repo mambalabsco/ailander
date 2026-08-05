@@ -128,14 +128,50 @@ export function otherKey(shot: AnchorShot): string {
  * nada que compartir. Mandarles la foto de la mujer solo les da una razón para
  * meterla en el plano, que es justo lo que no se quiere.
  */
-export function planAnchors(shots: AnchorShot[]): Anchor[] {
+export function planAnchors(
+  shots: AnchorShot[],
+  options: { force?: string[] } = {},
+): Anchor[] {
   const out: Anchor[] = [];
 
   /** La primera toma de cada grupo, que es su ancla. */
   const firstOf = new Map<string, string>();
 
+  const forced = new Set(options.force ?? []);
+
   for (const shot of shots) {
     const other = otherKey(shot);
+
+    /*
+     * Forzar el ancla en una toma concreta.
+     *
+     * `showsPerson` adivina leyendo el texto de la escena y no puede acertar
+     * siempre: una toma que dice «primer plano de las manos sobre la encimera»
+     * lleva persona y no lo parece. Cuando eso pasa sale con otra cara, y esto
+     * es la salida — se marca esa toma y se rehace atada a la primera.
+     */
+    if (forced.has(shot.n)) {
+      const anchor = firstOf.get("principal");
+
+      if (!anchor) {
+        firstOf.set("principal", shot.n);
+        out.push({
+          n: shot.n,
+          group: "principal",
+          from: "",
+          why: "Marcada a mano, y es la primera con persona: esta manda.",
+        });
+      } else {
+        out.push({
+          n: shot.n,
+          group: "principal",
+          from: anchor,
+          why: `Marcada a mano para que salga la misma persona: se ancla a la toma ${anchor}.`,
+        });
+      }
+
+      continue;
+    }
 
     if (!showsPerson(shot) && !other) {
       out.push({ n: shot.n, group: "", from: "", why: "No sale nadie: no necesita ancla." });

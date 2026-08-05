@@ -198,21 +198,44 @@ export function buildMusicInput(
  * pedirías a un músico: otra toma. Es una instrucción que el modelo entiende y
  * que no cambia el encargo, solo la interpretación.
  *
- * ## Lo que esto no garantiza
+ * ## Por qué no vale pedir «otra toma»
  *
- * Que salga muy distinta. Un modelo sin semilla puede devolver una variación
- * pequeña. Con semilla —Stable Audio— sí está garantizado, y por eso ahí se usa
- * la semilla y esto es solo un añadido.
+ * Eso fue lo primero que se probó, y no funciona. «Otra toma, misma idea» es lo
+ * que le pedirías a un músico; a un modelo sin semilla el encargo le sigue
+ * describiendo la misma pieza y devuelve la misma pieza. Lyria 3 la repitió tres
+ * veces seguidas.
+ *
+ * Lo que sí funciona es cambiar algo que está **en la partitura**: el tono, quién
+ * lleva la melodía, el compás, por dónde empieza el arreglo. Eso obliga a
+ * componer otra cosa en vez de interpretar lo mismo.
+ *
+ * ## Lo que sigue sin estar garantizado
+ *
+ * Que sea muy distinta. Con semilla —Stable Audio— sí lo está, y por eso ahí se
+ * usa la semilla y esto es solo un añadido.
  */
 export function variationHint(take: number): string {
-  const words = [
-    "Alternate take: same brief, different melodic interpretation.",
-    "Third take: keep the mood, change the chord movement.",
-    "Fourth take: same mood, different instrumentation.",
-    "Fifth take: same brief, a new arrangement.",
+  /*
+   * Cambios **musicales**, no fórmulas de cortesía.
+   *
+   * «Otra toma, misma idea» es lo que le pedirías a un músico, y con un músico
+   * funciona. A un modelo sin semilla no: el encargo sigue describiendo la misma
+   * pieza y devuelve la misma pieza. Lyria 3 lo hacía tres veces seguidas.
+   *
+   * Lo que sí cambia el resultado es cambiar algo que **está en la partitura**:
+   * el tono, el instrumento que lleva la melodía, el compás, por dónde empieza.
+   * Cada una de estas obliga a componer otra cosa, no a interpretar lo mismo.
+   */
+  const takes = [
+    "Different take: transpose to a different key and let a different instrument carry the melody.",
+    "Different take: change the chord progression and start on the subdominant instead of the tonic.",
+    "Different take: shift the tempo by about ten BPM and swap the percussion for a different pulse.",
+    "Different take: reverse the arrangement order — start with the fullest section and strip it back.",
+    "Different take: change the time feel to a triplet swing and use a different lead instrument.",
+    "Different take: move to the relative minor and thin the arrangement to two instruments.",
   ];
 
-  return words[Math.min(words.length - 1, Math.max(0, take - 2))];
+  return takes[(Math.max(2, take) - 2) % takes.length];
 }
 
 /** Si ese generador puede garantizar que la siguiente salga distinta. */

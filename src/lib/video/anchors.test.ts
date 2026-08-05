@@ -187,3 +187,38 @@ test("ninguna toma se pierde entre oleadas", () => {
 
   assert.deepEqual(anchorWaves(plan).flat().sort(), ["01", "02", "03", "04", "05"]);
 });
+
+/* ------------------------------ Forzar el ancla ----------------------------- */
+
+/*
+ * `showsPerson` adivina leyendo el texto y no puede acertar siempre: «primer
+ * plano de las manos sobre la encimera» lleva persona y no lo parece. Cuando eso
+ * pasa, la toma sale con otra cara y hay que poder atarla a mano.
+ */
+test("una toma marcada a mano se ancla aunque no parezca llevar a nadie", () => {
+  const plan = planAnchors(
+    [
+      shot("01", { scene: "una mujer en la cocina" }),
+      shot("02", { scene: "primer plano de la encimera" }),
+    ],
+    { force: ["02"] },
+  );
+
+  assert.equal(plan[1].group, "principal");
+  assert.equal(plan[1].from, "01");
+  assert.match(plan[1].why, /Marcada a mano/);
+});
+
+/* Si es la primera del anuncio, no hay a qué anclarla: manda ella. */
+test("marcar la primera la deja mandando en vez de romperse", () => {
+  const plan = planAnchors([shot("01", { scene: "el frasco" })], { force: ["01"] });
+
+  assert.equal(plan[0].from, "");
+  assert.equal(plan[0].group, "principal");
+});
+
+test("sin marcar nada, el plan es el de siempre", () => {
+  const shots = [shot("01", { scene: "una mujer" }), shot("02", { scene: "el frasco" })];
+
+  assert.deepEqual(planAnchors(shots, { force: [] }), planAnchors(shots));
+});

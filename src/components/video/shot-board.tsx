@@ -721,9 +721,70 @@ export function ShotBoard({
                   </a>
                 ) : null}
 
+                {/*
+                  Rehacer esta toma, aquí y sin marcar nada.
+
+                  Marcar y bajar al botón de arriba servía para rehacer varias de
+                  golpe, pero para una sola era dar la vuelta entera. Y el caso
+                  normal es uno solo: se mira el plano, no cuadra, se rehace.
+                */}
                 {shot.keyframeUrl ? (
-                  <Button onClick={() => toggle(shot.n)}>
-                    {marked ? "No rehacer" : "Rehacer imagen"}
+                  <GenerateButton
+                    action={() =>
+                      generateKeyframesAction({
+                        videoId: video.id,
+                        productId,
+                        only: [shot.n],
+                      })
+                    }
+                    label="Rehacer imagen"
+                    hint="Solo esta toma, con el mismo encargo."
+                  />
+                ) : null}
+
+                {/*
+                  Y atada a la persona del anuncio.
+
+                  El ancla se decide leyendo el texto de la escena, y no puede
+                  acertar siempre: una toma que dice «primer plano de las manos»
+                  lleva persona sin parecerlo, así que sale con otra cara. Esto
+                  la ata a la primera toma en la que salió.
+                */}
+                {shot.keyframeUrl ? (
+                  <GenerateButton
+                    action={() =>
+                      generateKeyframesAction({
+                        videoId: video.id,
+                        productId,
+                        only: [shot.n],
+                        conPersona: true,
+                      })
+                    }
+                    label="Rehacer con la misma persona"
+                    hint="Le manda la imagen de la primera toma donde salió, para que sea la misma cara."
+                  />
+                ) : null}
+
+                {/*
+                  Y el clip suelto.
+
+                  Rehacer la imagen no rehace el vídeo: el clip sigue siendo el
+                  de la imagen vieja, y el montaje lo usaría tal cual. Son dos
+                  pasos y aquí están los dos.
+                */}
+                {shot.keyframeUrl ? (
+                  <GenerateButton
+                    action={() =>
+                      generateClipsAction({ videoId: video.id, productId, only: [shot.n] })
+                    }
+                    label={shot.clipUrl ? "Rehacer el clip" : "Animar esta toma"}
+                    hint="Solo este plano. Después hay que volver a montar para que entre."
+                  />
+                ) : null}
+
+                {shot.keyframeUrl ? (
+                  <Button variant="ghost" onClick={() => toggle(shot.n)}>
+                    {marked ? "No rehacer en tanda" : "Marcar para la tanda"}
                   </Button>
                 ) : null}
               </div>

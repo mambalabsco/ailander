@@ -383,6 +383,15 @@ export async function generateKeyframesAction(
    */
   const forceProduct = raw.conProducto === true;
 
+  /*
+   * Forzar el ancla de persona en las tomas que se rehacen.
+   *
+   * `showsPerson` adivina leyendo el texto de la escena, y una toma que dice
+   * «primer plano de las manos» lleva persona sin parecerlo. Esa sale con otra
+   * cara, y esto es la salida: se rehace atada a la primera en la que salió.
+   */
+  const forcePerson = raw.conPersona === true ? only : [];
+
   if (!videoId || !productId) throw new Error("Falta el vídeo.");
   await guard();
 
@@ -489,6 +498,7 @@ export async function generateKeyframesAction(
           motion: item.motion,
           guion: item.guion,
         })),
+        { force: forcePerson },
       );
 
       const anchorOf = new Map(plan.map((item) => [item.n, item]));

@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  buildMusicInput,
   MUSIC_STYLES,
+  buildMusicInput,
   buildMusicPrompt,
+  variationHint,
   findMusicGenerator,
   guaranteesVariation,
   musicCost,
@@ -250,4 +251,40 @@ test("un intento absurdo no rompe el encargo", () => {
 
   assert.equal(typeof input.prompt, "string");
   assert.ok(String(input.prompt).length > 1);
+});
+
+/*
+ * «Otra toma, misma idea» es lo que le pedirías a un músico, y con un músico
+ * funciona. A un modelo sin semilla no: el encargo le sigue describiendo la
+ * misma pieza y devuelve la misma pieza. Lyria 3 la repitió tres veces seguidas.
+ */
+test("la variación cambia algo de la partitura, no la cortesía", () => {
+  const dos = variationHint(2);
+
+  assert.match(dos, /key|chord|tempo|time feel|minor/i);
+  assert.ok(!/same brief/i.test(dos));
+});
+
+test("cada toma pide un cambio distinto", () => {
+  const takes = [2, 3, 4, 5, 6, 7].map((n) => variationHint(n));
+
+  assert.equal(new Set(takes).size, takes.length);
+});
+
+/* La séptima toma no puede quedarse sin instrucción. */
+test("después de las que hay, se vuelve a empezar en vez de quedarse sin nada", () => {
+  assert.ok(variationHint(20).length > 20);
+});
+
+test("la primera toma no lleva variación", () => {
+  const input = buildMusicInput(MUSIC_GENERATORS[0], { prompt: "algo", seconds: 30, take: 1 });
+
+  assert.equal(input.prompt, "algo");
+});
+
+test("la segunda sí, pegada al encargo original", () => {
+  const input = buildMusicInput(MUSIC_GENERATORS[0], { prompt: "algo", seconds: 30, take: 2 });
+
+  assert.match(String(input.prompt), /^algo /);
+  assert.match(String(input.prompt), /Different take/);
 });
