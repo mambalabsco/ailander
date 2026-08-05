@@ -1,4 +1,5 @@
 import { assignAvatars } from "@/lib/avatar-prompts";
+import { autoplayVideos } from "@/lib/landing-copy-html";
 import { DEFAULT_THEME, type LandingTheme } from "@/lib/landing-theme";
 import type {
   LandingComment,
@@ -490,7 +491,16 @@ function renderSection(
          * con `display:grid` o `flex` cuenta como una columna más y descoloca
          * todo lo que venga detrás.
          */
-        section.html ? `<div class="copiado">${section.html}</div>` : "",
+        /*
+         * Los vídeos se ponen en modo GIF **también al pintar**, no solo al
+         * copiar.
+         *
+         * Hacerlo solo al copiar deja con reproductor todas las copias hechas
+         * antes, y una copia son varios minutos y varias llamadas: obligar a
+         * repetirla para arreglar un atributo sería tirar ese trabajo. Es
+         * idempotente, así que aplicarlo dos veces no cambia nada.
+         */
+        section.html ? `<div class="copiado">${autoplayVideos(section.html)}</div>` : "",
       ].join("");
 
     case "imagen": {

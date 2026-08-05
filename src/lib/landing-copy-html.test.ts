@@ -23,6 +23,7 @@ import {
   stripChrome,
   unlazy,
   autoplayVideos,
+  pruneCss,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -910,4 +911,112 @@ test("los anclas internas siguen funcionando aunque haya ficha", () => {
 
   assert.ok(out.html.includes('href="#precios"'));
   assert.equal(out.changed, 0);
+});
+
+/* ---------------------------- Podar el CSS muerto --------------------------- */
+
+test("se queda la regla cuya clase está en el marcado", () => {
+  const css = pruneCss(".usada{color:red}.muerta{color:blue}", '<div class="usada"></div>');
+
+  assert.ok(css.includes(".usada"));
+  assert.ok(!css.includes(".muerta"));
+});
+
+test("un selector sin clase ni identificador se queda siempre", () => {
+  /*
+   * `body`, `h1`, `*`, `:root`: no hay forma de saber si sobran mirando las
+   * clases, y quitarlos deja la página sin sus estilos base. El fallo va hacia
+   * conservar, que es el lado que no rompe.
+   */
+  const css = pruneCss("body{margin:0}*{box-sizing:border-box}:root{--x:1}", "<div></div>");
+
+  assert.ok(css.includes("body"));
+  assert.ok(css.includes("*"));
+  assert.ok(css.includes(":root"));
+});
+
+test("basta con que una de las alternativas del selector se use", () => {
+  // `.a, .b { }` se aplica si está cualquiera de las dos.
+  const css = pruneCss(".a,.muerta{color:red}", '<div class="a"></div>');
+
+  assert.ok(css.includes("color:red"));
+});
+
+test("un selector compuesto necesita todas sus clases", () => {
+  // `.tarjeta .titulo` sin `.titulo` en el marcado no puede aplicar nunca.
+  const css = pruneCss(".tarjeta .titulo{color:red}", '<div class="tarjeta"></div>');
+
+  assert.ok(!css.includes("color:red"));
+});
+
+test("los identificadores cuentan igual que las clases", () => {
+  const css = pruneCss("#hero{color:red}#nada{color:blue}", '<div id="hero"></div>');
+
+  assert.ok(css.includes("#hero"));
+  assert.ok(!css.includes("#nada"));
+});
+
+test("dentro de un @media se poda igual, y el bloque se mantiene", () => {
+  /*
+   * Partir por `}` trocearía el `@media` por la mitad y produciría CSS
+   * inválido — que es una página descolocada, no un error.
+   */
+  const css = pruneCss(
+    "@media (max-width:600px){.usada{color:red}.muerta{color:blue}}",
+    '<div class="usada"></div>',
+  );
+
+  assert.ok(css.includes("@media (max-width:600px)"));
+  assert.ok(css.includes(".usada"));
+  assert.ok(!css.includes(".muerta"));
+});
+
+test("un @media que se queda vacío se tira entero", () => {
+  const css = pruneCss("@media print{.muerta{color:blue}}", "<div></div>");
+
+  assert.equal(css.trim(), "");
+});
+
+test("las animaciones y las importaciones se quedan", () => {
+  // Saber si una animación se usa exige mirar los valores de cada regla, y
+  // equivocarse deja la página quieta o sin tipografía.
+  const css = pruneCss("@keyframes girar{from{opacity:0}}", "<div></div>");
+
+  assert.ok(css.includes("@keyframes girar"));
+});
+
+test("una tipografía que nadie menciona se cae", () => {
+  const css = pruneCss(
+    '@font-face{font-family:"Sobra";src:url(a.woff2)}@font-face{font-family:"Usada";src:url(b.woff2)}.t{font-family:"Usada"}',
+    '<div class="t"></div>',
+  );
+
+  assert.ok(css.includes("Usada"));
+  assert.ok(!css.includes("Sobra"));
+});
+
+test("la tipografía se compara sin comillas ni mayúsculas", () => {
+  // Se escriben de las dos formas, y comparar literal borraría una que sí se usa.
+  const css = pruneCss(
+    '@font-face{font-family:"Helvetica Now";src:url(a.woff2)}.t{font-family:helvetica now,sans-serif}',
+    '<div class="t"></div>',
+  );
+
+  assert.ok(css.includes("Helvetica Now"));
+});
+
+test("una @font-face sin nombre se queda", () => {
+  const css = pruneCss("@font-face{src:url(a.woff2)}", "<div></div>");
+
+  assert.ok(css.includes("@font-face"));
+});
+
+test("las clases salen de los atributos, no del texto", () => {
+  /*
+   * Buscar la palabra suelta en el HTML daría por usada cualquier clase que se
+   * llame como una palabra del contenido, y entonces no se quitaría nada.
+   */
+  const css = pruneCss(".oferta{color:red}", "<p>Esta oferta acaba hoy</p>");
+
+  assert.ok(!css.includes("color:red"));
 });

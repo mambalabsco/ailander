@@ -787,6 +787,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         scopeCss,
         unlazy,
         neutralizeLinks,
+        pruneCss,
         sanitizeCss,
         sanitizeHtml,
       } = await import("@/lib/landing-copy-html");
@@ -972,8 +973,19 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
            * ninguna pista de por qué. Y eso incluye lo de dentro de un `@media`,
            * que es donde vive media maqueta.
            */
+          /*
+             Y podado: lo que se copia no es el CSS de la página, es el del tema
+             entero. En una landing de Shopify son unos 350 KB de los que se usan
+             unas decenas — el resto viste el carrito, la ficha de producto y
+             plantillas que esta página no tiene.
+
+             No es elegancia: **Shopify rechaza un cuerpo de más de 512 KB** y
+             entre el marcado y ese CSS se pasa. Medido en trysculptique: 574 KB
+             sin podar, 471 con. Se poda contra el marcado ya limpio, que es el
+             que de verdad se va a publicar.
+          */
           css: scopeCss(
-            dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)),
+            pruneCss(dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)), body),
             ".copiado",
           ),
         },
