@@ -1,7 +1,7 @@
 import "server-only";
 
 import { requireContext } from "@/lib/supabase/session";
-import type { Flow } from "@/lib/flow/graph";
+import type { Flow, Stroke } from "@/lib/flow/graph";
 
 /**
  * Flujos, ejecuciones y lo que produjo cada nodo.
@@ -48,7 +48,7 @@ const EMPTY: Flow = { nodes: [], edges: [] };
 function parseGraph(value: unknown): Flow {
   if (typeof value !== "object" || value === null) return EMPTY;
 
-  const record = value as { nodes?: unknown; edges?: unknown };
+  const record = value as { nodes?: unknown; edges?: unknown; drawings?: unknown };
 
   const nodes = Array.isArray(record.nodes)
     ? record.nodes.filter(
@@ -74,7 +74,29 @@ function parseGraph(value: unknown): Flow {
       )
     : [];
 
-  return { nodes, edges };
+  /*
+   * Los trazos se validan igual que lo demás.
+   *
+   * Un trazo con puntos que no son números no rompe nada al guardarlo: rompe al
+   * pintarlo, con un `NaN` dentro del atributo `d` de un `path`, que el
+   * navegador descarta en silencio. El dibujo desaparece y no hay error.
+   */
+  const drawings = Array.isArray(record.drawings)
+    ? record.drawings.filter((stroke): stroke is Stroke => {
+        if (typeof stroke !== "object" || stroke === null) return false;
+
+        const item = stroke as { id?: unknown; points?: unknown };
+
+        return (
+          typeof item.id === "string" &&
+          Array.isArray(item.points) &&
+          item.points.length >= 4 &&
+          item.points.every((point) => typeof point === "number" && Number.isFinite(point))
+        );
+      })
+    : [];
+
+  return { nodes, edges, drawings };
 }
 
 export async function listFlows(): Promise<FlowRecord[]> {

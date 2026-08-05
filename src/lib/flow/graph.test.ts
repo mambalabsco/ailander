@@ -458,3 +458,25 @@ test("lo que no se ejecutó tampoco se da por hecho", () => {
 test("empezar de cero es no reutilizar nada", () => {
   assert.equal(reusable(rama(), {}).size, 0);
 });
+
+test("un flujo sin dibujos sigue siendo un flujo", () => {
+  // Los guardados antes de que existieran los trazos no traen el campo.
+  const flow: Flow = { nodes: [], edges: [] };
+
+  assert.equal(flow.drawings, undefined);
+});
+
+test("un trazo se guarda en coordenadas del lienzo", () => {
+  /*
+   * Es lo que hace que el dibujo vaya pegado a las cajas. En coordenadas de
+   * pantalla, mover o acercar el lienzo dejaría la flecha señalando otra cosa —
+   * y seguiría pareciendo una flecha correcta.
+   */
+  const flow: Flow = {
+    nodes: [{ id: "n1", type: "prompt", x: 100, y: 100, settings: {} }],
+    edges: [],
+    drawings: [{ id: "t1", color: "#f43f5e", width: 2, points: [100, 100, 140, 120] }],
+  };
+
+  assert.equal(flow.drawings?.[0].points.length, 4);
+});

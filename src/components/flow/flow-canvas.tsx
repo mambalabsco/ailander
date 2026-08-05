@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Background,
@@ -32,6 +32,7 @@ import {
   runStates,
   validate,
   type Flow,
+  type Stroke,
 } from "@/lib/flow/graph";
 import { costLabel, flowCost } from "@/lib/flow/cost";
 import {
@@ -125,6 +126,51 @@ export function FlowCanvas({
 }: FlowCanvasProps) {
   const router = useRouter();
   const [note, setNote] = useState("");
+
+  /*
+    Lo dibujado a mano y con qué se está dibujando.
+
+    «Mano» es el modo normal: se arrastra el lienzo y se mueven las cajas, que
+    es lo que se hace el noventa y nueve por ciento del tiempo. El lápiz es un
+    modo aparte y no un botón que dibuja siempre, porque mientras dibujas no
+    puedes mover nodos sin querer — y al revés.
+  */
+  const [drawings, setDrawings] = useState<Stroke[]>(graph.drawings ?? []);
+  const [tool, setTool] = useState<"mano" | "lapiz" | "borrar">("mano");
+  const [drawing, setDrawing] = useState<Stroke | null>(null);
+
+  /*
+    Dónde está el lienzo ahora mismo.
+
+    Los trazos se guardan en coordenadas del lienzo, así que para pintarlos hay
+    que aplicarles la misma transformación que React Flow aplica a los nodos. Sin
+    esto, al acercar o mover, el dibujo se queda quieto y la flecha que señalaba
+    una caja pasa a señalar otra.
+  */
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+
+  /** El recuadro del lienzo, para pasar de píxeles de pantalla a coordenadas. */
+  const surface = useRef<HTMLDivElement>(null);
+
+  /**
+   * Dónde cae un punto de la pantalla dentro del lienzo.
+   *
+   * Se deshace lo que React Flow hizo: primero se resta el origen del recuadro
+   * —el lienzo no empieza en la esquina de la ventana— y luego el
+   * desplazamiento y el zoom. Sin lo primero, el trazo aparece desplazado por
+   * la altura de la cabecera; sin lo segundo, deja de coincidir en cuanto se
+   * acerca.
+   */
+  const atCanvas = (clientX: number, clientY: number) => {
+    const box = surface.current?.getBoundingClientRect();
+    const x = clientX - (box?.left ?? 0);
+    const y = clientY - (box?.top ?? 0);
+
+    return {
+      x: Math.round((x - viewport.x) / viewport.zoom),
+      y: Math.round((y - viewport.y) / viewport.zoom),
+    };
+  };
   const [saving, setSaving] = useState(false);
   const [multiply, setMultiply] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string>("");
@@ -182,8 +228,9 @@ export function FlowCanvas({
         to: edge.target,
         port: Number(edge.targetHandle ?? 0),
       })),
+      drawings,
     }),
-    [nodes, edges],
+    [nodes, edges, drawings],
   );
 
   const problems = useMemo(() => validate(asFlow), [asFlow]);
@@ -432,6 +479,10 @@ export function FlowCanvas({
 
   /** Pinta un grafo entero encima del actual. */
   const applyGraph = (graph: Flow) => {
+    // Los trazos son del flujo, no de la pantalla: cargar otro grafo también
+    // cambia lo que hay dibujado encima.
+    setDrawings(graph.drawings ?? []);
+
     setNodes(
       graph.nodes.map((node) => ({
         id: node.id,
@@ -513,6 +564,44 @@ export function FlowCanvas({
           buena. Esto la trae directa: se busca de derecha a izquierda porque un
           lienzo se construye hacia la derecha y la última es la de más allá.
         */}
+        {/*
+          Mano, lápiz y goma.
+
+          El lápiz es un **modo** y no un botón que dibuja siempre: mientras
+          dibujas no puedes mover una caja sin querer, y al revés. Con las dos
+          cosas a la vez, cada trazo empieza arrastrando el nodo que había
+          debajo.
+        */}
+        <div className="flex gap-1 rounded-full border border-slate-200 p-0.5 dark:border-slate-800">
+          {(
+            [
+              { id: "mano", label: "Mano" },
+              { id: "lapiz", label: "Lápiz" },
+              { id: "borrar", label: "Goma" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTool(item.id)}
+              aria-pressed={tool === item.id}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                tool === item.id
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {drawings.length > 0 ? (
+          <Button variant="ghost" onClick={() => setDrawings([])}>
+            Limpiar el dibujo
+          </Button>
+        ) : null}
+
         <Button
           variant="ghost"
           onClick={() => {
@@ -855,7 +944,10 @@ export function FlowCanvas({
       ) : null}
 
       <div className="grid gap-3 lg:grid-cols-[1fr_20rem]">
-        <div className="h-[560px] rounded-2xl border border-slate-200 dark:border-slate-800">
+        <div
+          ref={surface}
+          className="relative h-[560px] rounded-2xl border border-slate-200 dark:border-slate-800"
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -863,6 +955,7 @@ export function FlowCanvas({
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={(_, node) => setSelected(node.id)}
+            onMove={(_, next) => setViewport(next)}
             onPaneClick={() => setSelected("")}
             nodeTypes={nodeTypes}
             fitView
@@ -871,6 +964,81 @@ export function FlowCanvas({
             <Background />
             <Controls />
             <MiniMap pannable zoomable />
+
+            {/*
+              El dibujo, encima de todo y con la misma transformación.
+
+              `pointerEvents` solo cuando hay lápiz o goma: si no, la capa se
+              comería los clics de los nodos y el lienzo dejaría de funcionar.
+            */}
+            <svg
+              className="absolute inset-0 h-full w-full"
+              style={{
+                zIndex: 5,
+                pointerEvents: tool === "mano" ? "none" : "auto",
+                cursor: tool === "borrar" ? "pointer" : "crosshair",
+              }}
+              onPointerDown={(event) => {
+                if (tool !== "lapiz") return;
+
+                const point = atCanvas(event.clientX, event.clientY);
+
+                setDrawing({
+                  id: `t${Date.now()}`,
+                  color: "#f43f5e",
+                  width: 2,
+                  points: [point.x, point.y],
+                });
+              }}
+              onPointerMove={(event) => {
+                if (!drawing) return;
+
+                const point = atCanvas(event.clientX, event.clientY);
+
+                setDrawing((current) =>
+                  current ? { ...current, points: [...current.points, point.x, point.y] } : null,
+                );
+              }}
+              onPointerUp={() => {
+                /*
+                  Un punto suelto no es un trazo.
+
+                  Un clic sin arrastrar deja dos números, y pintarlo no se ve
+                  pero sí ocupa: cien clics distraídos son cien trazos guardados
+                  que nadie puede borrar porque no se ven.
+                */
+                if (drawing && drawing.points.length >= 6) {
+                  setDrawings((current) => [...current, drawing]);
+                }
+
+                setDrawing(null);
+              }}
+            >
+              <g
+                transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {[...drawings, ...(drawing ? [drawing] : [])].map((stroke) => (
+                  <path
+                    key={stroke.id}
+                    d={pathOf(stroke)}
+                    stroke={stroke.color}
+                    strokeWidth={stroke.width}
+                    // El trazo se puede borrar de uno en uno, y para poder
+                    // acertarle sin precisión de cirujano se le da un ancho de
+                    // clic mayor que el que se ve.
+                    style={{ pointerEvents: tool === "borrar" ? "stroke" : "none" }}
+                    strokeOpacity={1}
+                    onPointerDown={() => {
+                      if (tool !== "borrar") return;
+                      setDrawings((current) => current.filter((item) => item.id !== stroke.id));
+                    }}
+                  />
+                ))}
+              </g>
+            </svg>
           </ReactFlow>
         </div>
 
@@ -1075,6 +1243,7 @@ function AutoBuild({
   const [seconds, setSeconds] = useState(30);
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState("");
+
   const [dropped, setDropped] = useState<string[]>([]);
   /** De qué parte: de una idea escrita o de un anuncio ya analizado. */
   const [source, setSource] = useState("idea");
@@ -1368,4 +1537,21 @@ function AutoBuild({
       ) : null}
     </div>
   );
+}
+
+/**
+ * La ruta de un trazo, en SVG.
+ *
+ * Una polilínea y no una curva suavizada: suavizar un garabato hecho a pulso lo
+ * cambia de sitio, y aquí lo que se dibuja son flechas y círculos que señalan
+ * una caja concreta. Que se vea el pulso es preferible a que señale mal.
+ */
+function pathOf(stroke: Stroke): string {
+  const parts: string[] = [];
+
+  for (let at = 0; at + 1 < stroke.points.length; at += 2) {
+    parts.push(`${at === 0 ? "M" : "L"}${stroke.points[at]} ${stroke.points[at + 1]}`);
+  }
+
+  return parts.join(" ");
 }

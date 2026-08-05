@@ -51,7 +51,7 @@ async function guard() {
  * mensaje ya no dice de dónde venía.
  */
 function readGraph(value: unknown): Flow {
-  const raw = (value ?? {}) as { nodes?: unknown; edges?: unknown };
+  const raw = (value ?? {}) as { nodes?: unknown; edges?: unknown; drawings?: unknown };
 
   const nodes = (Array.isArray(raw.nodes) ? raw.nodes : [])
     .map((item) => (item ?? {}) as Record<string, unknown>)
@@ -78,7 +78,29 @@ function readGraph(value: unknown): Flow {
       port: Number(item.port) || 0,
     }));
 
-  return { nodes, edges };
+  /*
+   * Los trazos, con sus puntos comprobados uno a uno.
+   *
+   * Un `NaN` dentro de la ruta de un `path` no da error: el navegador descarta
+   * el atributo entero y el dibujo desaparece sin decir por qué. Y hay tope de
+   * trazos: el grafo va en una columna `jsonb`, y garabatear sin límite acabaría
+   * haciendo que un flujo no se pueda guardar por tamaño.
+   */
+  const drawings = (Array.isArray(raw.drawings) ? raw.drawings : [])
+    .slice(0, 500)
+    .map((item) => (item ?? {}) as Record<string, unknown>)
+    .map((item) => ({
+      id: readText(item.id),
+      color: readText(item.color) || "#f43f5e",
+      width: Number(item.width) || 2,
+      points: (Array.isArray(item.points) ? item.points : [])
+        .map((point) => Number(point))
+        .filter((point) => Number.isFinite(point))
+        .slice(0, 2000),
+    }))
+    .filter((stroke) => stroke.id && stroke.points.length >= 4);
+
+  return { nodes, edges, drawings };
 }
 
 /* --------------------------------- Flujos ---------------------------------- */

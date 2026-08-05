@@ -254,9 +254,37 @@ export interface FlowEdge {
   port: number;
 }
 
+/**
+ * Un trazo a mano alzada sobre el lienzo.
+ *
+ * ## Por qué en coordenadas del lienzo y no de la pantalla
+ *
+ * Porque si no, al mover o acercar el lienzo el dibujo se queda donde estaba y
+ * la flecha que señalaba una caja pasa a señalar otra. Guardando los puntos en
+ * las mismas coordenadas que los nodos, el trazo va pegado a lo que rodea.
+ *
+ * Los puntos van planos —x, y, x, y…— y no como objetos: un trazo largo son
+ * cientos de puntos, y `{x, y}` triplica lo que ocupa en la columna `jsonb`.
+ */
+export interface Stroke {
+  id: string;
+  color: string;
+  width: number;
+  /** x, y, x, y… en coordenadas del lienzo. */
+  points: number[];
+}
+
 export interface Flow {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  /**
+   * Lo dibujado encima: flechas, círculos, lo que se marque a mano.
+   *
+   * No afecta a la ejecución. Vive en el grafo porque es parte de lo que
+   * alguien dejó explicado, igual que un nodo de nota, y guardarlo aparte
+   * significaría que se pierde al copiar o duplicar un flujo.
+   */
+  drawings?: Stroke[];
 }
 
 export interface Problem {
