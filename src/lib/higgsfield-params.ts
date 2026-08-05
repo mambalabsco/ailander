@@ -127,7 +127,7 @@ export function creditsFrom(payload: unknown): number | null {
  * `null` cuando no hay tarifa configurada, y **eso se enseña tal cual**. El
  * precio del crédito depende del plan contratado, así que no hay un número
  * correcto que poner por defecto: inventarlo daría un coste con dos decimales
- * que parece medido y no lo está. Se configura en `HIGGSFIELD_USD_PER_CREDIT`.
+ * que parece medido y no lo está. Se configura en la pantalla de Configuración.
  */
 export function creditsToUsd(credits: number | null, usdPerCredit: number | null): number | null {
   if (credits === null || usdPerCredit === null) return null;
@@ -144,6 +144,6 @@ export function costLabel(credits: number | null, usd: number | null): string {
   const amount = `${credits} crédito${credits === 1 ? "" : "s"}`;
 
   return usd === null
-    ? `${amount}. Pon HIGGSFIELD_USD_PER_CREDIT para verlo en dólares.`
+    ? `${amount}. Pon el precio del crédito en Configuración para verlo en dólares.`
     : `${amount} · unos ${usd.toFixed(2)} USD`;
 }

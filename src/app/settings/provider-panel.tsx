@@ -6,6 +6,7 @@ import { Button, Field, SelectField, TextField } from "@/components/ui";
 import {
   clearHiggsfieldCredentials,
   clearProviderKey,
+  clearSyncApiKey,
   loadProviderConfig,
   saveProviderConfig,
 } from "@/app/settings/actions";
@@ -20,6 +21,8 @@ const defaultView: ProviderConfigView = {
   hasClaudeApiKey: false,
   hasChatgptApiKey: false,
   hasHiggsfieldCredentials: false,
+  hasSyncApiKey: false,
+  higgsfieldUsdPerCredit: 0,
 };
 
 export function ProviderPanel() {
@@ -28,6 +31,7 @@ export function ProviderPanel() {
   const [chatgptKey, setChatgptKey] = useState("");
   const [higgsfieldId, setHiggsfieldId] = useState("");
   const [higgsfieldSecret, setHiggsfieldSecret] = useState("");
+  const [syncKey, setSyncKey] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -52,12 +56,15 @@ export function ProviderPanel() {
         chatgptApiKey: chatgptKey,
         higgsfieldKeyId: higgsfieldId,
         higgsfieldKeySecret: higgsfieldSecret,
+        higgsfieldUsdPerCredit: config.higgsfieldUsdPerCredit,
+        syncApiKey: syncKey,
       });
       setConfig(saved);
       setClaudeKey("");
       setChatgptKey("");
       setHiggsfieldId("");
       setHiggsfieldSecret("");
+      setSyncKey("");
       setMessage("Configuración guardada correctamente.");
     });
   };
@@ -229,7 +236,29 @@ export function ProviderPanel() {
             </span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          {/*
+            La tarifa del crédito, para ver los costes en dólares.
+
+            Higgsfield cobra en créditos y su `generate cost` los devuelve
+            exactos, pero cuánto vale uno depende del plan: Ultra son 3.000
+            créditos por 99 USD al mes, o sea 0,033. Sin este número el coste se
+            enseña en créditos y se dice que falta — un precio en dólares
+            inventado se lee como medido.
+          */}
+          <Field label="USD por crédito (Ultra: 0.033)">
+            <TextField
+              type="number"
+              step="0.001"
+              min="0"
+              value={String(config.higgsfieldUsdPerCredit || "")}
+              onChange={(event) =>
+                setConfig({ ...config, higgsfieldUsdPerCredit: Number(event.target.value) || 0 })
+              }
+              placeholder="0.033"
+            />
+          </Field>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
             <Field label="Key ID">
               <TextField
                 autoComplete="off"
@@ -262,6 +291,59 @@ export function ProviderPanel() {
               className="mt-3 text-sm text-rose-500 hover:underline disabled:opacity-50"
             >
               Eliminar credenciales
+            </button>
+          ) : null}
+        </div>
+
+        {/*
+          Sync hace el lipsync: pone la locución en la boca de un vídeo.
+
+          La clave se guarda aquí y no en una variable de entorno del servidor
+          porque el entorno lo toca quien entra por SSH, y a esta plataforma
+          entra gente que no. Va a la misma tabla que las demás, que no tiene
+          política de lectura: ni con un fallo de XSS sale al navegador.
+        */}
+        <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">Sync · lipsync</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Pone la voz que elijas en la boca de un vídeo ya generado. Se cobra por segundo de
+                vídeo, así que el coste sale en la barra del flujo antes de ejecutarlo.
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${config.hasSyncApiKey ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}
+            >
+              {config.hasSyncApiKey ? "Configurada" : "Sin configurar"}
+            </span>
+          </div>
+
+          <Field label="API key">
+            <TextField
+              type="password"
+              autoComplete="off"
+              value={syncKey}
+              onChange={(event) => setSyncKey(event.target.value)}
+              placeholder={
+                config.hasSyncApiKey ? "•••••••• (déjalo vacío para conservarla)" : "sk-…"
+              }
+            />
+          </Field>
+
+          {config.hasSyncApiKey ? (
+            <button
+              type="button"
+              onClick={() =>
+                startTransition(async () => {
+                  setConfig(await clearSyncApiKey());
+                  setMessage("Clave de Sync eliminada.");
+                })
+              }
+              disabled={isPending}
+              className="mt-3 text-sm text-rose-500 hover:underline disabled:opacity-50"
+            >
+              Eliminar la clave
             </button>
           ) : null}
         </div>

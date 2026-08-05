@@ -947,6 +947,28 @@ export async function cloneVoice(options: {
 /* --------------------------------- Lipsync --------------------------------- */
 
 /**
+ * La clave de Sync: primero la de Configuración, y si no la del entorno.
+ *
+ * Ese orden y no el contrario. La de Configuración la pone quien usa la
+ * plataforma; la del entorno solo se puede poner entrando al servidor, así que
+ * si mandara ella, cambiarla desde la pantalla no haría nada y no habría manera
+ * de saber por qué.
+ */
+async function syncKey(): Promise<string> {
+  const { readProviderConfig } = await import("@/lib/provider-config");
+  const saved = (await readProviderConfig().catch(() => null))?.syncApiKey?.trim();
+
+  if (saved) return saved;
+
+  const fromEnv = process.env.SYNC_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+
+  throw new Error(
+    "Falta la clave de Sync. Ponla en Configuración → Sync · lipsync y vuelve a ejecutar el nodo.",
+  );
+}
+
+/**
  * Poner la locución aprobada en la boca del vídeo, con Sync.
  *
  * ## Por qué se sondea con `wait` y no con esperas a secas
@@ -968,7 +990,7 @@ export async function cloneVoice(options: {
 export async function lipsync(
   request: LipsyncRequest & { timeoutMs?: number },
 ): Promise<{ url: string; seconds: number }> {
-  const apiKey = key("SYNC_API_KEY");
+  const apiKey = await syncKey();
   const headers = { "x-api-key": apiKey, "content-type": "application/json" };
 
   const created = await queued("https://api.sync.so/v2/generate", {

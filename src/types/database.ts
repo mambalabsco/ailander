@@ -394,6 +394,10 @@ type ProviderConfigRow = {
   anthropic_api_key: string | null;
   higgsfield_key_id: string | null;
   higgsfield_key_secret: string | null;
+  /** La de sync.so, para el lipsync. Nunca sale de la base sin `service_role`. */
+  sync_api_key: string | null;
+  /** USD por crédito de Higgsfield. `numeric`, así que llega como cadena. */
+  higgsfield_usd_per_credit: string | null;
   claude_model: string;
   claude_copy_model: string;
   claude_extraction_model: string;

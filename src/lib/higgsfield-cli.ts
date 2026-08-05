@@ -620,10 +620,17 @@ export async function estimateCliCost(options: {
     credits = null;
   }
 
-  const rate = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
+  /*
+   * La tarifa, primero la de Configuración y si no la del entorno.
+   *
+   * Ese orden: la de la pantalla la pone quien usa la plataforma, y la del
+   * entorno hace falta entrar al servidor. Si mandara el entorno, cambiarla
+   * desde la pantalla no haría nada y no habría forma de ver por qué.
+   */
+  const { readProviderConfig } = await import("@/lib/provider-config");
+  const saved = (await readProviderConfig().catch(() => null))?.higgsfieldUsdPerCredit ?? 0;
+  const fromEnv = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
+  const rate = saved > 0 ? saved : Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : null;
 
-  return {
-    credits,
-    usd: creditsToUsd(credits, Number.isFinite(rate) && rate > 0 ? rate : null),
-  };
+  return { credits, usd: creditsToUsd(credits, rate) };
 }

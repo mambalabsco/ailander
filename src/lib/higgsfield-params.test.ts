@@ -67,7 +67,7 @@ test("con tarifa, los dólares salen", () => {
 
 test("la línea dice lo que falta en vez de callarlo", () => {
   assert.match(costLabel(null, null), /no dio el coste/);
-  assert.match(costLabel(20, null), /HIGGSFIELD_USD_PER_CREDIT/);
+  assert.match(costLabel(20, null), /precio del crédito en Configuración/);
   assert.match(costLabel(20, 0.2), /0\.20 USD/);
   assert.match(costLabel(1, 0.01), /1 crédito\b/);
 });

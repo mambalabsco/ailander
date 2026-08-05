@@ -29,6 +29,8 @@ const DEFAULTS: ProviderConfig = {
   chatgptModel: "gpt-4.1",
   higgsfieldKeyId: "",
   higgsfieldKeySecret: "",
+  syncApiKey: "",
+  higgsfieldUsdPerCredit: 0,
 };
 
 export async function readProviderConfig(): Promise<ProviderConfig> {
@@ -57,6 +59,10 @@ export async function readProviderConfig(): Promise<ProviderConfig> {
     chatgptModel: data.chatgpt_model || DEFAULTS.chatgptModel,
     higgsfieldKeyId: data.higgsfield_key_id ?? "",
     higgsfieldKeySecret: data.higgsfield_key_secret ?? "",
+    syncApiKey: data.sync_api_key ?? "",
+    // `numeric` llega como cadena, y `Number(null)` es cero: las dos cosas
+    // acaban en el mismo sitio, que es «no hay tarifa».
+    higgsfieldUsdPerCredit: Number(data.higgsfield_usd_per_credit) || 0,
   };
 }
 
@@ -90,6 +96,13 @@ export async function writeProviderConfig(patch: Partial<ProviderConfig>): Promi
       chatgpt_model: patch.chatgptModel ?? current.chatgptModel,
       higgsfield_key_id: keep(patch.higgsfieldKeyId, current.higgsfieldKeyId) || null,
       higgsfield_key_secret: keep(patch.higgsfieldKeySecret, current.higgsfieldKeySecret) || null,
+      sync_api_key: keep(patch.syncApiKey, current.syncApiKey) || null,
+      // `numeric` se manda como cadena: la columna la acepta y así no se pierde
+      // precisión al pasar por el flotante de JavaScript.
+      higgsfield_usd_per_credit:
+        String(patch.higgsfieldUsdPerCredit ?? current.higgsfieldUsdPerCredit) === "0"
+          ? null
+          : String(patch.higgsfieldUsdPerCredit ?? current.higgsfieldUsdPerCredit),
     },
     { onConflict: "user_id", defaultToNull: false },
   );
@@ -99,7 +112,7 @@ export async function writeProviderConfig(patch: Partial<ProviderConfig>): Promi
 
 /** Borra una clave concreta. Es la única forma de dejarla vacía. */
 export async function clearProviderKey(
-  key: "claude" | "chatgpt" | "higgsfield",
+  key: "claude" | "chatgpt" | "higgsfield" | "sync",
 ): Promise<void> {
   const user = await getUser();
   if (!user) throw new Error("No hay sesión.");
@@ -111,7 +124,9 @@ export async function clearProviderKey(
       ? { anthropic_api_key: null }
       : key === "chatgpt"
         ? { chatgpt_api_key: null }
-        : { higgsfield_key_id: null, higgsfield_key_secret: null };
+        : key === "sync"
+          ? { sync_api_key: null }
+          : { higgsfield_key_id: null, higgsfield_key_secret: null };
 
   const { error } = await admin
     .from("provider_configs")

@@ -172,6 +172,16 @@ export interface ProviderConfig {
   /** Higgsfield usa un par id:secreto, no una clave suelta. */
   higgsfieldKeyId: string;
   higgsfieldKeySecret: string;
+  /** La de sync.so, para el lipsync de los flujos. */
+  syncApiKey: string;
+  /**
+   * Cuánto vale un crédito de Higgsfield en dólares, según el plan.
+   *
+   * Cero es «no configurado», y entonces el coste se enseña en créditos
+   * diciendo que falta la tarifa. No hay número por defecto que no sea
+   * inventado: cada plan da un precio distinto por crédito.
+   */
+  higgsfieldUsdPerCredit: number;
 }
 
 /**
@@ -187,4 +197,8 @@ export interface ProviderConfigView {
   hasClaudeApiKey: boolean;
   hasChatgptApiKey: boolean;
   hasHiggsfieldCredentials: boolean;
+  /** Si hay clave de Sync guardada. Nunca la clave. */
+  hasSyncApiKey: boolean;
+  /** Este sí viaja: no es un secreto, es una tarifa. */
+  higgsfieldUsdPerCredit: number;
 }

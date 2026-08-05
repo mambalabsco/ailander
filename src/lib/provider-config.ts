@@ -38,6 +38,8 @@ export const defaultProviderConfig: ProviderConfig = {
   chatgptModel: "gpt-4.1",
   higgsfieldKeyId: "",
   higgsfieldKeySecret: "",
+  syncApiKey: "",
+  higgsfieldUsdPerCredit: 0,
 };
 
 export async function readProviderConfig(): Promise<ProviderConfig> {
@@ -64,6 +66,8 @@ export function toProviderConfigView(config: ProviderConfig): ProviderConfigView
     hasClaudeApiKey: Boolean(config.claudeApiKey),
     hasChatgptApiKey: Boolean(config.chatgptApiKey),
     hasHiggsfieldCredentials: Boolean(config.higgsfieldKeyId && config.higgsfieldKeySecret),
+    hasSyncApiKey: Boolean(config.syncApiKey),
+    higgsfieldUsdPerCredit: config.higgsfieldUsdPerCredit,
   };
 }
 
