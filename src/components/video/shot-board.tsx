@@ -9,6 +9,8 @@ import {
   findMusicStyle,
   musicCostLabel,
   MUSIC_GENERATORS,
+  generatorsFor,
+  reach,
   MUSIC_STYLES,
 } from "@/lib/video/music";
 import { findMusicLevel, MUSIC_LEVELS } from "@/lib/video/loudness";
@@ -24,8 +26,11 @@ import {
   generateClipsAction,
   generateKeyframesAction,
   generateVoiceAction,
+  addCatalogTrackAction,
 } from "@/app/products/[id]/video-actions";
 import { ROLE_META, planDurations, reviewShots } from "@/lib/video/shots";
+import { FreeMusic } from "@/components/video/free-music";
+import { AD_BRIEFS, type Track } from "@/lib/video/music-library";
 import type { Video } from "@/lib/data/videos";
 
 /**
@@ -93,6 +98,19 @@ export function ShotBoard({
       guion: shot.guion,
     })),
   );
+
+  /*
+    Lo que tiene que durar la música: lo que dura la voz.
+
+    No se pregunta porque ya se sabe, y preguntarlo sería dejar que alguien
+    escriba un número distinto del real — que es exactamente cómo se acaba con
+    una pista que no cubre el anuncio.
+  */
+  const musicSeconds = Math.max(10, Math.ceil(video.voiceSeconds || 30));
+  const musicChoices = generatorsFor(musicSeconds);
+  const musicPick = musicChoices.some((model) => model.id === musicModel)
+    ? musicModel
+    : musicChoices[0].id;
 
   const step =
     video.finalUrl ? 4 : withClip.length > 0 ? 3 : withKeyframe.length > 0 ? 2 : withCuts.length > 0 ? 1 : 0;
@@ -277,18 +295,48 @@ export function ShotBoard({
                   placeholder="tenso al principio, esperanzador al final"
                   className="w-64 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                 />
+
+                {/*
+                  Encargos ya escritos, por si no quieres escribir uno.
+
+                  Un «música épica» devuelve algo distinto cada vez. Estos llevan
+                  instrumentos, tempo, arco y qué **no** hacer, que es lo que
+                  hace que la segunda generación se parezca a la primera.
+                */}
+                <div className="mt-1 flex max-w-64 flex-wrap gap-1">
+                  {AD_BRIEFS.map((brief) => (
+                    <button
+                      key={brief.id}
+                      type="button"
+                      onClick={() => setMusicMood(brief.prompt)}
+                      title={brief.prompt}
+                      className="rounded-full border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 transition hover:border-violet-400 hover:bg-violet-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-violet-600 dark:hover:bg-violet-950/40"
+                    >
+                      {brief.label}
+                    </button>
+                  ))}
+                </div>
               </label>
 
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-slate-500 dark:text-slate-400">Generador</span>
                 <SelectField
-                  value={musicModel}
+                  value={musicPick}
                   onChange={(event) => setMusicModel(event.target.value)}
                   className="min-w-44"
                 >
-                  {MUSIC_GENERATORS.map((model) => (
+                  {/*
+                    Solo los que llegan a lo que dura el anuncio.
+
+                    Aquí la duración no hay que preguntarla: la marca la voz. Con
+                    la lista entera delante, elegir uno de duración fija para un
+                    VSL de noventa segundos es un clic normal, y el resultado
+                    —treinta segundos de música y sesenta de bucle— no se ve
+                    hasta tener el vídeo montado.
+                  */}
+                  {musicChoices.map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.label}
+                      {model.label} · hasta {reach(model)} s
                     </option>
                   ))}
                 </SelectField>
@@ -353,20 +401,40 @@ export function ShotBoard({
                     productId,
                     mood: musicMood,
                     estilo: musicStyle,
-                    model: musicModel,
+                    model: musicPick,
                     level: musicLevel,
                   })
                 }
                 label={video.musicUrl ? "Generar otra" : "Generar música"}
                 disabled={!providers.compose}
                 disabledReason={!providers.compose ? "Falta FAL_KEY" : undefined}
-                hint={`Instrumental y del largo de la voz. ${musicCostLabel(
-                  findMusicGenerator(musicModel),
-                  Math.max(10, Math.ceil(video.voiceSeconds || 30)),
+                hint={`Instrumental y del largo de la voz (${musicSeconds} s). ${musicCostLabel(
+                  findMusicGenerator(musicPick),
+                  musicSeconds,
                 )}`}
               />
             </div>
           </div>
+
+          {/*
+            Buscar en catálogos libres, además de generar.
+
+            Generar cuesta y tarda; para una cama de fondo muchas veces basta
+            con una pista que ya existe y que dura lo que tiene que durar. Solo
+            se ofrecen licencias que permiten anuncios.
+          */}
+          <FreeMusic
+            seconds={musicSeconds}
+            onUse={(track: Track) => {
+              void addCatalogTrackAction({
+                videoId: video.id,
+                productId,
+                url: track.url,
+                name: track.name,
+                license: track.license ?? "",
+              }).then(() => router.refresh());
+            }}
+          />
 
           {/*
             Todas las que se han generado, para escucharlas y elegir.

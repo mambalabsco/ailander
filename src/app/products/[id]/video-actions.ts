@@ -1445,3 +1445,60 @@ export async function runFullVideoAction(input: unknown): Promise<LaunchResult> 
     },
   });
 }
+
+/**
+ * Poner en el vídeo una pista de un catálogo libre.
+ *
+ * ## Por qué se guarda la dirección y no una copia
+ *
+ * Porque son direcciones públicas y estables —es lo que las hace utilizables
+ * por el montador— y copiar cada pista llenaría el almacenamiento de música que
+ * no es nuestra. Además el tope de subida existe justo para no guardar archivos
+ * grandes que no hacen falta.
+ *
+ * ## La licencia se comprueba aquí otra vez
+ *
+ * Es la última puerta antes de que la música entre en un anuncio, y lo que
+ * llega es lo que mandó el navegador: fiarse de que la pantalla ya filtró
+ * significa fiarse de una petición que cualquiera puede escribir a mano. Y lo
+ * que se juega no es un fallo de pintado, es publicar un anuncio con música que
+ * no se puede usar.
+ */
+export async function addCatalogTrackAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const videoId = readText(raw.videoId);
+  const productId = readText(raw.productId);
+  const url = readText(raw.url);
+  const name = readText(raw.name) || "Música del catálogo";
+  const license = readText(raw.license);
+
+  if (!videoId || !productId) return { ok: false, message: "Falta el vídeo." };
+  if (!url) return { ok: false, message: "Esa pista no trae dirección." };
+
+  try {
+    await guard();
+
+    const { usableInAds } = await import("@/lib/video/music-library");
+
+    if (!usableInAds(license)) {
+      return {
+        ok: false,
+        message: `La licencia «${license || "desconocida"}» no permite usar esa música en un anuncio.`,
+      };
+    }
+
+    await updateVideo(videoId, { musicUrl: url });
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: true,
+      message: `«${name}» puesta. Comprueba en el montaje que no tapa la voz: no hay control de volumen.`,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo poner." };
+  }
+}
