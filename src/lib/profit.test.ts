@@ -19,6 +19,7 @@ import {
   type CustomCost,
   type DayRow,
   type OrderInput,
+  type ShippingZone,
 } from "./profit.ts";
 
 /**
@@ -600,4 +601,34 @@ test("sin dato en alguno de los dos lados no se inventa una variación", () => {
 test("un margen de cero se compara igual", () => {
   assert.equal(pointsChange(0, 5), -5);
   assert.equal(pointsChange(5, 0), 5);
+});
+
+test("en dropshipping el envío no se suma aparte", () => {
+  /*
+   * El precio del proveedor ya lleva el envío dentro, así que el tramo de la
+   * zona sobra. Sumarlo lo contaría dos veces: con márgenes de dropshipping,
+   * eso hace que un producto que gana parezca que pierde.
+   */
+  const zona: ShippingZone = {
+    name: "México",
+    countries: ["MX"],
+    isDefault: false,
+    tiers: [{ qty: 1, cost: 5 }],
+    dropshipping: true,
+  };
+
+  assert.equal(shippingCostFor(zona, 3), 0);
+  assert.equal(shippingCostFor({ ...zona, dropshipping: false }, 3), 5);
+});
+
+test("una zona sin la marca se comporta como siempre", () => {
+  // Las zonas guardadas antes de que existiera la marca no la traen.
+  const vieja = {
+    name: "Chile",
+    countries: ["CL"],
+    isDefault: true,
+    tiers: [{ qty: 1, cost: 4 }],
+  } as ShippingZone;
+
+  assert.equal(shippingCostFor(vieja, 2), 4);
 });

@@ -700,6 +700,7 @@ export async function saveZoneAction(
     countries: string[];
     isDefault: boolean;
     tiers: { qty: number; cost: number }[];
+    dropshipping?: boolean;
   },
 ): Promise<{ ok: boolean; message: string }> {
   const name = zone.name.trim();
@@ -709,7 +710,11 @@ export async function saveZoneAction(
     .filter((tier) => Number.isFinite(tier.qty) && Number.isFinite(tier.cost) && tier.qty > 0)
     .sort((a, b) => a.qty - b.qty);
 
-  if (tiers.length === 0) {
+  /*
+   * En dropshipping no hacen falta tramos: el envío ya va en el coste por
+   * unidad. Exigirlos obligaría a inventarse un cero que después no se suma.
+   */
+  if (tiers.length === 0 && !zone.dropshipping) {
     return { ok: false, message: "Añade al menos un tramo con su cantidad y su coste." };
   }
 
@@ -718,10 +723,17 @@ export async function saveZoneAction(
     countries: zone.countries.map((code) => code.trim().toUpperCase()).filter(Boolean),
     isDefault: zone.isDefault,
     tiers,
+    dropshipping: zone.dropshipping === true,
   });
 
   revalidatePath("/datos");
-  return { ok: true, message: `Zona «${name}» guardada.` };
+
+  return {
+    ok: true,
+    message: zone.dropshipping
+      ? `Zona «${name}» guardada en modo dropshipping: su envío no se suma aparte.`
+      : `Zona «${name}» guardada.`,
+  };
 }
 
 export async function deleteZoneAction(storeId: string, name: string): Promise<void> {

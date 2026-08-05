@@ -668,6 +668,8 @@ type CostShippingZoneRow = {
   countries: string[];
   is_default: boolean;
   tiers: unknown;
+  /** Si el precio del proveedor ya incluye el envío. */
+  dropshipping: boolean;
   updated_at: string;
 };
 

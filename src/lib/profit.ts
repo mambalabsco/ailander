@@ -103,6 +103,20 @@ export interface ShippingZone {
   countries: string[];
   isDefault: boolean;
   tiers: ShippingTier[];
+  /**
+   * Dropshipping: el proveedor cobra producto y envío en un solo precio.
+   *
+   * ## Por qué cambia la cuenta y no solo la etiqueta
+   *
+   * Porque el precio del proveedor ya lleva el envío dentro. Si además se suma
+   * el tramo de esta zona, el envío se cuenta **dos veces** y el beneficio sale
+   * más bajo de lo real — que en dropshipping, donde el margen es fino, puede
+   * ser la diferencia entre creer que un producto pierde dinero y que gane.
+   *
+   * Con esto activado, el tramo de la zona no se suma: el coste ya está en el
+   * coste por unidad.
+   */
+  dropshipping?: boolean;
 }
 
 export interface GatewayFee {
@@ -314,6 +328,15 @@ export function zoneFor(zones: ShippingZone[], countryCode: string): ShippingZon
  */
 export function shippingCostFor(zone: ShippingZone | null, quantity: number): number {
   if (!zone || zone.tiers.length === 0 || quantity <= 0) return 0;
+
+  /*
+   * En dropshipping el envío no se suma aparte: ya va en el coste por unidad.
+   *
+   * Se comprueba **aquí** y no en quien llama porque quien llama son dos sitios
+   * —el resumen diario y el detalle por pedido— y que uno lo hiciera y el otro
+   * no daría dos beneficios distintos para los mismos datos.
+   */
+  if (zone.dropshipping) return 0;
 
   const sorted = [...zone.tiers].sort((a, b) => a.qty - b.qty);
   let cost = 0;

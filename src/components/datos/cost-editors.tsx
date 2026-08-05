@@ -11,6 +11,7 @@ import {
   saveGatewayFeesAction,
   saveZoneAction,
 } from "@/app/datos/actions";
+import { COUNTRIES } from "@/lib/locales";
 import type { CustomCost, ShippingZone } from "@/lib/profit";
 
 /**
@@ -267,6 +268,15 @@ function ZoneForm({
   const [name, setName] = useState(zone?.name ?? "");
   const [countries, setCountries] = useState(zone?.countries.join(", ") ?? "");
   const [isDefault, setIsDefault] = useState(zone?.isDefault ?? false);
+  const [dropshipping, setDropshipping] = useState(zone?.dropshipping === true);
+
+  /** Los códigos ya elegidos, para pintar la lista. */
+  const picked = new Set(
+    countries
+      .split(",")
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean),
+  );
   const [tiers, setTiers] = useState<{ qty: string; cost: string }[]>(
     zone?.tiers.map((tier) => ({ qty: String(tier.qty), cost: String(tier.cost) })) ?? [
       { qty: "1", cost: "" },
@@ -287,16 +297,45 @@ function ZoneForm({
           />
         </label>
 
-        <label className="flex flex-col gap-1">
+        {/*
+          Los países se eligen de la lista, no se teclean.
+
+          Escribiendo el código a mano, un «MEX» en vez de «MX» no da error: la
+          zona simplemente no encaja con ningún pedido y el envío de ese país
+          cuenta cero. El beneficio sale más alto y nada avisa.
+        */}
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Países, por su código de dos letras
+            Países de esta zona
           </span>
-          <TextField
-            value={countries}
-            onChange={(event) => setCountries(event.target.value)}
-            placeholder="MX, US"
-          />
-        </label>
+
+          <div className="flex flex-wrap gap-1 rounded-xl border border-slate-300 p-2 dark:border-slate-700">
+            {COUNTRIES.map((country) => {
+              const on = picked.has(country.code);
+
+              return (
+                <button
+                  key={country.code}
+                  type="button"
+                  onClick={() => {
+                    const next = new Set(picked);
+                    if (on) next.delete(country.code);
+                    else next.add(country.code);
+                    setCountries([...next].join(", "));
+                  }}
+                  aria-pressed={on}
+                  className={`rounded-full px-2 py-0.5 text-xs transition ${
+                    on
+                      ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {country.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm">
@@ -308,6 +347,31 @@ function ZoneForm({
         />
         Usar para todo lo que no encaje en otra zona
       </label>
+
+      {/*
+        Dropshipping: el proveedor cobra producto y envío en un solo precio.
+
+        No es una etiqueta, cambia la cuenta. Ese precio ya está en el coste por
+        unidad, así que sumar además el tramo cuenta el envío dos veces y baja
+        el beneficio sin avisar — y con márgenes de dropshipping eso decide si
+        un producto parece que pierde dinero.
+      */}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={dropshipping}
+          onChange={(event) => setDropshipping(event.target.checked)}
+          className="h-4 w-4"
+        />
+        Dropshipping: el proveedor ya cobra el envío dentro del precio del producto
+      </label>
+
+      {dropshipping ? (
+        <p className="text-xs text-amber-800 dark:text-amber-300">
+          Los tramos de abajo no se van a sumar. Pon el precio del proveedor —producto más envío—
+          como coste por unidad en la pestaña de costos.
+        </p>
+      ) : null}
 
       <div className="space-y-2">
         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -381,8 +445,12 @@ function ZoneForm({
             startTransition(async () => {
               const result = await saveZoneAction(storeId, {
                 name,
-                countries: countries.split(",").map((code) => code.trim()),
+                countries: countries
+                  .split(",")
+                  .map((code) => code.trim().toUpperCase())
+                  .filter(Boolean),
                 isDefault,
+                dropshipping,
                 tiers: tiers.map((tier) => ({ qty: Number(tier.qty), cost: Number(tier.cost) })),
               });
 

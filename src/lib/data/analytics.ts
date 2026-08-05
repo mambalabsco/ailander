@@ -931,6 +931,7 @@ export async function readCostSettings(
       countries: row.countries ?? [],
       isDefault: row.is_default,
       tiers: parseTiers(row.tiers),
+      dropshipping: row.dropshipping === true,
     })),
     gatewayFees: (gateways.data ?? []).map((row) => ({
       gateway: row.gateway,
@@ -1016,6 +1017,7 @@ export async function saveShippingZone(
       countries: zone.countries,
       is_default: zone.isDefault,
       tiers: zone.tiers,
+      dropshipping: zone.dropshipping === true,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "store_id,name", defaultToNull: false },
