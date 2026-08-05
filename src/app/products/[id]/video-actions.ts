@@ -876,6 +876,14 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
   const videoId = readText(raw.videoId);
   const productId = readText(raw.productId);
   const mood = readText(raw.mood);
+  /*
+   * El estilo, que es lo que de verdad cambia cómo suena.
+   *
+   * Antes solo había un «aire» escrito a mano y el encargo era el mismo para
+   * todo: cama plana bajo una locución. Para un anuncio tipo película eso es la
+   * receta de una pista sosa — le prohibía al modelo justo lo que hace falta.
+   */
+  const styleId = readText(raw.estilo);
   const modelId = readText(raw.model);
   const levelId = readText(raw.level);
 
@@ -908,7 +916,7 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
     productId,
     kind: "imagenes",
     label: `Música · ${video.title}`,
-    resume: { videoId, productId, mood, model: modelId, level: levelId },
+    resume: { videoId, productId, mood, estilo: styleId, model: modelId, level: levelId },
     work: async (report) => {
       await report(`Componiendo ${seconds} s con ${generator.label} (toma ${take})`);
 
@@ -916,7 +924,9 @@ export async function generateMusicAction(input: unknown): Promise<LaunchResult>
         prompt: buildMusicPrompt({
           productName: product.name,
           audience: product.targetAudience || "el público objetivo",
+          styleId,
           mood,
+          seconds,
         }),
         seconds,
         model: generator.id,

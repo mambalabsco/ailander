@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   buildMusicInput,
+  MUSIC_STYLES,
   buildMusicPrompt,
   findMusicGenerator,
   guaranteesVariation,
@@ -126,12 +127,15 @@ test("la etiqueta avisa de que se cobra el minuto empezado", () => {
 
 /* --------------------- Qué música se le pide al modelo --------------------- */
 
-test("el encargo pide siempre instrumental y sin melodía protagonista", () => {
-  // Una cama con voz compite con la locución por el mismo sitio del oído.
-  const prompt = buildMusicPrompt({ productName: "Naturox", audience: "mujeres de 45" });
+/* Una cama con voz compite con la locución por el mismo sitio del oído: no es
+ * cuestión de volumen, es que no caben dos voces. */
+test("el encargo pide siempre instrumental", () => {
+  for (const style of MUSIC_STYLES) {
+    const prompt = buildMusicPrompt({ productName: "x", audience: "y", styleId: style.id });
 
-  assert.match(prompt, /No vocals/);
-  assert.match(prompt, /no prominent lead melody/);
+    assert.match(prompt, /No vocals/, style.id);
+    assert.match(prompt, /voice-over goes on top/, style.id);
+  }
 });
 
 test("el producto y el público entran en el encargo", () => {
@@ -141,8 +145,67 @@ test("el producto y el público entran en el encargo", () => {
   assert.match(prompt, /mujeres de 45/);
 });
 
-test("sin aire pedido hay uno por defecto en vez de dejarlo suelto", () => {
-  assert.match(buildMusicPrompt({ productName: "x", audience: "y" }), /Mood: .+\./);
+/*
+ * «Inspiracional» no le dice nada a un generador: cada modelo lo interpreta como
+ * quiere. Instrumentos, tempo y arreglo sí, y sale parecido dos veces seguidas.
+ */
+test("cada estilo manda sus instrumentos, su tempo y su arreglo", () => {
+  const prompt = buildMusicPrompt({ productName: "x", audience: "y", styleId: "inspiracional" });
+
+  assert.match(prompt, /Instruments: .*piano/);
+  assert.match(prompt, /Tempo: 88 BPM/);
+  assert.match(prompt, /Arrangement: .*strings enter/);
+});
+
+/*
+ * El fallo de la primera versión: se pedía dinámica plana y sin subidas **a
+ * todo**. Para una cama bajo una locución densa está bien; para un anuncio tipo
+ * película es la receta de una pista sosa.
+ */
+test("solo la cama neutra pide quedarse plana", () => {
+  assert.match(buildMusicPrompt({ productName: "x", audience: "y", styleId: "cama" }), /no build/);
+
+  assert.ok(
+    !buildMusicPrompt({ productName: "x", audience: "y", styleId: "cinematografico" }).includes(
+      "no build",
+    ),
+  );
+});
+
+/* Y el cinematográfico sí pide lo contrario: que crezca y suelte. */
+test("el cinematográfico pide tensión y una liberación", () => {
+  const prompt = buildMusicPrompt({ productName: "x", audience: "y", styleId: "cinematografico" });
+
+  assert.match(prompt, /tension builds/);
+  assert.match(prompt, /release/);
+});
+
+test("un estilo que no existe cae en uno bueno, no en nada", () => {
+  assert.match(buildMusicPrompt({ productName: "x", audience: "y", styleId: "raro" }), /Style: /);
+});
+
+/* Lo escrito a mano se suma al estilo, no lo sustituye. */
+test("el matiz a mano se añade sin borrar el estilo", () => {
+  const prompt = buildMusicPrompt({
+    productName: "x",
+    audience: "y",
+    styleId: "emotivo",
+    mood: "con un reloj de fondo",
+  });
+
+  assert.match(prompt, /solo cello/);
+  assert.match(prompt, /reloj de fondo/);
+});
+
+test("los segundos se dicen cuando se saben", () => {
+  assert.match(buildMusicPrompt({ productName: "x", audience: "y", seconds: 45 }), /about 45 seconds/);
+  assert.ok(!buildMusicPrompt({ productName: "x", audience: "y" }).includes("Length"));
+});
+
+test("todos los estilos están descritos", () => {
+  for (const style of MUSIC_STYLES) {
+    assert.ok(style.label && style.note && style.instruments && style.tempo, style.id);
+  }
 });
 
 /* -------------------- Que la segunda vez no suene igual -------------------- */

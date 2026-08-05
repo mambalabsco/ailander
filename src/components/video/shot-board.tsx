@@ -4,7 +4,13 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
-import { findMusicGenerator, musicCostLabel, MUSIC_GENERATORS } from "@/lib/video/music";
+import {
+  findMusicGenerator,
+  findMusicStyle,
+  musicCostLabel,
+  MUSIC_GENERATORS,
+  MUSIC_STYLES,
+} from "@/lib/video/music";
 import { findMusicLevel, MUSIC_LEVELS } from "@/lib/video/loudness";
 import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voice-settings";
 import { GenerateButton } from "@/components/generate-button";
@@ -50,6 +56,7 @@ export function ShotBoard({
   const [redo, setRedo] = useState<Set<string>>(new Set());
   const [musicNote, setMusicNote] = useState("");
   const [musicMood, setMusicMood] = useState("");
+  const [musicStyle, setMusicStyle] = useState(MUSIC_STYLES[0].id);
   /** Si hay archivo elegido. El `ref` no repinta al cambiar, y el botón depende. */
   const [musicChosen, setMusicChosen] = useState(false);
   const [musicModel, setMusicModel] = useState(MUSIC_GENERATORS[0].id);
@@ -287,6 +294,29 @@ export function ShotBoard({
                 </SelectField>
               </label>
 
+              {/*
+                El estilo, que es lo que de verdad cambia cómo suena.
+
+                Antes solo había un campo de «aire» escrito a mano, y el encargo
+                al modelo era el mismo para todo: cama plana bajo una locución,
+                sin subidas y sin melodía. Para eso está bien; para un anuncio
+                tipo película era la receta de una pista sosa.
+              */}
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Estilo</span>
+                <SelectField
+                  value={musicStyle}
+                  onChange={(event) => setMusicStyle(event.target.value)}
+                  className="min-w-44"
+                >
+                  {MUSIC_STYLES.map((style) => (
+                    <option key={style.id} value={style.id}>
+                      {style.label}
+                    </option>
+                  ))}
+                </SelectField>
+              </label>
+
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-slate-500 dark:text-slate-400">Volumen</span>
                 <SelectField
@@ -304,7 +334,8 @@ export function ShotBoard({
             </div>
 
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              {findMusicGenerator(musicModel).note} {findMusicLevel(musicLevel).note}
+              {findMusicStyle(musicStyle).note} {findMusicGenerator(musicModel).note}{" "}
+              {findMusicLevel(musicLevel).note}
             </p>
           </div>
 
@@ -321,6 +352,7 @@ export function ShotBoard({
                     videoId: video.id,
                     productId,
                     mood: musicMood,
+                    estilo: musicStyle,
                     model: musicModel,
                     level: musicLevel,
                   })

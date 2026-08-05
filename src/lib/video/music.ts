@@ -266,27 +266,165 @@ export function musicCostLabel(model: MusicGenerator, seconds: number): string {
 
 /* ----------------------- Qué música pedirle al modelo ---------------------- */
 
+/* ------------------------------- Los estilos -------------------------------- */
+
+export interface MusicStyle {
+  id: string;
+  label: string;
+  note: string;
+  /** Con qué se toca. Es lo que más cambia el resultado. */
+  instruments: string;
+  /** A qué velocidad, en pulsaciones por minuto. */
+  tempo: string;
+  /**
+   * Cómo evoluciona.
+   *
+   * Vacío en la cama neutra: es la única que **no** debe evolucionar.
+   */
+  arc: string;
+}
+
 /**
- * El encargo de la música, a partir de lo que vende el anuncio.
+ * Los estilos que se pueden pedir.
  *
- * Se pide **instrumental y sin protagonismo** siempre. Una cama con voz compite
- * con la locución por el mismo sitio del oído, y una melodía con gancho se lleva
- * la atención justo cuando se está contando el mecanismo.
+ * ## Por qué hacía falta esto
+ *
+ * El encargo era uno solo y estaba escrito para una cama de fondo bajo una
+ * locución densa: «sin melodía principal, dinámica plana, sin subidas, nada que
+ * distraiga de una voz». Para eso está bien, y para un anuncio tipo película es
+ * exactamente la receta de una pista sosa — le estaba **prohibiendo** al modelo
+ * todo lo que hace que una música de VSL funcione.
+ *
+ * Ahora la cama neutra es una opción más, no la única.
+ *
+ * ## Y por qué cada estilo dice instrumentos, tempo y arco
+ *
+ * Porque «inspiracional» no le dice nada a un generador: es una palabra que cada
+ * modelo interpreta como quiere. «Piano y cuerdas, 90 pulsaciones, entra solo el
+ * piano y a la mitad entran las cuerdas» sí, y sale parecido dos veces seguidas.
+ */
+export const MUSIC_STYLES: MusicStyle[] = [
+  {
+    id: "cinematografico",
+    label: "Cinematográfico",
+    note: "De tráiler: tensión que crece y golpe en el momento del producto.",
+    instruments:
+      "deep sub bass, low brass swells, tense sustained strings, muffled taiko-style drums, occasional rising riser, sparse metallic hits",
+    tempo: "90 BPM, half-time feel",
+    arc: "starts sparse and tense, tension builds through the middle, one clear release near the end that opens into wide sustained brass and strings",
+  },
+  {
+    id: "inspiracional",
+    label: "Inspiracional",
+    note: "Piano y cuerdas que suben. El de los anuncios que emocionan.",
+    instruments:
+      "solo piano, warm string section, soft mallet percussion, light choir pad in the last third",
+    tempo: "88 BPM",
+    arc: "starts with piano alone, strings enter around a third of the way in, builds steadily, resolves warm and major at the end",
+  },
+  {
+    id: "emotivo",
+    label: "Emotivo",
+    note: "Piano y chelo, íntimo. Para testimonios y para el problema.",
+    instruments: "intimate felt piano, solo cello, faint room tone, no drums",
+    tempo: "70 BPM",
+    arc: "stays intimate throughout, one small swell in the middle, ends unresolved and quiet",
+  },
+  {
+    id: "esperanzador",
+    label: "Esperanzador",
+    note: "Guitarra acústica y luz de mañana. Menos épico, más cercano.",
+    instruments:
+      "fingerpicked acoustic guitar, soft piano, light shaker and claps, warm upright bass",
+    tempo: "100 BPM",
+    arc: "gentle start, percussion enters early, stays bright and steady, small lift at the end",
+  },
+  {
+    id: "urgencia",
+    label: "Urgencia",
+    note: "Pulso que no para. Para la parte del problema y para la oferta.",
+    instruments:
+      "driving muted pulse, ticking percussion, low staccato strings, tight kick, rising synth line",
+    tempo: "120 BPM",
+    arc: "constant forward pressure, tightens progressively, cuts to near silence for one beat before the end",
+  },
+  {
+    id: "moderno",
+    label: "Moderno",
+    note: "Electrónico limpio, tipo anuncio de tecnología.",
+    instruments: "clean synth plucks, soft analog pad, tight electronic kick, subtle vinyl texture",
+    tempo: "110 BPM",
+    arc: "steady groove from the start, filter opens gradually, bright and even by the end",
+  },
+  {
+    id: "cama",
+    label: "Cama neutra",
+    note: "Plana a propósito: para cuando la locución no deja hueco.",
+    instruments: "soft sustained pads, gentle low percussion, subtle warm bass",
+    tempo: "80 BPM",
+    arc: "",
+  },
+];
+
+export function findMusicStyle(id: string): MusicStyle {
+  return MUSIC_STYLES.find((style) => style.id === id) ?? MUSIC_STYLES[0];
+}
+
+/**
+ * El encargo de la música.
+ *
+ * ## Lo que se pide siempre
+ *
+ * **Instrumental.** Una cama con voz compite con la locución por el mismo sitio
+ * del oído: no es cuestión de volumen, es que no caben dos voces.
+ *
+ * ## Y lo que ya no se prohíbe
+ *
+ * Antes se pedía además dinámica plana, sin subidas y sin melodía principal. Para
+ * una cama bajo una locución densa está bien; para un anuncio tipo película es la
+ * receta de una pista sosa. Ahora eso solo lo pide el estilo «cama neutra», que
+ * es el único al que le corresponde.
  */
 export function buildMusicPrompt(options: {
   productName: string;
   audience: string;
+  /** El estilo elegido. Sin él, el cinematográfico. */
+  styleId?: string;
+  /** Un matiz escrito a mano, que se añade al estilo en vez de sustituirlo. */
   mood?: string;
+  seconds?: number;
 }): string {
-  const mood = options.mood?.trim() || "cálido y esperanzador, con un pulso constante que avanza";
+  const style = findMusicStyle(options.styleId ?? "");
+  const seconds = options.seconds && options.seconds > 0 ? Math.round(options.seconds) : 0;
 
-  return [
-    `Instrumental background bed for a direct-response supplement ad about ${options.productName}, aimed at ${options.audience}.`,
-    `Mood: ${mood}.`,
-    // Sin voces ni instrumento solista: la locución va encima.
-    "No vocals, no singing, no spoken word, no prominent lead melody.",
-    "Soft sustained pads, gentle low percussion, subtle warm bass.",
-    "Even dynamics, no sudden hits, no drops, nothing that pulls attention from a voice-over.",
-    "Loopable, consistent from start to end.",
-  ].join(" ");
+  const lines = [
+    `Instrumental score for a direct-response video ad about ${options.productName}, aimed at ${options.audience}.`,
+    `Style: ${style.label.toLowerCase()}. ${style.note}`,
+    `Instruments: ${style.instruments}.`,
+    `Tempo: ${style.tempo}.`,
+  ];
+
+  if (style.arc) {
+    lines.push(`Arrangement: ${style.arc}.`);
+  } else {
+    /*
+     * La cama neutra es la única que pide quedarse quieta, y lo pide explícito:
+     * un modelo al que no le dices nada del arreglo te mete una subida igual.
+     */
+    lines.push(
+      "Arrangement: even from start to end, no build, no drop, nothing that pulls attention from a voice-over.",
+    );
+  }
+
+  if (seconds > 0) lines.push(`Length: about ${seconds} seconds.`);
+
+  if (options.mood?.trim()) lines.push(`Also: ${options.mood.trim()}.`);
+
+  // Siempre, y al final para que sea lo último que lee.
+  lines.push(
+    "No vocals, no singing, no spoken word, no lyrics: a voice-over goes on top.",
+    "Leave the midrange around 1-4 kHz uncrowded so speech stays clear.",
+  );
+
+  return lines.join(" ");
 }
