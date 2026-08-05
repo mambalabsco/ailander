@@ -700,3 +700,45 @@ test("los atributos sin valor del vídeo se conservan", () => {
   assert.match(limpio, /loop/);
   assert.match(limpio, /playsinline/);
 });
+
+/*
+ * Los vídeos de esa página son `<video data-src="….webm">` **sin `src`**,
+ * esperando a que su JavaScript lo mueva. Sin despertarlos se quedaban en un
+ * rectángulo negro con controles y nada que reproducir.
+ */
+test("los vídeos perezosos también se despiertan", () => {
+  const html = '<video data-src="https://cdn/x.webm" loop muted autoplay playsinline></video>';
+  const out = unlazy(html);
+
+  assert.match(out, /src="https:\/\/cdn\/x\.webm"/);
+});
+
+/* `poster` a secas hace que el navegador cargue la cadena vacía y enseñe el
+ * icono de imagen rota encima del vídeo. */
+test("una dirección sin valor no se conserva", () => {
+  const limpio = sanitizeHtml("<video poster src></video>");
+
+  assert.ok(!limpio.includes("poster"));
+  assert.ok(!limpio.includes("src"));
+});
+
+/* En una página de venta el .webm de fondo es la demo: hay que tenerlo a mano. */
+test("los vídeos se recogen igual que las imágenes", () => {
+  const found = collectImages(
+    '<video src="/demo.webm" poster="/cartel.jpg"></video><img src="/foto.jpg">',
+  );
+
+  assert.ok(found.includes("/demo.webm"));
+  assert.ok(found.includes("/cartel.jpg"));
+  assert.ok(found.includes("/foto.jpg"));
+});
+
+/*
+ * El «añadir el src que falta» decía `<img` a secas, así que a un `<video
+ * data-src="….webm">` —que no trae `src` ninguno— no se le ponía nada. Los once
+ * vídeos de la página se quedaban fuera y nada fallaba.
+ */
+test("el src que falta se añade con su propia etiqueta", () => {
+  assert.match(unlazy('<video data-src="/x.webm"></video>'), /<video src="\/x\.webm"/);
+  assert.match(unlazy('<source data-srcset="/y.webp 1x">'), /<source srcset="\/y\.webp 1x"/);
+});
