@@ -652,3 +652,51 @@ test("los huecos incrustados no son imágenes", () => {
 test("no se repiten", () => {
   assert.deepEqual(collectImages('<img src="/a.jpg"><img src="/a.jpg">'), ["/a.jpg"]);
 });
+
+/*
+ * Los elementos del constructor **son la maqueta**: esa página lleva 54
+ * `<gp-row>`, que es lo que reparte las columnas y pone los anchos y los
+ * márgenes. Tirarlos dejaba el contenido suelto a ancho completo — exactamente
+ * lo que se veía.
+ */
+test("los elementos del constructor se conservan", () => {
+  const html = '<gp-row class="gp-flex"><gp-button>Comprar</gp-button></gp-row>';
+  assert.equal(sanitizeHtml(html), html);
+});
+
+/* Sin su JavaScript son cajas con estilos, igual que un div: no ejecutan nada. */
+test("pero siguen sin poder ejecutar nada", () => {
+  const limpio = sanitizeHtml('<gp-row onclick="robar()"><script>alert(1)</script></gp-row>');
+
+  assert.ok(!limpio.includes("onclick"));
+  assert.ok(!limpio.includes("alert"));
+  assert.match(limpio, /<gp-row><\/gp-row>/);
+});
+
+/* El guion en el nombre es lo que la norma exige: sin él es una etiqueta inventada. */
+test("una etiqueta inventada sin guion sigue cayéndose", () => {
+  assert.equal(sanitizeHtml("<marquee>Hola</marquee>"), "Hola");
+});
+
+test("el vídeo se queda: en una página de venta es la demo", () => {
+  const html = '<video src="/demo.mp4" controls></video>';
+  assert.equal(sanitizeHtml(html), html);
+});
+
+/*
+ * Sin autoplay, un vídeo de fondo se queda en un rectángulo negro — justo donde
+ * el original enseña dos fotos. Con sonido sería lo peor que puede hacer una
+ * página, así que se permite solo en silencio: la misma regla del navegador.
+ */
+test("un vídeo mudo puede arrancar solo; con sonido no", () => {
+  assert.match(sanitizeHtml("<video autoplay muted loop></video>"), /autoplay/);
+  assert.ok(!sanitizeHtml("<video autoplay></video>").includes("autoplay"));
+});
+
+test("los atributos sin valor del vídeo se conservan", () => {
+  const limpio = sanitizeHtml("<video controls loop playsinline></video>");
+
+  assert.match(limpio, /controls/);
+  assert.match(limpio, /loop/);
+  assert.match(limpio, /playsinline/);
+});
