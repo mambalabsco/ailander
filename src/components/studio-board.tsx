@@ -7,7 +7,11 @@ import { GenerateButton } from "@/components/generate-button";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
 import { ASPECTS, aspectsFor, nearestAspect, pixels } from "@/lib/video/aspect";
 import {
+  AD_BRIEFS,
+  ENERGIES,
+  MOODS,
   attributionFor,
+  filterTracks,
   findLicense,
   type Track,
 } from "@/lib/video/music-library";
@@ -984,6 +988,28 @@ export function StudioBoard({
             <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
               <p className="text-sm font-medium">Música</p>
 
+              {/*
+                Encargos ya escritos, por si no quieres escribir uno.
+
+                Un «música épica» devuelve algo distinto cada vez. Estos llevan
+                instrumentos, tempo, arco y qué **no** hacer, que es lo que hace
+                que la segunda generación se parezca a la primera. Rellenan el
+                campo en vez de generar: lo normal es retocarlos antes.
+              */}
+              <div className="mt-2 flex flex-wrap gap-1">
+                {AD_BRIEFS.map((brief) => (
+                  <button
+                    key={brief.id}
+                    type="button"
+                    onClick={() => setMusicPrompt(brief.prompt)}
+                    title={brief.prompt}
+                    className="rounded-full border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 transition hover:border-violet-400 hover:bg-violet-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-violet-600 dark:hover:bg-violet-950/40"
+                  >
+                    {brief.label}
+                  </button>
+                ))}
+              </div>
+
               <input
                 value={musicPrompt}
                 onChange={(event) => setMusicPrompt(event.target.value)}
@@ -1354,6 +1380,9 @@ function FreeMusic({
   const [message, setMessage] = useState("");
   const [criteria, setCriteria] = useState("");
   const [picked, setPicked] = useState("");
+  const [mood, setMood] = useState("");
+  const [energy, setEnergy] = useState("");
+  const [within, setWithin] = useState("");
   const [busy, startBusy] = useTransition();
 
   if (!open) {
@@ -1363,6 +1392,8 @@ function FreeMusic({
       </Button>
     );
   }
+
+  const shown = filterTracks(tracks, { mood, energy, text: within });
 
   return (
     <div className="mt-2 space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -1416,6 +1447,40 @@ function FreeMusic({
       {tracks.length > 0 ? (
         <>
           {/*
+            Filtrar lo que ya se trajo, sin volver a preguntar al catálogo.
+
+            Una búsqueda devuelve cuarenta pistas y escucharlas todas es el
+            trabajo que esto venía a quitar. El ánimo y la energía salen de las
+            etiquetas del catálogo, así que hay pistas sin clasificar: por eso
+            el filtro vacío no filtra, en vez de esconderlas.
+          */}
+          <div className="flex flex-wrap gap-2">
+            <SelectField value={mood} onChange={(event) => setMood(event.target.value)}>
+              <option value="">Cualquier ánimo</option>
+              {MOODS.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.label}
+                </option>
+              ))}
+            </SelectField>
+
+            <SelectField value={energy} onChange={(event) => setEnergy(event.target.value)}>
+              <option value="">Cualquier energía</option>
+              {ENERGIES.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.label}
+                </option>
+              ))}
+            </SelectField>
+
+            <input
+              value={within}
+              onChange={(event) => setWithin(event.target.value)}
+              placeholder="Filtrar por palabra…"
+              className="min-w-40 flex-1 rounded-xl border border-slate-300 px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+            />
+          </div>
+          {/*
             Que elija la IA, con criterios escritos.
 
             Se le pasan las pistas que hay y devuelve una de ellas. Preguntarle
@@ -1450,7 +1515,7 @@ function FreeMusic({
           </div>
 
           <ul className="max-h-72 space-y-1 overflow-y-auto">
-            {tracks.map((track) => (
+            {shown.map((track) => (
               <li
                 key={track.id}
                 className={`flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 text-xs ${
@@ -1482,6 +1547,13 @@ function FreeMusic({
               </li>
             ))}
           </ul>
+
+          {shown.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Ninguna de las {tracks.length} encontradas pasa esos filtros. El ánimo sale de las
+              etiquetas del catálogo y muchas vienen sin etiquetar.
+            </p>
+          ) : null}
 
           {picked && attributionFor(tracks.find((track) => track.id === picked) ?? tracks[0]) ? (
             <p className="text-xs text-amber-700 dark:text-amber-400">
