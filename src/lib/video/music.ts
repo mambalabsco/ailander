@@ -498,3 +498,53 @@ export function durationWarning(model: MusicGenerator, asked: number): string {
 export function takesDuration(model: MusicGenerator): boolean {
   return model.durationField !== null;
 }
+
+/**
+ * Lo que da ese generador como mucho, en segundos.
+ *
+ * Los que no aceptan duración devuelven una pieza suya de en torno a treinta
+ * segundos. No está publicado al segundo, así que se usa treinta como lo que se
+ * puede contar con ello: pasarse aquí haría creer que cubre un vídeo que no
+ * cubre, y quedarse corto solo hace que la lista sea algo más estricta.
+ */
+export const FIXED_SECONDS = 30;
+
+export function reach(model: MusicGenerator): number {
+  return takesDuration(model) ? model.maxSeconds : FIXED_SECONDS;
+}
+
+/**
+ * Los generadores que pueden cubrir un vídeo de esa duración de una pieza.
+ *
+ * ## Por qué filtrar y no solo avisar
+ *
+ * Porque avisar deja la decisión donde no toca. Con la lista entera delante,
+ * elegir Lyria para un anuncio de noventa segundos es un clic normal, y el
+ * resultado —treinta segundos de música y sesenta de bucle o de silencio— no se
+ * ve hasta tener el vídeo montado. Quitando de la lista lo que no llega, ese
+ * clic deja de existir.
+ *
+ * Nunca devuelve vacío: si ninguno llega, se devuelven todos y quien llama lo
+ * dice. Una lista vacía es una pantalla rota, y el problema no es que no haya
+ * generadores, es que ninguno da tanto.
+ */
+export function generatorsFor(seconds: number): MusicGenerator[] {
+  const wanted = Math.round(seconds);
+  if (!Number.isFinite(wanted) || wanted <= 0) return MUSIC_GENERATORS;
+
+  const enough = MUSIC_GENERATORS.filter((model) => reach(model) >= wanted);
+
+  return enough.length > 0 ? enough : MUSIC_GENERATORS;
+}
+
+/** Si para esa duración no hay ninguno que llegue, qué decir. */
+export function outOfReachNote(seconds: number): string {
+  const wanted = Math.round(seconds);
+  const best = MUSIC_GENERATORS.reduce((top, model) =>
+    reach(model) > reach(top) ? model : top,
+  );
+
+  if (reach(best) >= wanted) return "";
+
+  return `Ninguno llega a ${wanted} s. El que más da es ${best.label}, con ${reach(best)} s: el resto se cubriría repitiendo.`;
+}

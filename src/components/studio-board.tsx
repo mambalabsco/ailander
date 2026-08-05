@@ -9,7 +9,10 @@ import { ASPECTS, aspectsFor, nearestAspect, pixels } from "@/lib/video/aspect";
 import {
   durationWarning,
   findMusicGenerator,
+  generatorsFor,
   musicCostLabel,
+  outOfReachNote,
+  reach,
   MUSIC_GENERATORS,
 } from "@/lib/video/music";
 import { MUSIC_LEVELS } from "@/lib/video/loudness";
@@ -155,6 +158,19 @@ export function StudioBoard({
   const cliClip = clipModel.startsWith("hf:")
     ? (cliVideoModels.find((model) => `hf:${model.slug}` === clipModel) ?? null)
     : null;
+
+  /*
+    El generador de música que se va a usar de verdad.
+
+    Al subir los segundos, el que estaba elegido puede dejar de estar en la
+    lista. Si el desplegable siguiera enseñándolo, se mandaría a generar uno que
+    ya se había descartado por corto — y sin que la pantalla lo dijera, porque
+    el nombre sigue ahí escrito.
+  */
+  const musicChoices = generatorsFor(musicSeconds);
+  const musicPick = musicChoices.some((model) => model.id === musicModel)
+    ? musicModel
+    : musicChoices[0].id;
 
   const clipGenerator = findGenerator(clipModel);
 
@@ -971,13 +987,21 @@ export function StudioBoard({
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-slate-500 dark:text-slate-400">Generador</span>
                   <SelectField
-                    value={musicModel}
+                    value={musicPick}
                     onChange={(event) => setMusicModel(event.target.value)}
                     className="min-w-40"
                   >
-                    {MUSIC_GENERATORS.map((model) => (
+                    {/*
+                      Solo los que llegan a la duración pedida.
+
+                      Con la lista entera delante, elegir Lyria para un anuncio
+                      de noventa segundos es un clic normal — y el resultado no
+                      se ve hasta tener el vídeo montado. Quitando lo que no
+                      llega, ese clic deja de existir.
+                    */}
+                    {musicChoices.map((model) => (
                       <option key={model.id} value={model.id}>
-                        {model.label}
+                        {model.label} · hasta {reach(model)} s
                       </option>
                     ))}
                   </SelectField>
@@ -1002,19 +1026,28 @@ export function StudioBoard({
                   Los que no dejan pedir duración no la preguntan: el campo
                   daría a entender que se respeta, y dan lo que dan.
                 */}
-                {findMusicGenerator(musicModel).durationField ? (
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
-                    <input
-                      type="number"
-                      min={findMusicGenerator(musicModel).minSeconds}
-                      max={findMusicGenerator(musicModel).maxSeconds}
-                      value={musicSeconds}
-                      onChange={(event) => setMusicSeconds(Number(event.target.value))}
-                      className="w-24 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-                ) : null}
+                {/*
+                  Los segundos se piden **siempre**, también para los que no
+                  aceptan duración.
+
+                  Es lo que decide qué generadores se ofrecen, así que ocultarlo
+                  cuando el elegido no la acepta dejaba sin forma de decir
+                  «necesito noventa» — que es justo el dato que hace falta para
+                  no elegir mal.
+                */}
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Cuánto tiene que durar
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={600}
+                    value={musicSeconds}
+                    onChange={(event) => setMusicSeconds(Number(event.target.value))}
+                    className="w-24 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </label>
               </div>
 
               {/*
@@ -1025,9 +1058,13 @@ export function StudioBoard({
                 escribe en `music.ts` para que el estudio y el flujo digan lo
                 mismo — dos redacciones acaban siendo dos criterios.
               */}
-              {durationWarning(findMusicGenerator(musicModel), musicSeconds) ? (
+              {outOfReachNote(musicSeconds) ? (
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                  {durationWarning(findMusicGenerator(musicModel), musicSeconds)}
+                  {outOfReachNote(musicSeconds)}
+                </p>
+              ) : durationWarning(findMusicGenerator(musicPick), musicSeconds) ? (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  {durationWarning(findMusicGenerator(musicPick), musicSeconds)}
                 </p>
               ) : null}
 
@@ -1043,7 +1080,7 @@ export function StudioBoard({
                       projectId: current.id,
                       prompt: musicPrompt,
                       seconds: musicSeconds,
-                      model: musicModel,
+                      model: musicPick,
                       level: musicLevel,
                     })
                   }

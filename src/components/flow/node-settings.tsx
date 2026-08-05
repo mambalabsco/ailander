@@ -7,7 +7,13 @@ import type { LaunchResult } from "@/types/jobs";
 import { findNodeType } from "@/lib/flow/graph";
 import { LIPSYNC_MODELS, SYNC_MODES, findLipsyncModel } from "@/lib/video/lipsync";
 import { IMAGE_GENERATORS, VIDEO_GENERATORS, durationLabel, findGenerator, nearestDuration } from "@/lib/video/catalog";
-import { durationWarning, findMusicGenerator, takesDuration, MUSIC_GENERATORS } from "@/lib/video/music";
+import {
+  durationWarning,
+  findMusicGenerator,
+  generatorsFor,
+  outOfReachNote,
+  reach,
+} from "@/lib/video/music";
 import { MUSIC_LEVELS } from "@/lib/video/loudness";
 import { VOICE_PRESETS } from "@/lib/video/voice-settings";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
@@ -676,10 +682,9 @@ export function NodeSettings({
                 noventa segundos con treinta de música. Que se lea al elegir y
                 no después.
               */}
-              {MUSIC_GENERATORS.map((model) => (
+              {generatorsFor(number(settings, "seconds", 30)).map((model) => (
                 <option key={model.id} value={model.id}>
-                  {model.label}
-                  {takesDuration(model) ? ` · hasta ${model.maxSeconds} s` : " · duración fija"}
+                  {model.label} · hasta {reach(model)} s
                 </option>
               ))}
             </SelectField>,
@@ -702,12 +707,17 @@ export function NodeSettings({
             {seconds("seconds", 30, 180)}
           </div>
 
-          {durationWarning(findMusicGenerator(text(settings, "model")), number(settings, "seconds", 30)) ? (
+          {outOfReachNote(number(settings, "seconds", 30)) ||
+          durationWarning(
+            findMusicGenerator(text(settings, "model")),
+            number(settings, "seconds", 30),
+          ) ? (
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              {durationWarning(
-                findMusicGenerator(text(settings, "model")),
-                number(settings, "seconds", 30),
-              )}
+              {outOfReachNote(number(settings, "seconds", 30)) ||
+                durationWarning(
+                  findMusicGenerator(text(settings, "model")),
+                  number(settings, "seconds", 30),
+                )}
             </p>
           ) : null}
         </div>

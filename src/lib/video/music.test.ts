@@ -7,7 +7,9 @@ import {
   buildMusicPrompt,
   variationHint,
   findMusicGenerator,
+  generatorsFor,
   guaranteesVariation,
+  outOfReachNote,
   musicCost,
   musicCostLabel,
   MUSIC_GENERATORS,
@@ -287,4 +289,39 @@ test("la segunda sí, pegada al encargo original", () => {
 
   assert.match(String(input.prompt), /^algo /);
   assert.match(String(input.prompt), /Different take/);
+});
+
+test("para un vídeo largo solo se ofrecen los que llegan", () => {
+  /*
+   * Con la lista entera delante, elegir uno de duración fija para un anuncio de
+   * noventa segundos es un clic normal — y el resultado no se ve hasta tener el
+   * vídeo montado.
+   */
+  const noventa = generatorsFor(90).map((model) => model.id);
+
+  assert.ok(!noventa.includes("lyria"));
+  assert.ok(!noventa.includes("minimax"));
+  assert.ok(noventa.includes("elevenlabs"));
+});
+
+test("para uno corto siguen estando todos", () => {
+  const corto = generatorsFor(20).map((model) => model.id);
+
+  assert.equal(corto.length, MUSIC_GENERATORS.length);
+});
+
+test("nunca devuelve una lista vacía", () => {
+  // Una lista vacía es una pantalla rota: el problema no es que no haya
+  // generadores, es que ninguno da tanto — y eso se dice, no se esconde.
+  assert.ok(generatorsFor(5000).length > 0);
+  assert.match(outOfReachNote(5000), /Ninguno llega/);
+});
+
+test("sin duración pedida no se filtra nada", () => {
+  assert.equal(generatorsFor(0).length, MUSIC_GENERATORS.length);
+  assert.equal(generatorsFor(Number.NaN).length, MUSIC_GENERATORS.length);
+});
+
+test("cuando alguno llega, no se avisa de que no llega ninguno", () => {
+  assert.equal(outOfReachNote(90), "");
 });
