@@ -19,6 +19,14 @@ export const MEDIA_PARAMS: Record<string, string> = {
   start_image: "--start-image",
   end_image: "--end-image",
   video_references: "--video-references",
+  /*
+   * El audio de referencia: una voz ya generada para que el modelo la use.
+   *
+   * Existe —lo dice la ayuda del propio CLI, «Media flags: … --audio-references
+   * …»— y faltaba aquí, así que `declaredMediaParams` nunca lo encontraba: un
+   * modelo que acepta voz se veía como uno que no acepta nada.
+   */
+  audio_references: "--audio-references",
 };
 
 /** El parámetro con el que viaja la foto del producto en los de imagen. */

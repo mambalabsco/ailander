@@ -502,6 +502,14 @@ export async function generateWithCli(options: {
   prompt: string;
   /** Imágenes de referencia ya descargadas. El CLI las sube él. */
   references?: { filename: string; bytes: Uint8Array }[];
+  /**
+   * Audio de referencia: una voz ya generada, para los modelos que la aceptan.
+   *
+   * Va aparte de `references` porque lleva **su propia bandera**. Meter un mp3
+   * en la lista de imágenes lo mandaría con `--image-references` y el CLI lo
+   * rechaza; y si no lo rechazara sería peor, porque generaría ignorándolo.
+   */
+  audio?: { filename: string; bytes: Uint8Array }[];
   /** Qué se espera de vuelta. Por defecto, imágenes. */
   kind?: MediaKind;
   /**
@@ -563,6 +571,24 @@ export async function generateWithCli(options: {
         await writeFile(file, reference.bytes);
         args.push(flag, file);
       }
+    }
+
+    /*
+     * El audio va con su bandera, y solo si el modelo la declara.
+     *
+     * Igual que con las imágenes: mandar una bandera que el modelo no conoce
+     * aborta con «Unknown params», y eso tira la generación entera por un
+     * extra que era opcional.
+     */
+    for (const track of options.audio ?? []) {
+      // La carpeta puede no existir todavía: las imágenes son opcionales y
+      // pueden no haber venido ninguna.
+      workdir ??= await mkdtemp(path.join(tmpdir(), "higgsfield-"));
+
+      const safe = track.filename.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-80);
+      const file = path.join(workdir, safe || "voz.mp3");
+      await writeFile(file, track.bytes);
+      args.push("--audio-references", file);
     }
 
     /*

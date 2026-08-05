@@ -156,6 +156,7 @@ const urls = (inputs: Map<number, NodeResult[]>, port: number): string[] =>
  */
 async function downloadAll(
   references: string[],
+  name = "ref.png",
 ): Promise<{ filename: string; bytes: Uint8Array }[]> {
   const got = await Promise.all(
     references.slice(0, 9).map(async (url, index) => {
@@ -166,7 +167,7 @@ async function downloadAll(
         const bytes = new Uint8Array(await response.arrayBuffer());
         if (bytes.byteLength === 0) return null;
 
-        return { filename: `ref-${index + 1}.png`, bytes };
+        return { filename: `${index + 1}-${name}`, bytes };
       } catch {
         return null;
       }
@@ -408,8 +409,12 @@ async function runNode(
         const slug = chosen.slice(3);
         const wanted = num(node.settings, "seconds", 6);
 
+        const voice = urls(inputs, 2);
+
         const [params, durations] = await Promise.all([
-          urls(inputs, 1).length > 0 ? modelMediaParams(slug) : Promise.resolve([] as string[]),
+          urls(inputs, 1).length > 0 || voice.length > 0
+            ? modelMediaParams(slug)
+            : Promise.resolve([] as string[]),
           modelDurations(slug).catch(() => [] as number[]),
         ]);
 
@@ -426,6 +431,10 @@ async function runNode(
           );
         }
 
+        if (voice.length > 0 && !params.includes("audio_references")) {
+          await ctx.report(`${slug} no acepta voz de referencia: se genera sin ella.`);
+        }
+
         await ctx.report(`Animando con ${slug}`);
 
         const result = await generateWithCli({
@@ -435,6 +444,17 @@ async function runNode(
           // El que declare: `image_references` si está, y si no el primero.
           referenceParam: params.includes("image_references") ? "image_references" : params[0],
           references: await downloadAll(urls(inputs, 1)),
+          /*
+           * La voz solo si el modelo la declara.
+           *
+           * Mandársela a uno que no la conoce aborta con «Unknown params», y
+           * eso tira una generación de varios minutos por un extra opcional.
+           * Y se dice cuando se cae, porque conectar la voz y que no se use es
+           * exactamente lo que parecería que sí.
+           */
+          audio: params.includes("audio_references")
+            ? await downloadAll(voice, "voz.mp3")
+            : undefined,
           aspectRatio: text(node.settings, "aspectRatio", "9:16"),
           seconds,
         });

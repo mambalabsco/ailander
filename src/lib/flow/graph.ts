@@ -141,6 +141,14 @@ export const NODE_TYPES: NodeType[] = [
     accepts: [
       { kind: "texto", label: "Prompt", required: true },
       { kind: "imagen", label: "Imagen de partida", required: false, many: true },
+      /*
+       * Hay modelos que aceptan una voz ya generada como referencia.
+       *
+       * Solo la usan los de Higgsfield que declaran `audio_references`, y por
+       * eso es opcional: al que no la declara no se le manda —una bandera que
+       * no conoce aborta la generación entera— y el nodo funciona igual.
+       */
+      { kind: "audio", label: "Voz de referencia", required: false },
     ],
     produces: "video",
     note: "Anima una imagen, o genera desde el texto si el modelo lo admite.",
