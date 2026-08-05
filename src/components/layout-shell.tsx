@@ -260,7 +260,19 @@ export function LayoutShell({ children, userEmail, demoMode, capabilities }: Lay
             dispara el desvanecido. Sin ella, el contenido nuevo aparece de golpe
             encima del anterior y el cambio se lee como un corte.
           */}
-          <main key={pathname} className="page-in min-w-0 flex-1 p-4 md:p-6">
+          {/*
+            Sin `key={pathname}` ni animación de entrada propia.
+
+            Antes esto forzaba a remontar el contenido en cada navegación y le
+            aplicaba un fundido de entrada. Animaba solo la mitad: la página
+            vieja desaparecía de golpe y la nueva entraba sola, así que entre las
+            dos había un parpadeo en blanco.
+
+            Ahora lo hace `<ViewTransition>` en el layout raíz, que sí tiene las
+            dos a la vez y puede fundirlas. Dejar las dos cosas encendidas hacía
+            que se pisaran.
+          */}
+          <main className="min-w-0 flex-1 p-4 md:p-6">
             {children}
           </main>
         </div>

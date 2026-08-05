@@ -150,15 +150,49 @@ body {
   }
 }
 
-.page-in {
-  animation: page-in 180ms ease-out both;
+/*
+ * La transición entre páginas.
+ *
+ * ## Por qué el tiempo no es simétrico
+ *
+ * Lo viejo se va rápido (140 ms) y lo nuevo llega algo más despacio (200 ms) y
+ * empezando cuando lo otro ya se fue. Si las dos duran lo mismo y a la vez, se
+ * superponen a media opacidad y durante un instante se leen los dos textos
+ * encima: parece un fallo de pintado, no una transición.
+ *
+ * ## Y por qué tan corto
+ *
+ * Porque esto se ve **en cada clic**. Cualquier cosa por encima de un cuarto de
+ * segundo deja de ser un acabado y pasa a ser una espera: la primera vez gusta
+ * y a la décima estorba.
+ */
+::view-transition-old(contenido) {
+  animation: 140ms ease-out both page-out;
+}
+
+::view-transition-new(contenido) {
+  animation: 200ms ease-out 140ms both page-in;
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 /* Quien pide menos movimiento no lo recibe: los desvanecidos y los giros son
    justo lo que marean. El circulito se queda quieto pero visible, que sigue
    diciendo lo que tenía que decir. */
 @media (prefers-reduced-motion: reduce) {
-  .page-in {
+  /*
+    Quien pide menos movimiento no lo recibe.
+
+    El navegador no desactiva solo las transiciones de vista, así que hay que
+    apagarlas a mano. Sin esto, la única forma de no marearse sería no navegar.
+  */
+  ::view-transition-old(contenido),
+  ::view-transition-new(contenido) {
     animation: none;
   }
 

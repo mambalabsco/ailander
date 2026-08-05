@@ -7,6 +7,18 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   experimental: {
+    /*
+     * Transiciones entre páginas.
+     *
+     * Enciende la integración de Next con `<ViewTransition>` de React, que es
+     * quien de verdad anima: sin la bandera, el componente existe pero la
+     * navegación no lo dispara y no pasa nada — que es el peor resultado
+     * posible, porque el código parece puesto.
+     *
+     * La API de transiciones del navegador es estándar y donde no esté, la
+     * aplicación funciona igual: simplemente no anima.
+     */
+    viewTransition: true,
     serverActions: {
       /*
        * Para los fotogramas de un anuncio analizado.

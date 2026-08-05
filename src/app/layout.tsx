@@ -1,3 +1,4 @@
+import { ViewTransition } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LayoutShell } from "@/components/layout-shell";
@@ -56,7 +57,19 @@ export default async function RootLayout({
           demoMode={!configured}
           capabilities={capabilities}
         >
-          {children}
+          {/*
+            La transición envuelve **solo el contenido**, no el chasis.
+
+            La barra lateral y la cabecera no cambian al navegar: animarlas las
+            haría parpadear en cada clic, que es justo lo contrario de lo que se
+            busca. Lo que cambia es lo de dentro, y es lo único que se funde.
+
+            `name` fijo y no uno por ruta: no se quiere que Next intente
+            emparejar elementos entre páginas distintas —eso es para cuando una
+            miniatura se convierte en la foto grande— sino un fundido simple
+            entre lo que había y lo que llega.
+          */}
+          <ViewTransition name="contenido">{children}</ViewTransition>
         </LayoutShell>
       </body>
     </html>
