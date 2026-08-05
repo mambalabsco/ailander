@@ -401,6 +401,50 @@ async function runTask(
  * Un fallo que devuelve algo bonito es el peor tipo de fallo, porque nadie lo
  * busca. Se pide solo la cabecera, que cuesta un parpadeo.
  */
+/**
+ * Una dirección que el proveedor pueda descargar, volviéndola a firmar si hace
+ * falta.
+ *
+ * ## El fallo que arregla
+ *
+ * Las firmadas de Supabase caducan a la hora. Mientras se mira una imagen en
+ * pantalla eso da igual; en cuanto la dirección se **guarda** —en un nodo de
+ * flujo, en un anuncio a medias— deja de servir sola. Un flujo montado ayer
+ * lleva dentro la firma de ayer.
+ *
+ * Y no falla de forma visible: el proveedor no puede descargar la foto del
+ * envase y genera sin ella. Sale una imagen convincente con un bote que no
+ * existe, se anima, se monta, y se descubre viendo el vídeo terminado.
+ *
+ * Devuelve cadena vacía cuando no hay nada que hacer, y quien llama decide si
+ * eso es parar o seguir sin referencia.
+ */
+async function usableReference(url: string): Promise<string> {
+  if (await referenceIsReachable(url)) return url;
+
+  const { storageRefFrom } = await import("@/lib/storage-url");
+  const ref = storageRefFrom(url, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+
+  if (!ref) return "";
+
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+
+    /*
+     * Una hora, como el resto de la aplicación. Es de sobra para una
+     * generación —las largas rondan los diez minutos— y no deja enlaces vivos
+     * por ahí más de lo necesario.
+     */
+    const { data } = await createAdminClient()
+      .storage.from(ref.bucket)
+      .createSignedUrl(ref.path, 3600);
+
+    return data?.signedUrl ?? "";
+  } catch {
+    return "";
+  }
+}
+
 async function referenceIsReachable(url: string): Promise<boolean> {
   try {
     const response = await fetch(url, { method: "HEAD", cache: "no-store" });
@@ -427,9 +471,7 @@ export async function keyframe(options: {
 }): Promise<string> {
   const wanted = options.references?.filter(Boolean) ?? [];
 
-  const checked = await Promise.all(
-    wanted.map(async (url) => ((await referenceIsReachable(url)) ? url : "")),
-  );
+  const checked = await Promise.all(wanted.map((url) => usableReference(url)));
 
   const refs = checked.filter(Boolean);
 
@@ -495,7 +537,23 @@ export async function animate(options: {
     // Uno que no está en la tabla: se trata como el más común de todos.
     { ...VIDEO_GENERATORS[0], slug };
 
-  const references = [options.imageUrl ?? "", ...(options.references ?? [])].filter(Boolean);
+  /*
+   * Las mismas comprobaciones que en las imágenes, y por el mismo motivo.
+   *
+   * Aquí faltaban: se mandaba lo que hubiera guardado, y una firma caducada
+   * hacía que kie generase el clip **sin** la imagen de partida. El resultado
+   * es un vídeo que no se parece a la toma anterior, y eso al mirarlo se
+   * interpreta como que el modelo salió mal — no como que la referencia no
+   * llegó.
+   */
+  const asked = [options.imageUrl ?? "", ...(options.references ?? [])].filter(Boolean);
+  const references = (await Promise.all(asked.map((url) => usableReference(url)))).filter(Boolean);
+
+  if (asked.length > 0 && references.length === 0) {
+    throw new Error(
+      `Ninguna de las ${asked.length} imágenes de partida se puede descargar desde fuera, así que ${generator.label} las ignoraría y el clip no se parecería a la toma anterior. Vuelve a elegirlas en el nodo.`,
+    );
+  }
 
   if (generator.mode !== "texto" && references.length === 0) {
     throw new Error(`${generator.label} necesita al menos una imagen de partida.`);
