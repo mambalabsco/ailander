@@ -937,6 +937,8 @@ export async function readCostSettings(
       gateway: row.gateway,
       percent: num(row.percent),
       fixed: num(row.fixed),
+      extraPercent: num(row.extra_percent),
+      extraFixed: num(row.extra_fixed),
     })),
     customCosts: (custom.data ?? []).map((row) => ({
       id: row.id,
@@ -983,6 +985,15 @@ function parseTiers(value: unknown): ShippingTier[] {
 export async function saveCogs(
   storeId: string,
   rows: { productRef: string; variantRef: string; label: string; amount: number }[],
+  /**
+   * De dónde sale este coste.
+   *
+   * Por defecto `manual`, porque el camino normal es que lo escriba una
+   * persona. Solo la importación pasa `shopify`, y así una regla escrita a mano
+   * se distingue para siempre de una traída: es lo que permite refrescar el
+   * inventario sin pisar un ajuste que alguien hizo por algo.
+   */
+  source: "manual" | "shopify" = "manual",
 ): Promise<void> {
   if (rows.length === 0) return;
   const { supabase, userId } = await requireContext();
@@ -995,6 +1006,7 @@ export async function saveCogs(
       variant_ref: row.variantRef,
       label: row.label,
       amount: row.amount.toFixed(2),
+      source,
       updated_at: new Date().toISOString(),
     })),
     { onConflict: "store_id,product_ref,variant_ref", defaultToNull: false },
@@ -1049,6 +1061,8 @@ export async function saveGatewayFees(storeId: string, fees: GatewayFee[]): Prom
       gateway: fee.gateway,
       percent: fee.percent.toFixed(4),
       fixed: fee.fixed.toFixed(2),
+      extra_percent: (fee.extraPercent ?? 0).toFixed(4),
+      extra_fixed: (fee.extraFixed ?? 0).toFixed(2),
       updated_at: new Date().toISOString(),
     })),
     { onConflict: "store_id,gateway", defaultToNull: false },
@@ -1139,7 +1153,15 @@ export async function gatewaysInUse(
 export async function variantsSold(
   storeId: string,
 ): Promise<
-  { productRef: string; variantRef: string; sku: string; title: string; units: number; cogs: number | null }[]
+  {
+    productRef: string;
+    variantRef: string;
+    sku: string;
+    title: string;
+    units: number;
+    cogs: number | null;
+    cogsSource: "manual" | "shopify" | null;
+  }[]
 > {
   const { supabase } = await requireContext();
 
@@ -1188,7 +1210,12 @@ export async function variantsSold(
       );
       const rule = exact ?? byProduct;
 
-      return { ...entry, cogs: rule ? num(rule.amount) : null };
+      return {
+        ...entry,
+        cogs: rule ? num(rule.amount) : null,
+        // Para poder decir en pantalla cuál se puede refrescar y cuál manda.
+        cogsSource: rule ? ((rule.source as "manual" | "shopify") ?? "manual") : null,
+      };
     })
     .sort((a, b) => b.units - a.units);
 }

@@ -76,6 +76,8 @@ export default async function CostosPage({ searchParams }: PageProps) {
             orders: row.orders,
             percent: feesByGateway.get(row.gateway)?.percent ?? 0,
             fixed: feesByGateway.get(row.gateway)?.fixed ?? 0,
+            extraPercent: feesByGateway.get(row.gateway)?.extraPercent ?? 0,
+            extraFixed: feesByGateway.get(row.gateway)?.extraFixed ?? 0,
           }))}
         />
       </SectionCard>

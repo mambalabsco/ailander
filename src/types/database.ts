@@ -657,6 +657,8 @@ type CostCogsRow = {
   label: string;
   amount: string;
   currency: string;
+  /** `manual` manda sobre `shopify`: quien lo ajustó a mano sabía algo más. */
+  source: string;
   updated_at: string;
 };
 
@@ -680,6 +682,9 @@ type CostGatewayFeeRow = {
   gateway: string;
   percent: string;
   fixed: string;
+  /** Lo que la pasarela cobra por encima de su tarifa publicada. */
+  extra_percent: string;
+  extra_fixed: string;
   updated_at: string;
 };
 

@@ -6,6 +6,7 @@ import { Button, SelectField, TextField } from "@/components/ui";
 import {
   deleteCustomCostAction,
   deleteZoneAction,
+  importCogsAction,
   saveCogsAction,
   saveCustomCostAction,
   saveGatewayFeesAction,
@@ -39,11 +40,14 @@ export interface VariantRow {
   title: string;
   units: number;
   cogs: number | null;
+  /** De dónde salió: `manual` manda y no se refresca. */
+  cogsSource?: "manual" | "shopify" | null;
 }
 
 export function CogsEditor({ storeId, variants }: { storeId: string; variants: VariantRow[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [note, setNote] = useState("");
   const [draft, setDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       variants.map((variant) => [
@@ -77,6 +81,9 @@ export function CogsEditor({ storeId, variants }: { storeId: string; variants: V
                 Vendidas
               </th>
               <th className="px-3 py-2 text-right font-medium">Coste por unidad</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500 dark:text-slate-400">
+                Origen
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -116,6 +123,22 @@ export function CogsEditor({ storeId, variants }: { storeId: string; variants: V
                       className="w-28 text-right"
                     />
                   </td>
+
+                  {/*
+                    De dónde salió cada coste.
+
+                    Importa porque decide qué pasa al traer de Shopify: los
+                    manuales se respetan y los traídos se refrescan. Sin verlo,
+                    la única forma de saber por qué un número no cambió es
+                    volver a importar y comparar.
+                  */}
+                  <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                    {empty
+                      ? "—"
+                      : variant.cogsSource === "shopify"
+                        ? "de Shopify"
+                        : "a mano · manda"}
+                  </td>
                 </tr>
               );
             })}
@@ -124,6 +147,31 @@ export function CogsEditor({ storeId, variants }: { storeId: string; variants: V
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        {/*
+          Traer los que falten de Shopify.
+
+          No pisa los puestos a mano: quien los ajustó sabía algo que el
+          inventario no sabe —un precio de proveedor con el envío dentro, uno
+          negociado— y sobrescribirlo devolvería el beneficio a un número
+          plausible y distinto sin que nadie se enterara.
+        */}
+        <Button
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await importCogsAction(storeId);
+              setNote(result.message);
+              if (result.ok) router.refresh();
+            })
+          }
+        >
+          {isPending ? "Trayendo…" : "Traer de Shopify"}
+        </Button>
+
+        {note ? (
+          <span className="text-xs text-slate-600 dark:text-slate-300">{note}</span>
+        ) : null}
+
         <Button
           variant="primary"
           disabled={isPending}
@@ -474,6 +522,9 @@ export interface GatewayRow {
   orders: number;
   percent: number;
   fixed: number;
+  /** Lo que cobra por encima de su tarifa: divisa, antifraude, lo que sea. */
+  extraPercent: number;
+  extraFixed: number;
 }
 
 export function GatewayEditor({
@@ -489,7 +540,12 @@ export function GatewayEditor({
     Object.fromEntries(
       gateways.map((row) => [
         row.gateway,
-        { percent: String(row.percent), fixed: String(row.fixed) },
+        {
+          percent: String(row.percent),
+          fixed: String(row.fixed),
+          extraPercent: String(row.extraPercent),
+          extraFixed: String(row.extraFixed),
+        },
       ]),
     ),
   );
@@ -515,11 +571,31 @@ export function GatewayEditor({
               </th>
               <th className="px-3 py-2 text-right font-medium">%</th>
               <th className="px-3 py-2 text-right font-medium">Fijo por pedido</th>
+              {/*
+                El extra va en columnas propias y no sumado al porcentaje.
+
+                Un 3,4 % que en realidad son 2,9 de tarifa más 0,5 de divisa es
+                imposible de revisar seis meses después: lo que se acaba
+                haciendo es volver a mirarlo en la factura. Separado se
+                comprueba de un vistazo.
+              */}
+              <th className="px-3 py-2 text-right font-medium text-slate-500 dark:text-slate-400">
+                % extra
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-slate-500 dark:text-slate-400">
+                Fijo extra
+              </th>
+              <th className="px-3 py-2 text-right font-medium">Total</th>
             </tr>
           </thead>
           <tbody>
             {gateways.map((row) => {
-              const values = draft[row.gateway] ?? { percent: "0", fixed: "0" };
+              const values = draft[row.gateway] ?? {
+                percent: "0",
+                fixed: "0",
+                extraPercent: "0",
+                extraFixed: "0",
+              };
               const zero = Number(values.percent) === 0 && Number(values.fixed) === 0;
 
               return (
@@ -565,6 +641,50 @@ export function GatewayEditor({
                       className="w-28 text-right"
                     />
                   </td>
+
+                  <td className="px-3 py-2 text-right">
+                    <TextField
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={values.extraPercent}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [row.gateway]: { ...values, extraPercent: event.target.value },
+                        }))
+                      }
+                      className="w-24 text-right"
+                    />
+                  </td>
+
+                  <td className="px-3 py-2 text-right">
+                    <TextField
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={values.extraFixed}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [row.gateway]: { ...values, extraFixed: event.target.value },
+                        }))
+                      }
+                      className="w-24 text-right"
+                    />
+                  </td>
+
+                  {/*
+                    Lo que de verdad se resta, ya sumado.
+
+                    Es lo que hace que separar tarifa y extra no salga caro: el
+                    número que entra en el beneficio se ve sin sumarlo de
+                    cabeza, que es justo lo que nadie hace.
+                  */}
+                  <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                    {(Number(values.percent) + Number(values.extraPercent) || 0).toFixed(2)}% +{" "}
+                    {(Number(values.fixed) + Number(values.extraFixed) || 0).toFixed(2)}
+                  </td>
                 </tr>
               );
             })}
@@ -583,6 +703,8 @@ export function GatewayEditor({
                 gateway,
                 percent: Number(values.percent) || 0,
                 fixed: Number(values.fixed) || 0,
+                extraPercent: Number(values.extraPercent) || 0,
+                extraFixed: Number(values.extraFixed) || 0,
               })),
             );
             router.refresh();

@@ -632,3 +632,22 @@ test("una zona sin la marca se comporta como siempre", () => {
 
   assert.equal(shippingCostFor(vieja, 2), 4);
 });
+
+test("el extra de la pasarela se suma a la comisión", () => {
+  /*
+   * Lo que cuesta cobrar no siempre es la tarifa publicada: hay pasarelas que
+   * suman por divisa o facturan el antifraude aparte. Va en campos propios para
+   * poder revisarlo, pero lo que se resta es la suma.
+   */
+  const fees = [{ gateway: "paypal", percent: 2.9, fixed: 0.3, extraPercent: 0.5, extraFixed: 0.1 }];
+
+  // 100 × 3,4 % = 3,4, más 0,40 de fijos.
+  assert.equal(Number(gatewayFeeFor(fees, "paypal", 100).toFixed(2)), 3.8);
+});
+
+test("una comisión sin extra se comporta como siempre", () => {
+  // Las guardadas antes de que existiera el extra no lo traen.
+  const fees = [{ gateway: "shopify_payments", percent: 2.9, fixed: 0.3 }];
+
+  assert.equal(Number(gatewayFeeFor(fees, "shopify_payments", 100).toFixed(2)), 3.2);
+});

@@ -123,6 +123,16 @@ export interface GatewayFee {
   gateway: string;
   percent: number;
   fixed: number;
+  /**
+   * Lo que cuesta cobrar por encima de la tarifa: divisa, antifraude, lo que
+   * la pasarela factura aparte y no sale en su porcentaje publicado.
+   *
+   * Va en campos propios y no sumado al principal para poder revisarlo. Un
+   * 3,4 % que en realidad son 2,9 + 0,5 es imposible de comprobar seis meses
+   * después, y lo que se acaba haciendo es volver a mirar la factura.
+   */
+  extraPercent?: number;
+  extraFixed?: number;
 }
 
 export type CustomCostKind = "fijo" | "variable";
@@ -363,7 +373,10 @@ export function gatewayFeeFor(fees: GatewayFee[], gateway: string, total: number
   // Un pedido de cero —un reemplazo, un regalo— no genera comisión fija.
   if (total <= 0) return 0;
 
-  return (total * fee.percent) / 100 + fee.fixed;
+  const percent = fee.percent + (fee.extraPercent ?? 0);
+  const fixed = fee.fixed + (fee.extraFixed ?? 0);
+
+  return (total * percent) / 100 + fixed;
 }
 
 /**

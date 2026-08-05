@@ -24,6 +24,7 @@ import {
   setAccountActive,
   setAccountFilters,
   setLoginCustomerId,
+  variantsSold,
 } from "@/lib/data/analytics";
 import * as metaOauth from "@/lib/meta-oauth";
 import { requireCapability } from "@/lib/permissions";
@@ -691,6 +692,97 @@ export async function saveCogsAction(
     rows.filter((row) => Number.isFinite(row.amount) && row.amount >= 0),
   );
   revalidatePath("/datos");
+}
+
+/**
+ * Traer de Shopify los costes por unidad que falten.
+ *
+ * ## Lo que respeta
+ *
+ * **No pisa lo manual.** Quien ajustó un coste a mano sabía algo que el
+ * inventario no sabe —un precio de proveedor con el envío dentro, uno
+ * negociado— y sobrescribirlo no daría error: devolvería el beneficio a un
+ * número plausible y distinto sin que nadie se enterara.
+ *
+ * Sí refresca los que ya vinieron de Shopify: ahí el inventario es la fuente y
+ * lo que hay guardado es una copia vieja.
+ *
+ * ## Y lo que cuenta
+ *
+ * Cuántos se trajeron, cuántos siguen sin coste y cuántos se respetaron. Un
+ * «listo» a secas tiene la misma cara trayendo cuarenta que ninguno, y ninguno
+ * es lo que pasa cuando la tienda no tiene los costes cargados en el
+ * inventario — que es un problema de Shopify, no de aquí, y hay que poder
+ * distinguirlo.
+ */
+export async function importCogsAction(
+  storeId: string,
+): Promise<{ ok: boolean; message: string }> {
+  await requireCapability("dinero");
+
+  const store = await findStore(storeId);
+  if (!store) return { ok: false, message: "No se encontró la tienda." };
+
+  if (!store.shopifyAdminToken || !store.shopifyShopDomain) {
+    return { ok: false, message: "Esta tienda no está conectada a Shopify." };
+  }
+
+  const sold = await variantsSold(storeId);
+
+  // Las que ya tienen un coste puesto a mano se quedan fuera de la petición:
+  // no solo no se guardan, es que ni se preguntan.
+  const askable = sold.filter((item) => item.variantRef && item.cogsSource !== "manual");
+  const kept = sold.filter((item) => item.cogsSource === "manual").length;
+
+  if (askable.length === 0) {
+    return {
+      ok: true,
+      message: kept > 0 ? `Nada que traer: los ${kept} costes están puestos a mano.` : "No hay variantes vendidas todavía.",
+    };
+  }
+
+  const { readVariantCosts } = await import("@/lib/shopify-costs");
+
+  let costs;
+  try {
+    costs = await readVariantCosts(store, askable.map((item) => item.variantRef));
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Shopify no contestó.",
+    };
+  }
+
+  /*
+   * El nombre lo pone lo que ya se sabe de la venta, no lo que devuelve
+   * Shopify: en la tabla de costos las filas se reconocen por el título con el
+   * que se vendieron, y cambiárselo al importar las volvería irreconocibles.
+   */
+  const byVariant = new Map(askable.map((item) => [item.variantRef, item]));
+
+  await saveCogs(
+    storeId,
+    costs.map((cost) => ({
+      productRef: cost.productRef || byVariant.get(cost.variantRef)?.productRef || "",
+      variantRef: cost.variantRef,
+      label: byVariant.get(cost.variantRef)?.title || cost.label,
+      amount: cost.amount,
+    })),
+    "shopify",
+  );
+
+  revalidatePath("/datos");
+
+  const missing = askable.length - costs.length;
+
+  return {
+    ok: true,
+    message: [
+      `${costs.length} coste(s) traídos de Shopify.`,
+      missing > 0 ? ` ${missing} variante(s) no tienen coste cargado en el inventario.` : "",
+      kept > 0 ? ` ${kept} puestos a mano se han respetado.` : "",
+    ].join(""),
+  };
 }
 
 export async function saveZoneAction(
