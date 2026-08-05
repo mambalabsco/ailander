@@ -87,6 +87,25 @@ export const NODE_TYPES: NodeType[] = [
     note: "Un copy que ya funcionó o un ángulo investigado, para partir de ahí.",
   },
   {
+    /*
+     * Una nota pegada en el lienzo.
+     *
+     * No produce nada y no se ejecuta: es lo que se escribe al lado de una
+     * cadena de nodos para acordarse de por qué está así. Sin esto, esa
+     * información vivía en la cabeza de quien montó el flujo, y un flujo se
+     * abre semanas después.
+     *
+     * Va con su propio tipo y no como comentario de un nodo porque lo que se
+     * anota casi nunca es un nodo: es la relación entre tres.
+     */
+    id: "nota",
+    label: "Nota",
+    group: "fuente",
+    accepts: [],
+    produces: "texto",
+    note: "Un recordatorio pegado en el lienzo. No se ejecuta ni cuesta nada.",
+  },
+  {
     id: "guion",
     label: "Guion",
     group: "idea",

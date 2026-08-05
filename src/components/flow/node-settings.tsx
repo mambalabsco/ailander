@@ -183,6 +183,19 @@ export function NodeSettings({
         />
       ) : null}
 
+      {type === "nota"
+        ? field(
+            "La nota",
+            <textarea
+              value={text(settings, "text")}
+              onChange={(event) => set("text", event.target.value)}
+              rows={6}
+              placeholder="Este ángulo funcionó en Naturox; el plano 3 hay que rehacerlo con la cara nueva"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />,
+          )
+        : null}
+
       {type === "prompt" ? (
         <div className="space-y-2">
           {field(

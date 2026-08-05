@@ -505,6 +505,57 @@ export function FlowCanvas({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {/*
+          La última imagen que salió, sin ir a buscarla.
+
+          Encadenar planos es coger la imagen del nodo anterior y meterla en el
+          siguiente, y con doce cajas eso es abrir paneles hasta dar con la
+          buena. Esto la trae directa: se busca de derecha a izquierda porque un
+          lienzo se construye hacia la derecha y la última es la de más allá.
+        */}
+        <Button
+          variant="ghost"
+          onClick={() => {
+            const withImage = nodes
+              .filter((node) => {
+                const data = node.data as FlowNodeData;
+                return data.result?.kind === "imagen" || Boolean(data.preview?.url);
+              })
+              .sort((a, b) => b.position.x - a.position.x);
+
+            const last = withImage[0];
+
+            if (!last) {
+              setNote("Todavía no hay ninguna imagen en el lienzo.");
+              return;
+            }
+
+            const data = last.data as FlowNodeData;
+            const url = data.result?.url || data.preview?.url || "";
+            const id = nextId(nodes, "archivo");
+
+            setNodes((current) => [
+              ...current,
+              {
+                id,
+                type: "caja",
+                position: { x: last.position.x + 280, y: last.position.y },
+                data: {
+                  type: "archivo",
+                  summary: "última imagen",
+                  preview: { url, text: "" },
+                  settings: { url, name: "Última imagen" },
+                },
+              },
+            ]);
+
+            setSelected(id);
+            setNote("Puesta en un nodo nuevo, lista para conectar.");
+          }}
+        >
+          Última imagen
+        </Button>
+
         <Button disabled={saving} onClick={save}>
           {saving ? "Guardando…" : "Guardar el flujo"}
         </Button>

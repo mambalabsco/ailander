@@ -50,6 +50,7 @@ export function previewOf(
   if (type === "archivo" && get("url")) return { url: get("url"), text: "" };
   if (type === "avatar" && get("avatarUrl")) return { url: get("avatarUrl"), text: "" };
   if (type === "prompt" && get("text")) return { url: "", text: get("text") };
+  if (type === "nota" && get("text")) return { url: "", text: get("text") };
   if (type === "referencia" && get("text")) return { url: "", text: get("text") };
   if (type === "copy" && get("angle")) return { url: "", text: get("angle") };
   if (type === "musica" && get("prompt")) return { url: "", text: get("prompt") };

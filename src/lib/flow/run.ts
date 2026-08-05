@@ -243,6 +243,15 @@ async function runNode(
       return { kind: "guion", url: "", value };
     }
 
+    /*
+      Una nota no llama a nadie: devuelve su texto y ya.
+
+      Se deja pasar en vez de saltarla para que, si alguien la conecta a la
+      entrada de un prompt, funcione como lo que parece.
+    */
+    case "nota":
+      return { kind: "texto", url: "", value: text(node.settings, "text") };
+
     case "prompt": {
       const own = text(node.settings, "text");
       const upstream = first(inputs, 0);

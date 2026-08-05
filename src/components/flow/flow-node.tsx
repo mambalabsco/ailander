@@ -47,6 +47,8 @@ const GROUP_STYLE: Record<string, string> = {
 const INLINE_PROMPT: Record<string, string> = {
   prompt: "text",
   musica: "prompt",
+  // Una nota que no se escribe dentro de la caja no es una nota.
+  nota: "text",
 };
 
 export interface FlowNodeData extends Record<string, unknown> {
