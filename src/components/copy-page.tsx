@@ -27,6 +27,7 @@ import { copyLandingAction } from "@/app/products/[id]/landing-actions";
  */
 export function CopyPage({ productId }: { productId: string }) {
   const [pageUrl, setPageUrl] = useState("");
+  const [fresh, setFresh] = useState(false);
 
   return (
     <div className="space-y-2">
@@ -50,13 +51,35 @@ export function CopyPage({ productId }: { productId: string }) {
 
         <GenerateButton
           variant="primary"
-          action={() => copyLandingAction({ productId, pageUrl })}
+          action={() => copyLandingAction({ productId, pageUrl, fresh })}
           label="Copiarla"
           disabled={!pageUrl.trim()}
           disabledReason={!pageUrl.trim() ? "Pega la dirección primero." : undefined}
           hint="Una petición por sección. Va en segundo plano y se puede cerrar la pestaña."
         />
       </div>
+
+      {/*
+        Empezar de cero.
+
+        La copia siempre parte de cero —se descarga sin caché y se guarda en una
+        fila nueva—, así que esto no cambia cómo se copia: cambia lo que queda.
+        Sin ello cada intento deja otra copia en la lista y a la cuarta ya no se
+        sabe cuál es la buena.
+
+        Va apagado por defecto: borrar algo que alguien pudo haber editado a
+        mano no se hace sin pedirlo, y el borrado ocurre **después** de que la
+        nueva esté guardada.
+      */}
+      <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+        <input
+          type="checkbox"
+          checked={fresh}
+          onChange={(event) => setFresh(event.target.checked)}
+        />
+        Empezar de cero: quitar las copias anteriores de esta misma página cuando la nueva esté
+        lista
+      </label>
 
       <p className="text-xs text-amber-800 dark:text-amber-300">
         Las imágenes siguen siendo las de la página original: se ven para poder revisarla, pero

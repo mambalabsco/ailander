@@ -731,6 +731,16 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
   const productId = readText(raw.productId);
   const pageUrl = readText(raw.pageUrl);
+  /**
+   * Empezar de cero: tirar las copias anteriores de esta misma página.
+   *
+   * La copia **siempre** parte de cero —se descarga sin caché y se guarda en una
+   * fila nueva—, así que esto no cambia cómo se copia. Lo que cambia es lo que
+   * queda: sin ello, cada intento deja otra copia en la lista y a la cuarta ya
+   * no se sabe cuál es la buena. Va como opción y no por defecto porque borrar
+   * lo que alguien pudo haber editado a mano no se hace sin pedirlo.
+   */
+  const fresh = raw.fresh === true;
 
   if (!productId) throw new Error("Falta el producto.");
   if (!pageUrl) throw new Error("Pega la dirección de la página que quieres copiar.");
@@ -782,6 +792,9 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       const page = await readPageForCopy(url);
       const origin = new URL(url).origin;
+
+      // El prefijo de las copias de **esta** página, para no tocar las de otra.
+      const oldPrefix = `copia-${new URL(url).hostname.replace(/[^a-z0-9]+/gi, "-")}-`;
 
       const warnings: string[] = [];
       let inputTokens = 0;
@@ -966,6 +979,19 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       await report("Guardando la página");
 
+      /*
+       * Se borran **después** de copiar, no antes.
+       *
+       * Antes dejaría al producto sin ninguna copia si la nueva falla a mitad,
+       * y con esto se tarda varios minutos: quedarse sin la que ya funcionaba
+       * por un intento que salió mal es la peor forma de perder trabajo.
+       */
+      const previous = fresh
+        ? (await import("@/lib/data/landings").then((m) => m.listLandings(productId))).filter(
+            (landing) => landing.slug.startsWith(oldPrefix),
+          )
+        : [];
+
       const saved = await saveLanding({
         productId,
         title: `Copia de ${new URL(url).hostname}`,
@@ -986,6 +1012,26 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       revalidatePath(`/products/${productId}`);
 
+      /*
+        Ahora sí: la nueva está guardada, así que quitar las viejas ya no puede
+        dejar al producto sin ninguna. Un borrado que falle no tira la copia
+        buena — se cuenta lo que se quitó y ya.
+      */
+      let removed = 0;
+
+      if (previous.length > 0) {
+        const { deleteLanding } = await import("@/lib/data/landings");
+
+        for (const landing of previous) {
+          try {
+            await deleteLanding(landing.id);
+            removed += 1;
+          } catch {
+            // Una copia vieja que no se deja borrar no es motivo para fallar.
+          }
+        }
+      }
+
       return {
         /*
          * El recuento va siempre, salga bien o mal.
@@ -998,6 +1044,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           `Copiada ${new URL(url).hostname}: ${texts.length - failed} de ${texts.length} textos adaptados`,
           failed > 0 ? ` (${failed} se quedaron en el idioma original)` : "",
           `, ${images.length} imágenes y vídeos recogidos.`,
+          removed > 0 ? ` Se quitaron ${removed} copias anteriores de esta página.` : "",
           warnings.length > 0 ? ` ${warnings.length} aviso(s).` : "",
           " Los archivos siguen siendo los suyos: adáptalos antes de publicar.",
         ].join(""),
