@@ -767,6 +767,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         absolutize,
         absolutizeCss,
         applyTexts,
+        batchTexts,
         buildTextPrompt,
         closeOpenTags,
         dropHidingRules,
@@ -825,16 +826,26 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
        * mirar la página. Un hueco vacío no se ve.
        */
       const texts = extractTexts(body);
-      const CHUNK = 120;
+
+      /*
+       * En tandas medidas por caracteres, no por número.
+       *
+       * Lo que no cabe es la **respuesta**, y mide lo que midan los textos. Una
+       * página de frases cortas va en dos tandas y una de párrafos largos en
+       * ocho, sin que nadie tenga que ajustar nada.
+       */
+      const batches = batchTexts(texts);
       const adapted: string[] = [];
+      let failed = 0;
 
-      for (let at = 0; at < texts.length; at += CHUNK) {
-        if (await cancelled()) break;
-
-        const batch = texts.slice(at, at + CHUNK);
-
-        await report(`Adaptando el texto ${at + 1}–${at + batch.length} de ${texts.length}`);
-
+      /**
+       * Adapta una tanda, y si no cabe la parte en dos y lo intenta otra vez.
+       *
+       * Cuando la respuesta se corta, el fallo no es del texto: es del tamaño. La
+       * mitad de una tanda que no cupo casi siempre cabe, y así se salva lo que
+       * antes se perdía entero.
+       */
+      const adapt = async (batch: string[], depth = 0): Promise<string[]> => {
         try {
           const outcome = await generateStructured<{ textos: string[] }>({
             prompt: buildTextPrompt({
@@ -863,20 +874,59 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
           const back = outcome.data.textos ?? [];
 
-          if (back.length < batch.length) {
-            warnings.push(
-              `De los textos ${at + 1}–${at + batch.length} volvieron ${back.length}: el resto se quedó en el idioma original.`,
-            );
+          // Si volvieron menos de la mitad, casi seguro se cortó: se parte y se
+          // reintenta en vez de dar por perdida la tanda.
+          if (back.length < batch.length / 2 && batch.length > 1 && depth < 2) {
+            const half = Math.ceil(batch.length / 2);
+
+            return [
+              ...(await adapt(batch.slice(0, half), depth + 1)),
+              ...(await adapt(batch.slice(half), depth + 1)),
+            ];
           }
 
-          adapted.push(...batch.map((original, index) => back[index] ?? original));
+          return batch.map((original, index) => back[index] ?? original);
         } catch (error) {
+          if (batch.length > 1 && depth < 2) {
+            const half = Math.ceil(batch.length / 2);
+
+            return [
+              ...(await adapt(batch.slice(0, half), depth + 1)),
+              ...(await adapt(batch.slice(half), depth + 1)),
+            ];
+          }
+
           warnings.push(
-            `Los textos ${at + 1}–${at + batch.length} no se pudieron adaptar (${error instanceof Error ? error.message : "falló"}): se quedaron como estaban.`,
+            `Un texto no se pudo adaptar: ${error instanceof Error ? error.message : "falló"}.`,
           );
 
-          adapted.push(...batch);
+          return batch;
         }
+      };
+
+      for (const [index, batch] of batches.entries()) {
+        if (await cancelled()) {
+          /*
+           * Cancelar a mitad deja el resto en su idioma, y eso **se dice**.
+           *
+           * Antes se salía del bucle en silencio: la página se guardaba sin
+           * adaptar y con la misma cara que una adaptada. Un fallo mudo que
+           * cuesta una copia entera.
+           */
+          warnings.push(
+            `Cancelado: ${texts.length - adapted.length} textos se quedaron en el idioma original.`,
+          );
+
+          adapted.push(...batches.slice(index).flat());
+          break;
+        }
+
+        await report(`Adaptando el texto · tanda ${index + 1} de ${batches.length}`);
+
+        const back = await adapt(batch);
+
+        failed += back.filter((text, at) => text === batch[at]).length;
+        adapted.push(...back);
       }
 
       const out: LandingSection[] = [
@@ -937,10 +987,19 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
       revalidatePath(`/products/${productId}`);
 
       return {
+        /*
+         * El recuento va siempre, salga bien o mal.
+         *
+         * «Copiada» a secas tiene la misma cara con doscientos textos adaptados
+         * que con cero, y cero es lo que pasa cuando la respuesta no cabe. Con el
+         * número delante, una copia sin adaptar se ve sin abrirla.
+         */
         summary: [
-          `Copiada ${new URL(url).hostname}: ${texts.length} textos adaptados y ${images.length} imágenes recogidas.`,
+          `Copiada ${new URL(url).hostname}: ${texts.length - failed} de ${texts.length} textos adaptados`,
+          failed > 0 ? ` (${failed} se quedaron en el idioma original)` : "",
+          `, ${images.length} imágenes y vídeos recogidos.`,
           warnings.length > 0 ? ` ${warnings.length} aviso(s).` : "",
-          " Las imágenes siguen siendo las suyas: adáptalas antes de publicar.",
+          " Los archivos siguen siendo los suyos: adáptalos antes de publicar.",
         ].join(""),
         result: { landingId: saved.id, warnings },
         inputTokens,

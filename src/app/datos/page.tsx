@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { JobsPanel } from "@/components/jobs-panel";
+import { AutoSyncSpend } from "@/components/datos/auto-sync";
 import { ProfitChart } from "@/components/datos/profit-chart";
 import { DataWarning, MetricCard, money, pct, times } from "@/components/datos/metrics";
 import { DatosHeader } from "@/app/datos/header";
@@ -82,6 +83,22 @@ export default async function DatosPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <DatosHeader context={context} synced={Boolean(lastOrder)} />
+
+      {/*
+        El gasto de Meta se pide al abrir, no cuando alguien se acuerda.
+
+        Antes solo entraba pulsando «Sincronizar», así que el panel enseñaba las
+        cifras de la última vez que a alguien se le ocurrió — con el beneficio más
+        alto del real, porque le faltaba el gasto de hoy.
+      */}
+      {store ? (
+        <AutoSyncSpend
+          storeId={store.id}
+          from={context.range.from}
+          to={context.range.to}
+          enabled={report.activeAccounts > 0}
+        />
+      ) : null}
 
       {jobs.length > 0 ? (
         <JobsPanel productId="" jobs={jobs} storeLevel />

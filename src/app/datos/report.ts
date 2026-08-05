@@ -75,7 +75,14 @@ export async function reportContext(params: {
   const timeZone = store?.shopTimeZone || "UTC";
 
   const today = todayIn(timeZone);
-  const preset: RangePreset = isPreset(params.rango) ? params.rango : "30d";
+  /*
+   * Hoy por defecto.
+   *
+   * Estaba en treinta días, y eso contesta «cómo va el mes». La pregunta con la
+   * que se abre este panel es otra: **cómo va hoy** — si lo que se está gastando
+   * ahora mismo está saliendo. Los treinta días siguen a un clic.
+   */
+  const preset: RangePreset = isPreset(params.rango) ? params.rango : "hoy";
   const range = resolveRange(preset, today, { from: params.desde, to: params.hasta });
 
   return {

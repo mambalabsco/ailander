@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   absolutize,
   applyTexts,
+  batchTexts,
   bodyOf,
   buildTextPrompt,
   collectImages,
@@ -741,4 +742,49 @@ test("los vídeos se recogen igual que las imágenes", () => {
 test("el src que falta se añade con su propia etiqueta", () => {
   assert.match(unlazy('<video data-src="/x.webm"></video>'), /<video src="\/x\.webm"/);
   assert.match(unlazy('<source data-srcset="/y.webp 1x">'), /<source srcset="\/y\.webp 1x"/);
+});
+
+/* ------------------------------- Las tandas --------------------------------- */
+
+/*
+ * Lo que no cabe es la **respuesta**, y mide lo que midan los textos. Ciento
+ * veinte frases cortas caben de sobra; ciento veinte párrafos largos no — y
+ * cuando no cabe, el modelo se corta a mitad y la tanda entera se queda sin
+ * adaptar.
+ */
+test("se reparte por caracteres, no por número", () => {
+  const largos = Array.from({ length: 10 }, () => "x".repeat(1_000));
+  const tandas = batchTexts(largos, { maxChars: 2_500 });
+
+  assert.ok(tandas.length >= 4);
+  for (const tanda of tandas) {
+    assert.ok(tanda.join("").length <= 3_000, "una tanda se pasó del tope");
+  }
+});
+
+/* Mil frases de tres letras caben, pero el modelo pierde la cuenta al numerarlas. */
+test("y también hay tope de cuántas", () => {
+  const cortos = Array.from({ length: 200 }, () => "hola");
+  const tandas = batchTexts(cortos, { maxChars: 100_000, maxItems: 60 });
+
+  assert.equal(tandas.length, 4);
+  assert.ok(tandas.every((tanda) => tanda.length <= 60));
+});
+
+/* Partir una frase por la mitad daría dos sin sentido: traducir media es peor. */
+test("un texto que solo ya se pasa va igualmente entero", () => {
+  const tandas = batchTexts(["x".repeat(9_000)], { maxChars: 1_000 });
+
+  assert.equal(tandas.length, 1);
+  assert.equal(tandas[0][0].length, 9_000);
+});
+
+test("ninguna frase se pierde ni cambia de orden", () => {
+  const textos = Array.from({ length: 137 }, (_, i) => `frase ${i}`);
+
+  assert.deepEqual(batchTexts(textos, { maxChars: 200 }).flat(), textos);
+});
+
+test("sin textos no hay tandas", () => {
+  assert.deepEqual(batchTexts([]), []);
 });
