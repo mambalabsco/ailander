@@ -1,7 +1,8 @@
 "use client";
 
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { findNodeType, type NodeState, type PortKind } from "@/lib/flow/graph";
+import { previewOf, summaryOf } from "@/components/flow/node-view";
 
 /**
  * Una caja del lienzo.
@@ -36,8 +37,22 @@ const GROUP_STYLE: Record<string, string> = {
   montaje: "border-rose-300 dark:border-rose-800",
 };
 
+/**
+ * Qué nodos se escriben dentro de la caja, y en qué ajuste guardan el texto.
+ *
+ * Solo los de texto libre. Un nodo de clip también tiene prompt, pero el suyo
+ * **entra por un cable** desde un nodo de prompt: dejarlo escribir aquí daría
+ * dos prompts para el mismo plano y ninguna forma de saber cuál manda.
+ */
+const INLINE_PROMPT: Record<string, string> = {
+  prompt: "text",
+  musica: "prompt",
+};
+
 export interface FlowNodeData extends Record<string, unknown> {
   type: string;
+  /** Los ajustes de la caja: el modelo, el texto, los segundos. */
+  settings?: Record<string, unknown>;
   /** Qué hay dentro: el modelo elegido, el texto, lo que sea. */
   summary: string;
   /**
@@ -92,7 +107,9 @@ const STATE_STYLE: Record<NodeState, { ring: string; label: string; tone: string
   },
 };
 
-export function FlowNodeBox({ data, selected }: NodeProps) {
+export function FlowNodeBox({ id, data, selected }: NodeProps) {
+  const { setNodes } = useReactFlow();
+
   const value = data as FlowNodeData;
   const type = findNodeType(value.type);
 
@@ -106,6 +123,35 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
 
   const result = value.result;
   const state = value.state ? STATE_STYLE[value.state] : null;
+
+  /*
+    El resumen y la vista previa se recalculan al escribir.
+
+    Si no, la caja enseñaría el prompt nuevo y su cabecera el viejo: dos
+    versiones del mismo texto a diez píxeles una de otra.
+  */
+  const write = (text: string) => {
+    const field = INLINE_PROMPT[value.type];
+
+    setNodes((current) =>
+      current.map((node) => {
+        if (node.id !== id) return node;
+
+        const data = node.data as FlowNodeData;
+        const settings = { ...(data.settings ?? {}), [field]: text };
+
+        return {
+          ...node,
+          data: {
+            ...data,
+            settings,
+            summary: summaryOf(value.type, settings),
+            preview: previewOf(value.type, settings),
+          },
+        };
+      }),
+    );
+  };
 
   return (
     <div
@@ -215,7 +261,31 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
           />
         ) : null}
 
-        {!result?.url && value.preview?.text ? (
+        {/*
+          El prompt se escribe **aquí**, no en el panel de la derecha.
+
+          Escribirlo en el panel obliga a mirar a un sitio y a leer el resultado
+          en otro: con seis prompts que se contestan entre ellos —la toma dos
+          continúa la uno— la comparación es ir y venir seis veces. Dentro de la
+          caja se leen los seis seguidos, que es como se corrigen.
+
+          El panel sigue estando: ahí viven el modelo, los segundos y el botón
+          de que lo escriba Claude, que no caben en una caja de 208 píxeles.
+        */}
+        {INLINE_PROMPT[value.type] && !result?.url ? (
+          <textarea
+            /*
+              `nodrag` y `nowheel` son de React Flow: sin ellas, arrastrar para
+              seleccionar texto mueve el nodo y la rueda hace zoom al lienzo en
+              vez de desplazar el texto.
+            */
+            className="nodrag nowheel mt-1 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-[10px] leading-snug text-slate-700 outline-none focus:border-violet-400 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200"
+            rows={4}
+            placeholder={type.note}
+            value={settingOf(value, INLINE_PROMPT[value.type])}
+            onChange={(event) => write(event.target.value)}
+          />
+        ) : !result?.url && value.preview?.text ? (
           <p className="mt-1 line-clamp-4 rounded-lg bg-slate-50 px-1.5 py-1 text-[10px] leading-snug text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
             {value.preview.text}
           </p>
@@ -298,4 +368,10 @@ export function FlowNodeBox({ data, selected }: NodeProps) {
       </div>
     </div>
   );
+}
+
+/** Un ajuste de texto del nodo, o vacío. */
+function settingOf(data: FlowNodeData, field: string): string {
+  const value = data.settings?.[field];
+  return typeof value === "string" ? value : "";
 }
