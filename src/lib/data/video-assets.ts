@@ -64,7 +64,24 @@ export async function uploadVideoAsset(options: {
     .from(BUCKET)
     .upload(path, options.data, { contentType: options.contentType, upsert: true });
 
-  if (error) throw new Error(`No se pudo guardar el audio: ${error.message}`);
+  if (error) {
+    /*
+     * El almacenamiento rechazando por tamaño después de que la comprobación de
+     * arriba lo dejara pasar solo significa una cosa: el tope del bucket es
+     * menor que `MAX_MB`, o sea que falta aplicar la migración que lo sube.
+     *
+     * Su mensaje —«The object exceeded the maximum allowed size»— no dice ni
+     * cuánto pesaba, ni cuál es el tope, ni que lo que falta es una migración.
+     * Con eso delante, lo que parece es que el arreglo no funcionó.
+     */
+    if (/exceeded the maximum allowed size/i.test(error.message)) {
+      throw new Error(
+        `El almacenamiento rechazó ${megas.toFixed(1)} MB aunque la plataforma admite ${MAX_MB}. El tope del bucket «${BUCKET}» sigue siendo el viejo: falta aplicar la migración «20260805000600_video_assets_192» en el servidor.`,
+      );
+    }
+
+    throw new Error(`No se pudo guardar el audio: ${error.message}`);
+  }
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return data.publicUrl;
