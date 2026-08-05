@@ -881,3 +881,186 @@ export async function cliCostAction(input: unknown): Promise<{ label: string }> 
     };
   }
 }
+
+/**
+ * Buscar música libre de derechos en catálogos abiertos.
+ *
+ * ## Lo que devuelve y lo que no
+ *
+ * Solo pistas con licencia que **permite anuncios**: CC0 siempre, y CC BY si se
+ * acepta citar al autor. Lo demás no se enseña. Buscando música de fondo en
+ * catálogos libres, lo que más abunda es `by-nc-nd` —prohíbe el uso comercial y
+ * prohíbe montarla en un vídeo— y suena exactamente igual de bien.
+ *
+ * Un fallo aquí no se ve al mirar el anuncio: aparece meses después en forma de
+ * reclamación.
+ */
+export async function searchMusicAction(input: unknown): Promise<{
+  tracks: import("@/lib/video/music-library").Track[];
+  problem: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    const { searchFreeMusic } = await import("@/lib/music-search");
+
+    return await searchFreeMusic({
+      text: readText(raw.text),
+      minSeconds: Number(raw.minSeconds) || 0,
+      allowAttribution: raw.allowAttribution === true,
+    });
+  } catch (error) {
+    return {
+      tracks: [],
+      problem: error instanceof Error ? error.message : "No se pudo buscar música.",
+    };
+  }
+}
+
+/**
+ * Que un modelo elija de la lista, según criterios escritos.
+ *
+ * Se le pasan **las pistas que hay** y se le pide el identificador de una de
+ * ellas. Preguntarle sin la lista devuelve una descripción preciosa de una
+ * canción que no existe, y entonces hay que buscarla a mano — que es justo el
+ * trabajo que esto venía a quitar.
+ *
+ * El identificador se comprueba contra la lista antes de devolverlo: un modelo
+ * puede inventárselo, y usarlo sin comprobar pondría en el anuncio una música
+ * que no existe.
+ */
+export async function pickMusicAction(input: unknown): Promise<{
+  trackId: string;
+  why: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    const { buildPickPrompt, readPick } = await import("@/lib/video/music-library");
+    type Track = import("@/lib/video/music-library").Track;
+
+    const tracks = (Array.isArray(raw.tracks) ? raw.tracks : []) as Track[];
+    const criteria = readText(raw.criteria);
+
+    if (tracks.length === 0) return { trackId: "", why: "No hay ninguna pista donde elegir." };
+    if (!criteria) return { trackId: "", why: "Escribe con qué criterio quieres que elija." };
+
+    /*
+     * Con esquema y no con texto libre.
+     *
+     * La API obliga a que la respuesta cumpla la forma, así que el
+     * identificador llega en su propio campo en vez de haber que sacarlo de
+     * entre la prosa. Aun así se comprueba contra la lista: cumplir el esquema
+     * garantiza que hay una cadena, no que esa cadena sea una pista que existe.
+     */
+    const answer = await generateStructured<{ trackId: string; why: string }>({
+      prompt: buildPickPrompt({ criteria, tracks, seconds: Number(raw.seconds) || 0 }),
+      schema: {
+        type: "object",
+        properties: {
+          trackId: {
+            type: "string",
+            description: "El identificador exacto de la pista elegida, o vacío si ninguna sirve.",
+          },
+          why: { type: "string", description: "En dos frases, por qué esa y no las otras." },
+        },
+        required: ["trackId", "why"],
+        additionalProperties: false,
+      },
+      role: "copy",
+    });
+
+    const pick = readPick(`[${answer.data.trackId}]`, tracks);
+
+    /*
+     * Sin identificador válido se devuelve la explicación tal cual.
+     *
+     * Puede ser que el modelo dijera que ninguna sirve —que es una respuesta
+     * legítima y útil— o que se inventara una. En los dos casos lo que hay que
+     * enseñar es lo que contestó, no un «no se pudo elegir» que esconde el
+     * motivo.
+     */
+    return { trackId: pick?.id ?? "", why: answer.data.why.trim() };
+  } catch (error) {
+    return {
+      trackId: "",
+      why: error instanceof Error ? error.message : "No se pudo elegir.",
+    };
+  }
+}
+
+/**
+ * Meter una pista del catálogo libre en el proyecto, como una más.
+ *
+ * Se llama `add…` y no `use…` a propósito: cualquier cosa que empiece por «use»
+ * la trata React como un hook, y llamarla dentro de un manejador de eventos se
+ * convierte en un error de compilación que no tiene nada que ver con lo que
+ * hace la función.
+ *
+ * ## Por qué se guarda como asset y no como un caso aparte
+ *
+ * Porque entonces el montaje no tiene que saber que existe. Una pista de
+ * catálogo encendida se mezcla igual que una generada: mismo camino, mismo
+ * volumen, mismos avisos si es más corta que el vídeo. Un camino especial para
+ * ella sería un sitio más donde el comportamiento puede divergir sin que nadie
+ * lo note hasta ver el vídeo.
+ *
+ * Se guarda la dirección del catálogo, no una copia: son direcciones estables y
+ * públicas —es lo que las hace utilizables por el montador— y copiar cada pista
+ * llenaría el almacenamiento de música que no es nuestra.
+ */
+export async function addCatalogMusicAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    const projectId = readText(raw.projectId);
+    const url = readText(raw.url);
+    const name = readText(raw.name) || "Música del catálogo";
+    const license = readText(raw.license);
+
+    if (!projectId) return { ok: false, message: "Falta el proyecto." };
+    if (!url) return { ok: false, message: "Esa pista no trae dirección." };
+
+    /*
+     * La licencia se vuelve a comprobar aquí.
+     *
+     * Es la última puerta antes de que la pista entre en un anuncio, y lo que
+     * llega es lo que mandó el navegador: fiarse de que la pantalla ya filtró
+     * significa fiarse de una petición que cualquiera puede escribir a mano.
+     */
+    const { usableInAds } = await import("@/lib/video/music-library");
+
+    if (!usableInAds(license)) {
+      return {
+        ok: false,
+        message: `La licencia «${license || "desconocida"}» no permite usar esa música en un anuncio.`,
+      };
+    }
+
+    await addAsset({
+      projectId,
+      kind: "musica",
+      url,
+      name,
+      model: `catalogo:${license}`,
+    });
+
+    revalidatePath("/estudio");
+
+    return { ok: true, message: `«${name}» añadida al proyecto.` };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo añadir.",
+    };
+  }
+}

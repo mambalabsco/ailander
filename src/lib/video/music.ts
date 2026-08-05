@@ -88,7 +88,7 @@ export const MUSIC_GENERATORS: MusicGenerator[] = [
     usdPerMinute: 0.8,
     // Redondea hacia arriba: treinta segundos pagan un minuto.
     billsWholeMinutes: true,
-    note: "El mejor de largo, y cuarenta veces más caro. Cobra por minuto empezado, así que conviene pedir el largo justo.",
+    note: "El mejor de largo, y cuarenta veces más caro. Cobra por minuto empezado, así que conviene pedir el largo justo. Es el único que entrega MP3: los demás dan WAV y una pista larga puede pasarse del tope al guardarla.",
   },
   {
     id: "minimax",
