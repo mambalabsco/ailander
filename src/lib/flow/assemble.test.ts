@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { composeTracks, planAssembly } from "./assemble.ts";
+import { composeTracks, planAssembly, type Plan } from "./assemble.ts";
 
 const clip = (id: string, seconds = 6, url = `https://x.co/${id}.mp4`) => ({ id, url, seconds });
 
@@ -112,13 +112,20 @@ test("con la imagen mucho más larga que la voz, se dice que el final va mudo", 
   assert.ok(plan.warnings.some((warning) => warning.includes("sin locución")));
 });
 
-test("la música corta se avisa, no se estira", () => {
+test("la música corta se repite y se avisa de las vueltas", () => {
+  /*
+   * Antes esto solo avisaba de que el final quedaba «sin música», y el aviso no
+   * arreglaba nada: hay generadores que no aceptan duración y siempre dan unos
+   * treinta segundos. Ahora se cubre repitiendo y lo que se dice es cuántas
+   * vueltas van a sonar, que es lo que deja decidir si compensa cambiar de
+   * generador.
+   */
   const plan = planAssembly({
     clips: [clip("a", 30)],
     music: { id: "m", url: "https://x.co/m.wav", seconds: 10 },
   });
 
-  assert.ok(plan.warnings.some((warning) => warning.includes("sin música")));
+  assert.ok(plan.warnings.some((warning) => warning.includes("se repite 3 veces")));
 });
 
 test("una música de sobra no molesta", () => {
@@ -172,4 +179,88 @@ test("una voz sin dirección no cuenta como voz", () => {
 
   assert.equal(plan.voice, null);
   assert.equal(composeTracks(plan, "https://x.co/todo.mp4").length, 1);
+});
+
+test("la música corta se repite hasta cubrir el vídeo", () => {
+  /*
+   * Es el fallo que dejaba dos tercios de un anuncio en silencio: Lyria da unos
+   * treinta segundos pidas lo que pidas, y un fotograma con más duración que el
+   * audio no lo alarga — el montador rellena el hueco de silencio y entrega el
+   * vídeo con la duración correcta, así que no parece un fallo.
+   */
+  const plan: Plan = {
+    clips: [{ id: "c1", url: "https://v/1.mp4", seconds: 90 }],
+    voice: null,
+    music: { id: "m", url: "https://a/m.mp3", seconds: 30 },
+    seconds: 90,
+    warnings: [],
+    blockers: [],
+  };
+
+  const music = composeTracks(plan, "https://v/full.mp4").find((track) => track.id === "musica");
+
+  assert.equal(music?.keyframes.length, 3);
+  assert.deepEqual(
+    music?.keyframes.map((frame) => frame.timestamp),
+    [0, 30_000, 60_000],
+  );
+});
+
+test("la última vuelta se recorta al final del vídeo", () => {
+  // Pasarse dejaría música sonando sobre nada.
+  const plan: Plan = {
+    clips: [{ id: "c1", url: "https://v/1.mp4", seconds: 70 }],
+    voice: null,
+    music: { id: "m", url: "https://a/m.mp3", seconds: 30 },
+    seconds: 70,
+    warnings: [],
+    blockers: [],
+  };
+
+  const music = composeTracks(plan, "https://v/full.mp4").find((track) => track.id === "musica");
+
+  assert.equal(music?.keyframes.length, 3);
+  assert.equal(music?.keyframes[2].duration, 10_000);
+});
+
+test("la música que ya cubre no se toca", () => {
+  const plan: Plan = {
+    clips: [{ id: "c1", url: "https://v/1.mp4", seconds: 40 }],
+    voice: null,
+    music: { id: "m", url: "https://a/m.mp3", seconds: 60 },
+    seconds: 40,
+    warnings: [],
+    blockers: [],
+  };
+
+  const music = composeTracks(plan, "https://v/full.mp4").find((track) => track.id === "musica");
+
+  assert.equal(music?.keyframes.length, 1);
+  assert.equal(music?.keyframes[0].duration, 40_000);
+});
+
+test("sin duración medida se coloca una vez, como antes", () => {
+  // Repetir sin saber cuánto dura sería adivinar, y adivinar mal aquí es
+  // solapar la pista consigo misma.
+  const plan: Plan = {
+    clips: [{ id: "c1", url: "https://v/1.mp4", seconds: 90 }],
+    voice: null,
+    music: { id: "m", url: "https://a/m.mp3", seconds: 0 },
+    seconds: 90,
+    warnings: [],
+    blockers: [],
+  };
+
+  const music = composeTracks(plan, "https://v/full.mp4").find((track) => track.id === "musica");
+
+  assert.equal(music?.keyframes.length, 1);
+});
+
+test("el aviso dice cuántas vueltas van a sonar", () => {
+  const plan = planAssembly({
+    clips: [{ id: "c1", url: "https://v/1.mp4", seconds: 90 }],
+    music: { id: "m", url: "https://a/m.mp3", seconds: 30 },
+  });
+
+  assert.ok(plan.warnings.some((note) => /se repite 3 veces/.test(note)));
 });

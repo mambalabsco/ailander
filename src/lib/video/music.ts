@@ -451,3 +451,50 @@ export function buildMusicPrompt(options: {
 
   return lines.join(" ");
 }
+
+/**
+ * Qué va a durar de verdad la pieza que pidas.
+ *
+ * ## Por qué esto existe
+ *
+ * Porque el campo de segundos se deja rellenar siempre, y hay generadores que
+ * no lo miran: Lyria y Minimax devuelven lo que ellos deciden —unos treinta
+ * segundos— pidas lo que pidas. El campo aceptaba un 90, no daba error, y la
+ * música salía de 30. El fallo se descubría al ver el anuncio con dos tercios
+ * en silencio.
+ *
+ * Devuelve `null` cuando el generador no publica su duración: es «no se sabe»,
+ * que no es lo mismo que treinta y hay que enseñarlo distinto.
+ */
+export function realSeconds(model: MusicGenerator, asked: number): number | null {
+  if (!model.durationField) return null;
+
+  return Math.min(model.maxSeconds, Math.max(model.minSeconds, Math.round(asked)));
+}
+
+/**
+ * Qué avisar antes de generar, si es que hay algo que avisar.
+ *
+ * Vacío cuando la pieza va a cubrir el vídeo. Se escribe aquí y no en la
+ * pantalla para que digan lo mismo el estudio y el flujo: dos redacciones del
+ * mismo aviso acaban siendo dos criterios distintos.
+ */
+export function durationWarning(model: MusicGenerator, asked: number): string {
+  const real = realSeconds(model, asked);
+  const wanted = Math.round(asked);
+
+  if (real === null) {
+    return `${model.label} no acepta duración: da la pieza que él decide, en torno a 30 s. Si el vídeo dura más, se repetirá en bucle con un salto audible en cada vuelta. Para una pieza continua elige uno que acepte duración.`;
+  }
+
+  if (real < wanted) {
+    return `${model.label} llega a ${model.maxSeconds} s, así que de los ${wanted} pedidos saldrán ${real}. El resto se cubre repitiendo.`;
+  }
+
+  return "";
+}
+
+/** Los que sí dejan pedir cuánto tiene que durar. */
+export function takesDuration(model: MusicGenerator): boolean {
+  return model.durationField !== null;
+}

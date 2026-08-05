@@ -6,7 +6,12 @@ import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
 import { SUBTITLE_PRESETS } from "@/lib/video/captions";
 import { ASPECTS, aspectsFor, nearestAspect, pixels } from "@/lib/video/aspect";
-import { findMusicGenerator, musicCostLabel, MUSIC_GENERATORS } from "@/lib/video/music";
+import {
+  durationWarning,
+  findMusicGenerator,
+  musicCostLabel,
+  MUSIC_GENERATORS,
+} from "@/lib/video/music";
 import { MUSIC_LEVELS } from "@/lib/video/loudness";
 import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voice-settings";
 import {
@@ -1009,12 +1014,22 @@ export function StudioBoard({
                       className="w-24 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                     />
                   </label>
-                ) : (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Este no deja pedir duración.
-                  </p>
-                )}
+                ) : null}
               </div>
+
+              {/*
+                Lo que va a durar de verdad, dicho antes de gastar.
+
+                «Este no deja pedir duración» era cierto y no servía: no decía
+                cuánto da ni qué pasa si el vídeo dura más. El aviso completo se
+                escribe en `music.ts` para que el estudio y el flujo digan lo
+                mismo — dos redacciones acaban siendo dos criterios.
+              */}
+              {durationWarning(findMusicGenerator(musicModel), musicSeconds) ? (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  {durationWarning(findMusicGenerator(musicModel), musicSeconds)}
+                </p>
+              ) : null}
 
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {findMusicGenerator(musicModel).note}

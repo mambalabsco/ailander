@@ -125,9 +125,24 @@ export function planAssembly(input: {
     }
   }
 
-  if (music && music.seconds > 0 && music.seconds + 0.5 < seconds) {
+  /*
+   * La música más corta que el vídeo se **repite**, no se deja en silencio.
+   *
+   * Antes esto era solo un aviso, y un aviso no arregla nada: hay generadores
+   * —Lyria, Minimax— que no aceptan duración y siempre devuelven unos treinta
+   * segundos. Con un anuncio de noventa, dos tercios iban sin música y lo único
+   * que se podía hacer era leer la queja.
+   *
+   * Repetir tiene una costura audible en cada vuelta. Es peor que una pieza
+   * escrita para durar lo que dura el vídeo y mucho mejor que el silencio, así
+   * que se hace y **se dice**: cuántas vueltas van a sonar, para que quien
+   * prefiera lo otro cambie a un generador que sí acepte duración.
+   */
+  if (music && music.seconds > 0.5 && music.seconds + 0.5 < seconds) {
+    const loops = Math.ceil(seconds / music.seconds);
+
     warnings.push(
-      `La música dura ${music.seconds.toFixed(1)} s y el vídeo ${seconds.toFixed(1)} s: el final queda sin música.`,
+      `La música dura ${music.seconds.toFixed(1)} s y el vídeo ${seconds.toFixed(1)} s: se repite ${loops} veces para cubrirlo, con un salto audible en cada vuelta. Para una pieza continua usa un generador que acepte duración.`,
     );
   }
 
@@ -170,12 +185,52 @@ export function composeTracks(plan: Plan, pictureUrl: string) {
   }
 
   if (plan.music) {
-    tracks.push({
-      id: "musica",
-      type: "audio",
-      keyframes: [{ timestamp: 0, duration: ms, url: plan.music.url }],
-    });
+    tracks.push({ id: "musica", type: "audio", keyframes: musicKeyframes(plan.music, ms) });
   }
 
   return tracks;
+}
+
+/**
+ * La música, repetida hasta cubrir el vídeo.
+ *
+ * ## Por qué en varios fotogramas y no estirando uno
+ *
+ * Porque un fotograma con más duración de la que tiene el audio **no lo alarga**:
+ * el montador reserva el hueco y lo rellena de silencio. Eso es exactamente lo
+ * que pasaba —el final mudo— y no daba ningún error, porque el vídeo salía con
+ * la duración pedida.
+ *
+ * Colocando la misma pista una y otra vez, cada copia empieza donde acabó la
+ * anterior. La última se recorta al final del vídeo para que no se pase.
+ *
+ * ## Y por qué hay tope de vueltas
+ *
+ * Porque si la duración medida viniera mal —un cero, un valor absurdo— el bucle
+ * generaría miles de fotogramas y la petición al montador reventaría por tamaño.
+ * Con el tope, en el peor caso suena menos música de la que debía, que es lo
+ * mismo que pasaba antes.
+ */
+function musicKeyframes(
+  music: { url: string; seconds: number },
+  totalMs: number,
+): { timestamp: number; duration: number; url: string }[] {
+  const pieceMs = Math.round(Math.max(0, music.seconds) * 1000);
+
+  // Sin duración medida no se puede repetir sin adivinar: se coloca una vez,
+  // que es lo que se hacía antes de esto.
+  if (pieceMs < 500) return [{ timestamp: 0, duration: totalMs, url: music.url }];
+
+  const keyframes: { timestamp: number; duration: number; url: string }[] = [];
+
+  for (let at = 0; at < totalMs && keyframes.length < 200; at += pieceMs) {
+    keyframes.push({
+      timestamp: at,
+      // La última se recorta: pasarse dejaría música sonando sobre nada.
+      duration: Math.min(pieceMs, totalMs - at),
+      url: music.url,
+    });
+  }
+
+  return keyframes;
 }
