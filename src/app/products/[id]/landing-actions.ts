@@ -466,7 +466,48 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
         if (found?.shopifyUrl) avatars.push(found.shopifyUrl);
       }
 
-      const html = renderLandingHtml(page, { urls, avatars, embedUrls: true });
+      const rendered = renderLandingHtml(page, { urls, avatars, embedUrls: true });
+
+      /*
+       * El CSS sale del cuerpo y se sirve aparte.
+       *
+       * Shopify rechaza un `page.body` de más de 512 KB, y una copia de una
+       * landing de Shopify se pasa: el marcado son unos 220 KB y el CSS del tema
+       * unos 350. Podarlo baja a 471 —publica, con 41 KB de margen— y la
+       * siguiente página un poco más pesada vuelve a chocar.
+       *
+       * La salida limpia sería un asset del tema, pero `themeFilesUpsert` exige
+       * además de `write_themes` una exención que Shopify concede a mano, y
+       * aplica igual a las apps personalizadas de una tienda. Un `<link>` no
+       * pide permiso a nadie.
+       *
+       * Si la subida de la hoja falla, se publica con el CSS dentro: una página
+       * que quizá no quepa es mejor que ninguna, y el error de Shopify dice
+       * exactamente qué pasó.
+       */
+      const { externalizeCss } = await import("@/lib/landing-copy-html");
+      const { uploadVideoAsset } = await import("@/lib/data/video-assets");
+
+      let html = rendered;
+
+      // Sin dirección todavía: esta pasada solo sirve para saber si hay CSS que
+      // sacar y cuánto pesa. La buena se hace abajo, ya con el enlace.
+      const partes = externalizeCss(rendered, "");
+
+      if (partes.css) {
+        try {
+          const href = await uploadVideoAsset({
+            videoId: `landing-${page.id}`,
+            name: "estilos.css",
+            data: Buffer.from(partes.css, "utf8"),
+            contentType: "text/css",
+          });
+
+          html = externalizeCss(rendered, href).html;
+        } catch {
+          html = rendered;
+        }
+      }
 
       const crear = () =>
         createPage(store, {

@@ -24,6 +24,7 @@ import {
   unlazy,
   autoplayVideos,
   pruneCss,
+  externalizeCss,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -1019,4 +1020,54 @@ test("las clases salen de los atributos, no del texto", () => {
   const css = pruneCss(".oferta{color:red}", "<p>Esta oferta acaba hoy</p>");
 
   assert.ok(!css.includes("color:red"));
+});
+
+/* ------------------------- Sacar el CSS del cuerpo ------------------------- */
+
+test("el CSS sale del marcado y queda un link", () => {
+  /*
+   * Shopify rechaza un cuerpo de más de 512 KB, y el CSS del tema es dos
+   * tercios del peso de una copia.
+   */
+  const out = externalizeCss("<style>.a{color:red}</style><div>hola</div>", "https://x/a.css");
+
+  assert.ok(!out.html.includes("<style"));
+  assert.ok(out.html.includes('<link rel="stylesheet" href="https://x/a.css">'));
+  assert.ok(out.html.includes("<div>hola</div>"));
+  assert.equal(out.css, ".a{color:red}");
+});
+
+test("el link va delante del marcado", () => {
+  // Detrás, el navegador pinta sin estilos y repinta al llegar la hoja: el
+  // parpadeo blanco pasa justo mientras alguien decide si se queda.
+  const out = externalizeCss("<div>hola</div><style>.a{color:red}</style>", "https://x/a.css");
+
+  assert.ok(out.html.indexOf("<link") < out.html.indexOf("<div>"));
+});
+
+test("varias hojas se juntan en una", () => {
+  const out = externalizeCss(
+    "<style>.a{color:red}</style><p></p><style>.b{color:blue}</style>",
+    "https://x/a.css",
+  );
+
+  assert.ok(out.css.includes(".a"));
+  assert.ok(out.css.includes(".b"));
+  assert.equal((out.html.match(/<link/g) ?? []).length, 1);
+});
+
+test("sin CSS no se enlaza nada", () => {
+  // Un `<link>` a un archivo que no existe es una petición fallida en cada
+  // visita y una línea roja en la consola de quien mira la página.
+  const out = externalizeCss("<div>hola</div>", "https://x/a.css");
+
+  assert.ok(!out.html.includes("<link"));
+  assert.equal(out.css, "");
+});
+
+test("sin dirección se quita el CSS pero no se enlaza", () => {
+  const out = externalizeCss("<style>.a{color:red}</style><div></div>", "");
+
+  assert.ok(!out.html.includes("<link"));
+  assert.equal(out.css, ".a{color:red}");
 });
