@@ -47,6 +47,8 @@ export interface NodeSettingsProps {
   /** Los modelos del CLI, para poder crear una cara sin salir del lienzo. */
   cliModels: { slug: string; name: string }[];
   cliModelsError: string;
+  /** Los de vídeo de Higgsfield, para los nodos de clip. */
+  cliVideoModels: { slug: string; name: string }[];
   /** Los copys que ya funcionaron y los ángulos investigados del producto. */
   copyReferences: { id: string; kind: "copy" | "angulo"; label: string; text: string }[];
   onChange: (settings: Record<string, unknown>) => void;
@@ -81,6 +83,7 @@ export function NodeSettings({
   productImages,
   cliModels,
   cliModelsError,
+  cliVideoModels,
   copyReferences,
   onChange,
   onDelete,
@@ -474,6 +477,21 @@ export function NodeSettings({
                   {model.label}
                 </option>
               ))}
+
+              {/*
+                Los de Higgsfield llevan `hf:` delante, igual que en el estudio.
+                Es lo que distingue «va por la API» de «va por su CLI», que no
+                es lo mismo ni acepta los mismos campos.
+              */}
+              {type === "clip" && cliVideoModels.length > 0 ? (
+                <optgroup label="Higgsfield">
+                  {cliVideoModels.map((model) => (
+                    <option key={model.slug} value={`hf:${model.slug}`}>
+                      {model.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </SelectField>,
           )}
 

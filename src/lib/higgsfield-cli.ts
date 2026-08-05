@@ -346,7 +346,26 @@ export async function listCliModels(kind: "image" | "video" = "image"): Promise<
 }
 
 async function readModels(kind: "image" | "video"): Promise<CliModel[]> {
-  const { stdout, stderr } = await exec(["model", "list", `--${kind}`, "--json"], 30_000);
+  /*
+   * Se piden las dos listas: la filtrada y la de todo.
+   *
+   * `model list --video` filtra en su lado, y hay modelos que están en la web
+   * de Higgsfield y no salen ahí —Sora es el que se notó—. Sin saber por qué
+   * los deja fuera, lo que se puede hacer es mirar también la lista sin filtro
+   * y recuperar los que dicen ser de este tipo.
+   *
+   * Si la lista completa tampoco los trae, esto no cambia nada: no inventa
+   * modelos, solo deja de perder los que ya venían.
+   *
+   * La segunda llamada no aborta la primera si falla: media lista es mejor que
+   * ninguna, y era lo que había antes.
+   */
+  const [filtered, everything] = await Promise.all([
+    exec(["model", "list", `--${kind}`, "--json"], 30_000),
+    exec(["model", "list", "--json"], 30_000).catch(() => null),
+  ]);
+
+  const { stdout, stderr } = filtered;
   const combined = `${stdout}\n${stderr}`;
 
   if (looksUnauthenticated(combined)) {
@@ -376,19 +395,55 @@ async function readModels(kind: "image" | "video"): Promise<CliModel[]> {
     );
   }
 
-  return items
-    .map((item) => ({
-      slug: String(item.job_type ?? item.slug ?? item.name ?? ""),
-      title: String(item.title ?? item.display_name ?? item.job_type ?? item.slug ?? ""),
-      jobType: String(item.output_type ?? item.type ?? ""),
-      // Si el listado trae los parámetros, ya se sabe; si no, `null` y se
-      // preguntará por el modelo concreto. Un `false` aquí sería mentir.
-      mediaParams: hasParams(item) ? declaredMediaParams(item) : null,
-      acceptsReferences: hasParams(item)
-        ? declaredMediaParams(item).includes("image_references")
-        : null,
-    }))
-    .filter((model) => model.slug);
+  const models = items.map(toCliModel).filter((model) => model.slug);
+
+  /*
+   * Los que la lista completa dice que son de este tipo y el filtro no trajo.
+   *
+   * Se comprueba `output_type` y no el nombre: llamarse «sora-video» no lo hace
+   * de vídeo, y hay modelos de imagen con «video» en el título por lo que
+   * generan a partir de uno.
+   */
+  const seen = new Set(models.map((model) => model.slug));
+
+  if (everything) {
+    const all = findModelList(safeParse(everything.stdout)) ?? [];
+
+    for (const item of all) {
+      const model = toCliModel(item);
+
+      if (!model.slug || seen.has(model.slug)) continue;
+      if (!model.jobType.toLowerCase().includes(kind)) continue;
+
+      seen.add(model.slug);
+      models.push(model);
+    }
+  }
+
+  return models;
+}
+
+function toCliModel(item: Record<string, unknown>): CliModel {
+  return {
+    slug: String(item.job_type ?? item.slug ?? item.name ?? ""),
+    title: String(item.title ?? item.display_name ?? item.job_type ?? item.slug ?? ""),
+    jobType: String(item.output_type ?? item.type ?? ""),
+    // Si el listado trae los parámetros, ya se sabe; si no, `null` y se
+    // preguntará por el modelo concreto. Un `false` aquí sería mentir.
+    mediaParams: hasParams(item) ? declaredMediaParams(item) : null,
+    acceptsReferences: hasParams(item)
+      ? declaredMediaParams(item).includes("image_references")
+      : null,
+  };
+}
+
+/** JSON que puede no serlo: la lista de respaldo no merece tirar la buena. */
+function safeParse(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 /** Si esta entrada del listado describe sus parámetros o solo se nombra. */

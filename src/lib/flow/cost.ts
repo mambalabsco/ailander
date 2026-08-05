@@ -101,8 +101,24 @@ export function nodeCost(node: FlowNode): NodeCost {
     }
 
     case "clip": {
-      const model = findGenerator(text(node.settings, "model"));
+      const chosen = text(node.settings, "model");
       const seconds = num(node.settings, "seconds", 6);
+
+      /*
+        Los de Higgsfield cobran en créditos y su tarifa depende del plan, así
+        que aquí no hay dólares que sumar. Se cuenta como «sin precio
+        confirmado», que es lo que la barra ya sabe enseñar aparte — sumarle un
+        cero lo haría parecer gratis.
+      */
+      if (chosen.startsWith("hf:")) {
+        return {
+          nodeId: node.id,
+          what: `Clip · ${chosen.slice(3)} · ${seconds} s · créditos de Higgsfield`,
+          usd: null,
+        };
+      }
+
+      const model = findGenerator(chosen);
 
       return {
         nodeId: node.id,

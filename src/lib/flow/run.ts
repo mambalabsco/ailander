@@ -30,7 +30,7 @@ import {
   speak,
   trimClip,
 } from "@/lib/video/providers";
-import { generateWithCli } from "@/lib/higgsfield-cli";
+import { generateWithCli, modelDurations, modelMediaParams } from "@/lib/higgsfield-cli";
 import { findLipsyncModel } from "@/lib/video/lipsync";
 import { composeTracks, planAssembly } from "@/lib/flow/assemble";
 import { buildVocabulary, subtitleLanguage } from "@/lib/video/vocabulary";
@@ -394,7 +394,58 @@ async function runNode(
       const prompt = first(inputs, 0);
       if (!prompt) throw new Error("Ese nodo de clip no tiene prompt.");
 
-      const model = findGenerator(text(node.settings, "model"));
+      const chosen = text(node.settings, "model");
+
+      /*
+       * Los de Higgsfield van por su CLI, no por la API.
+       *
+       * Llevan `hf:` delante para distinguirlos, igual que en el estudio. Y
+       * llevan otro camino entero: las referencias viajan como archivos, la
+       * duración se comprueba contra lo que declara el modelo, y ni el sonido
+       * ni el precio se piden aquí porque los pone él.
+       */
+      if (chosen.startsWith("hf:")) {
+        const slug = chosen.slice(3);
+        const wanted = num(node.settings, "seconds", 6);
+
+        const [params, durations] = await Promise.all([
+          urls(inputs, 1).length > 0 ? modelMediaParams(slug) : Promise.resolve([] as string[]),
+          modelDurations(slug).catch(() => [] as number[]),
+        ]);
+
+        const seconds =
+          durations.length > 0
+            ? durations.reduce((best, option) =>
+                Math.abs(option - wanted) < Math.abs(best - wanted) ? option : best,
+              )
+            : wanted;
+
+        if (durations.length > 0 && seconds !== Math.round(wanted)) {
+          await ctx.report(
+            `${slug} no hace ${Math.round(wanted)} s: va de ${durations.join(", ")}. Se generan ${seconds}.`,
+          );
+        }
+
+        await ctx.report(`Animando con ${slug}`);
+
+        const result = await generateWithCli({
+          model: slug,
+          prompt: prompt.value,
+          kind: "video",
+          // El que declare: `image_references` si está, y si no el primero.
+          referenceParam: params.includes("image_references") ? "image_references" : params[0],
+          references: await downloadAll(urls(inputs, 1)),
+          aspectRatio: text(node.settings, "aspectRatio", "9:16"),
+          seconds,
+        });
+
+        const clip = result.imageUrls[0];
+        if (!clip) throw new Error(`${slug} no devolvió ningún vídeo.`);
+
+        return { kind: "video", url: clip, value: prompt.value };
+      }
+
+      const model = findGenerator(chosen);
 
       /*
        * La duración que el modelo acepta, no la que se pidió.

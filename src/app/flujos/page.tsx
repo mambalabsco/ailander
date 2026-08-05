@@ -33,7 +33,8 @@ export default async function FlujosPage(props: {
 
   const { f } = await props.searchParams;
 
-  const [flows, products, avatars, voices, cliModels, references] = await Promise.all([
+  const [flows, products, avatars, voices, cliModels, cliVideoModels, references] =
+    await Promise.all([
     listFlows().catch(() => []),
     listOwnProducts(),
     listAvatars().catch(() => []),
@@ -56,6 +57,8 @@ export default async function FlujosPage(props: {
         error: error instanceof Error ? error.message : "no se pudo listar",
       }),
     ),
+    // Los de vídeo son otra llamada porque el CLI filtra por tipo.
+    listCliModels("video").catch(() => []),
     // Los anuncios ya analizados: se clona su construcción, no su vídeo.
     listVideoReferences().catch(() => []),
   ]);
@@ -176,6 +179,10 @@ export default async function FlujosPage(props: {
             voices={voices.map((voice) => ({ id: voice.id, name: voice.name }))}
             cliModels={cliModels.models.map((model) => ({ slug: model.slug, name: model.title }))}
             cliModelsError={cliModels.error}
+            cliVideoModels={cliVideoModels.map((model) => ({
+              slug: model.slug,
+              name: model.title,
+            }))}
             productImages={productImages}
             copyReferences={copyReferences}
             productId={current.productId || undefined}

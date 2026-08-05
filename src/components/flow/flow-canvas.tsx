@@ -79,6 +79,8 @@ export interface FlowCanvasProps {
   cliModels: { slug: string; name: string }[];
   /** Por qué no hay modelos, si no los hay. */
   cliModelsError: string;
+  /** Los de vídeo de Higgsfield, para los nodos de clip. */
+  cliVideoModels: { slug: string; name: string }[];
   /** Las del producto del flujo, para usarlas de referencia sin subirlas otra vez. */
   productImages: { url: string; name: string; primary: boolean }[];
   /** Los anuncios ya analizados, para poder clonar su construcción. */
@@ -113,6 +115,7 @@ export function FlowCanvas({
   voices,
   cliModels,
   cliModelsError,
+  cliVideoModels,
   productImages,
   references,
   copyReferences,
@@ -739,6 +742,7 @@ export function FlowCanvas({
               avatars={faces}
               cliModels={cliModels}
               cliModelsError={cliModelsError}
+              cliVideoModels={cliVideoModels}
               productImages={productImages}
               copyReferences={copyReferences}
               onFacesChanged={() => setRunning(true)}
