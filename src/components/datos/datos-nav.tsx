@@ -14,6 +14,12 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 const TABS = [
   { href: "/datos", label: "Panel" },
+  /*
+   * Todas las tiendas juntas, en su propia pestaña y no como opción del
+   * selector: cada tienda tiene su moneda y su zona horaria, y esconderlo
+   * dentro de un «Todas» daría un total que existe y no significa nada.
+   */
+  { href: "/datos/todas", label: "Todas las tiendas" },
   { href: "/datos/campanas", label: "Campañas" },
   { href: "/datos/pyg", label: "Pérdidas y ganancias" },
   { href: "/datos/pedidos", label: "Pedidos" },
