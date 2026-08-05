@@ -19,7 +19,13 @@ import {
   speak,
   trimClip,
 } from "@/lib/video/providers";
-import { generateWithCli, modelMediaParams } from "@/lib/higgsfield-cli";
+import {
+  estimateCliCost,
+  generateWithCli,
+  modelDurations,
+  modelMediaParams,
+} from "@/lib/higgsfield-cli";
+import { costLabel } from "@/lib/higgsfield-params";
 import { findMusicGenerator, musicCostLabel } from "@/lib/video/music";
 import { belowVoice, findMusicLevel } from "@/lib/video/loudness";
 import { estimateCost, findGenerator, VIDEO_GENERATORS } from "@/lib/video/catalog";
@@ -297,10 +303,16 @@ export async function makeImageAction(input: unknown): Promise<LaunchResult> {
  * Un clip con un modelo de vídeo de Higgsfield, por su CLI.
  *
  * Va aparte del resto porque no se le parece en nada: el catálogo lo dice el
- * CLI en marcha, las referencias viajan como archivos en vez de como
- * direcciones, y **la duración no se pide** — cada modelo tiene la suya. Meterlo
- * en la misma función que los de kie obligaría a fingir campos que aquí no
- * existen.
+ * CLI en marcha y las referencias viajan como archivos en vez de como
+ * direcciones. Meterlo en la misma función que los de kie obligaría a fingir
+ * campos que aquí no existen.
+ *
+ * ## La duración sí se pide
+ *
+ * Antes no: se leía en la pantalla, se guardaba y se quedaba ahí. Todos los
+ * vídeos salían con la duración por defecto del modelo, y como el campo estaba
+ * y se dejaba escribir, parecía que hacía algo. Ahora se manda, y si el modelo
+ * no acepta ese número se ajusta al más cercano **diciéndolo**.
  */
 async function makeCliClip(input: {
   projectId: string;
@@ -308,6 +320,7 @@ async function makeCliClip(input: {
   slug: string;
   references: string[];
   aspectRatio: string;
+  seconds: number;
 }): Promise<LaunchResult> {
   if (!input.prompt) throw new Error("Escribe qué quieres ver.");
 
@@ -332,7 +345,33 @@ async function makeCliClip(input: {
        * otro que mantiene un personaje quiere `--image-references`. La bandera
        * equivocada no se ignora: aborta la generación con «Unknown params».
        */
-      const params = input.references.length > 0 ? await modelMediaParams(input.slug) : [];
+      const [params, durations] = await Promise.all([
+        input.references.length > 0 ? modelMediaParams(input.slug) : Promise.resolve([]),
+        modelDurations(input.slug).catch(() => [] as number[]),
+      ]);
+
+      /*
+       * Los segundos que ese modelo vende, no los que se teclearon.
+       *
+       * Mandar una duración que no acepta aborta con «Unknown params», y no
+       * mandarla deja la suya por defecto. Se ajusta al valor más cercano de los
+       * que declara y se cuenta: un vídeo de cinco segundos cuando se pidieron
+       * diez tiene que decirlo antes, no descubrirse al verlo.
+       *
+       * Si no declara ninguna, se manda lo pedido: puede que las acepte todas.
+       */
+      const seconds =
+        durations.length > 0
+          ? durations.reduce((best, option) =>
+              Math.abs(option - input.seconds) < Math.abs(best - input.seconds) ? option : best,
+            )
+          : input.seconds;
+
+      if (durations.length > 0 && seconds !== input.seconds) {
+        await report(
+          `${input.slug} no hace ${input.seconds} s: va de ${durations.join(", ")}. Se generan ${seconds}.`,
+        );
+      }
 
       if (input.references.length > 0 && params.length === 0) {
         throw new Error(
@@ -364,6 +403,7 @@ async function makeCliClip(input: {
         referenceParam: params.includes("image_references") ? "image_references" : params[0],
         references: bytes,
         aspectRatio: input.aspectRatio,
+        seconds,
       });
 
       await addAsset({
@@ -407,7 +447,14 @@ export async function makeClipAction(input: unknown): Promise<LaunchResult> {
   // Los de Higgsfield van por su CLI y llevan `hf:` delante, igual que en las
   // imágenes. Su catálogo lo da él en marcha, así que no está en la tabla.
   if (modelId.startsWith("hf:")) {
-    return makeCliClip({ projectId, prompt, slug: modelId.slice(3), references, aspectRatio });
+    return makeCliClip({
+      projectId,
+      prompt,
+      slug: modelId.slice(3),
+      references,
+      aspectRatio,
+      seconds,
+    });
   }
 
   const model = findGenerator(modelId);
@@ -780,4 +827,57 @@ export async function assembleProjectAction(input: unknown): Promise<LaunchResul
       return { summary: `Montado con ${clips.length} plano(s)${extra}.` };
     },
   });
+}
+
+/**
+ * Qué duraciones acepta un modelo de Higgsfield, para la pantalla.
+ *
+ * Vacío es «no lo dice», y entonces la pantalla enseña un campo libre. Se
+ * devuelve vacío también cuando falla: quedarse sin poder elegir segundos es
+ * peor que elegirlos a mano.
+ */
+export async function cliDurationsAction(slug: unknown): Promise<number[]> {
+  try {
+    await guard();
+
+    const id = readText(slug);
+    if (!id) return [];
+
+    return await modelDurations(id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Lo que va a costar esa generación de Higgsfield, antes de lanzarla.
+ *
+ * Va por `generate cost`, que es el mismo cálculo que hace el trabajo real pero
+ * sin crearlo. El mensaje ya viene redactado —incluido el caso de que no haya
+ * tarifa de crédito configurada— para que la pantalla no tenga que decidir qué
+ * hacer con un `null`.
+ */
+export async function cliCostAction(input: unknown): Promise<{ label: string }> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    await guard();
+
+    const slug = readText(raw.slug);
+    const prompt = readText(raw.prompt);
+
+    if (!slug || !prompt) return { label: "" };
+
+    const cost = await estimateCliCost({
+      model: slug,
+      prompt,
+      seconds: Number(raw.seconds) || undefined,
+    });
+
+    return { label: costLabel(cost.credits, cost.usd) };
+  } catch (error) {
+    return {
+      label: error instanceof Error ? error.message : "No se pudo calcular el coste.",
+    };
+  }
 }

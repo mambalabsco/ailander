@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
@@ -18,6 +18,8 @@ import {
 } from "@/lib/video/catalog";
 import {
   assembleProjectAction,
+  cliCostAction,
+  cliDurationsAction,
   cloneVoiceAction,
   createProjectAction,
   deleteAssetAction,
@@ -105,6 +107,10 @@ export function StudioBoard({
   const [clipPrompt, setClipPrompt] = useState("");
   const [clipModel, setClipModel] = useState(VIDEO_GENERATORS[0].id);
   const [clipSeconds, setClipSeconds] = useState(6);
+  /** Las duraciones que declara el modelo de Higgsfield elegido. */
+  const [cliDurations, setCliDurations] = useState<number[]>([]);
+  /** Lo que dice `generate cost`, ya redactado por el servidor. */
+  const [cliCostNote, setCliCostNote] = useState("");
   const [clipRefs, setClipRefs] = useState<Set<string>>(new Set());
   const [clipSound, setClipSound] = useState(false);
   const [wantedClipAspect, setClipAspect] = useState("9:16");
@@ -147,14 +153,54 @@ export function StudioBoard({
 
   const clipGenerator = findGenerator(clipModel);
 
+  /*
+    Las duraciones se piden al cambiar de modelo, no al abrir la pantalla.
+
+    Preguntar por los cuarenta del catálogo serían cuarenta idas y vueltas al
+    CLI para pintar un desplegable, y treinta y nueve no se van a usar.
+  */
+  const cliSlug = cliClip?.slug ?? "";
+
+  useEffect(() => {
+    let live = true;
+
+    /*
+      Todo dentro del asíncrono, incluido el caso de «no hay modelo».
+
+      Llamar a `setCliDurations` en el cuerpo del efecto es un cambio de estado
+      síncrono durante el renderizado, que React marca como error. Y de paso el
+      coste anterior se borra aquí: era de otro modelo, y una cifra vieja al
+      lado de un modelo nuevo es peor que ninguna.
+    */
+    void (async () => {
+      const list = cliSlug ? await cliDurationsAction(cliSlug) : [];
+      if (!live) return;
+
+      setCliDurations(list);
+      setCliCostNote("");
+    })();
+
+    return () => {
+      live = false;
+    };
+  }, [cliSlug]);
+
   const clipTakesRefs = cliClip ? cliClip.takesReferences : clipGenerator.refField !== null;
   const clipManyRefs = cliClip ? true : clipGenerator.refIsArray;
-  const clipHasDuration = !cliClip;
+  /*
+    Los de Higgsfield también tienen duración.
+
+    Antes se daba por hecho que no —«este modelo decide él la duración»— y era
+    verdad solo porque nunca se le mandaba: el campo no salía, no se enviaba
+    nada y todos generaban su duración por defecto. Ahora se le pregunta al
+    modelo qué acepta y se enseña lo que diga.
+  */
+  const clipHasDuration = true;
   const clipNativeAudio = !cliClip && clipGenerator.audioField !== null;
   const clipCost = cliClip ? null : estimateCost(clipGenerator, clipSeconds);
 
   const clipNote = cliClip
-    ? "De Higgsfield, por su CLI. La duración y el precio los pone el modelo; lo que cobre lo verás en tu cuenta."
+    ? "De Higgsfield, por su CLI. Los segundos y el coste los dice el propio modelo."
     : clipGenerator.note;
 
   /*
@@ -565,7 +611,7 @@ export function StudioBoard({
                 className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
               />
 
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Button
                   variant="ghost"
                   onClick={polish}
@@ -573,6 +619,36 @@ export function StudioBoard({
                 >
                   {polishing ? "Reescribiendo…" : "Mejorar el prompt"}
                 </Button>
+
+                {/*
+                  El coste se pide, no se calcula aquí.
+
+                  Higgsfield cobra en créditos y cada modelo tiene su tarifa; la
+                  única cifra que no es una suposición es la que da su propio
+                  `generate cost`, que es el mismo cálculo del trabajo real sin
+                  crearlo. Va a mano y no en cada tecla porque es una llamada.
+                */}
+                {cliClip ? (
+                  <Button
+                    variant="ghost"
+                    disabled={!clipPrompt.trim()}
+                    onClick={() => {
+                      setCliCostNote("Calculando…");
+
+                      void cliCostAction({
+                        slug: cliClip.slug,
+                        prompt: clipPrompt,
+                        seconds: clipSeconds,
+                      }).then((result) => setCliCostNote(result.label));
+                    }}
+                  >
+                    Cuánto cuesta
+                  </Button>
+                ) : null}
+
+                {cliCostNote ? (
+                  <span className="text-xs text-slate-600 dark:text-slate-300">{cliCostNote}</span>
+                ) : null}
               </div>
 
               {/*
@@ -631,6 +707,36 @@ export function StudioBoard({
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Este modelo decide él la duración.
                   </p>
+                ) : cliClip ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Segundos
+                      {cliDurations.length > 0 ? ` · ${cliDurations.join(", ")}` : ""}
+                    </span>
+
+                    {cliDurations.length > 0 ? (
+                      <SelectField
+                        value={String(nearestOf(cliDurations, clipSeconds))}
+                        onChange={(event) => setClipSeconds(Number(event.target.value))}
+                        className="w-24"
+                      >
+                        {cliDurations.map((option) => (
+                          <option key={option} value={option}>
+                            {option} s
+                          </option>
+                        ))}
+                      </SelectField>
+                    ) : (
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={clipSeconds}
+                        onChange={(event) => setClipSeconds(Number(event.target.value))}
+                        className="w-20 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                      />
+                    )}
+                  </label>
                 ) : clipGenerator.durations.length > 0 ? (
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Segundos</span>
@@ -1120,5 +1226,19 @@ export function StudioBoard({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * El valor más cercano de una lista.
+ *
+ * Para las duraciones de Higgsfield, que llegan en marcha y no están en la
+ * tabla de generadores. Sin esto, un desplegable con 5 y 10 abierto con un 6
+ * guardado no enseñaría ninguno seleccionado y el primer valor se aplicaría en
+ * silencio al generar.
+ */
+function nearestOf(options: number[], wanted: number): number {
+  return options.reduce((best, option) =>
+    Math.abs(option - wanted) < Math.abs(best - wanted) ? option : best,
   );
 }

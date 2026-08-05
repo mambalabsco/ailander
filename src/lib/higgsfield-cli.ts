@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createCache } from "@/lib/ttl-cache";
 import { createQueue } from "@/lib/queue";
+import { creditsFrom, creditsToUsd, declaredDurations } from "@/lib/higgsfield-params";
 import {
   declaredMediaParams,
   describePayload,
@@ -458,6 +459,15 @@ export async function generateWithCli(options: {
   referenceParam?: string;
   aspectRatio?: string;
   resolution?: string;
+  /**
+   * Cuántos segundos dura el vídeo.
+   *
+   * Sin esto no se mandaba nada y **todos** salían con la duración por defecto
+   * del modelo: el campo de segundos de la pantalla se rellenaba, se guardaba y
+   * no llegaba a ningún sitio. Los valores que acepta cada modelo los dice
+   * `modelDurations`; mandar uno que no acepta aborta con «Unknown params».
+   */
+  seconds?: number;
   timeoutMs?: number;
 }): Promise<CliGenerationResult> {
   const references = options.references ?? [];
@@ -473,6 +483,7 @@ export async function generateWithCli(options: {
 
     if (options.aspectRatio) args.push("--aspect_ratio", options.aspectRatio);
     if (options.resolution) args.push("--resolution", options.resolution);
+    if (options.seconds && options.seconds > 0) args.push("--duration", String(options.seconds));
 
     if (references.length > 0) {
       const flag = MEDIA_PARAMS[options.referenceParam ?? "image_references"];
@@ -536,4 +547,83 @@ export async function generateWithCli(options: {
   } finally {
     if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/* ------------------------ Duraciones y lo que cuesta ----------------------- */
+
+/**
+ * Qué duraciones acepta un modelo de vídeo, en segundos.
+ *
+ * Vacío es «no lo dice», y quien llama tiene que enseñarlo como campo libre.
+ * Un desplegable vacío o con una sola opción inventada es peor que un campo:
+ * el primero parece roto y el segundo hace elegir mal.
+ *
+ * Se pregunta por modelo elegido y no por el catálogo entero, como
+ * `modelMediaParams`: `model get` es una ida y vuelta a la API.
+ */
+export async function modelDurations(slug: string): Promise<number[]> {
+  return cache.get(`durations:${slug}`, async () => {
+    const { stdout, stderr } = await exec(["model", "get", slug, "--json"], 30_000);
+
+    if (looksUnauthenticated(`${stdout}\n${stderr}`)) {
+      throw new Error("El CLI de Higgsfield no tiene sesión. Ejecuta «higgsfield auth login».");
+    }
+
+    try {
+      return declaredDurations(JSON.parse(stdout));
+    } catch {
+      return [];
+    }
+  });
+}
+
+export interface CliCost {
+  credits: number | null;
+  usd: number | null;
+}
+
+/**
+ * Lo que va a costar, **sin crear el trabajo**.
+ *
+ * El CLI tiene `generate cost`, que es la misma llamada que `generate create`
+ * pero sin generar: contesta los créditos exactos para esos parámetros. Es la
+ * diferencia entre saber el precio antes y verlo en el saldo después.
+ *
+ * Los dólares solo salen si hay tarifa configurada. El crédito vale distinto
+ * según el plan, así que no hay número por defecto que no sea inventado — y un
+ * coste inventado con dos decimales parece medido.
+ */
+export async function estimateCliCost(options: {
+  model: string;
+  prompt: string;
+  seconds?: number;
+  resolution?: string;
+}): Promise<CliCost> {
+  const args = ["generate", "cost", options.model, "--prompt", options.prompt];
+
+  if (options.seconds && options.seconds > 0) args.push("--duration", String(options.seconds));
+  if (options.resolution) args.push("--resolution", options.resolution);
+
+  args.push("--json");
+
+  const { stdout, stderr } = await exec(args, 60_000);
+
+  if (looksUnauthenticated(`${stdout}\n${stderr}`)) {
+    throw new Error("El CLI de Higgsfield no tiene sesión. Ejecuta «higgsfield auth login».");
+  }
+
+  let credits: number | null = null;
+
+  try {
+    credits = creditsFrom(JSON.parse(stdout));
+  } catch {
+    credits = null;
+  }
+
+  const rate = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
+
+  return {
+    credits,
+    usd: creditsToUsd(credits, Number.isFinite(rate) && rate > 0 ? rate : null),
+  };
 }
