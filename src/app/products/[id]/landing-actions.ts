@@ -822,7 +822,10 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
        *    JavaScript le quita la clase al hacer scroll. Sin esto, la página
        *    entera se queda en `opacity: 0`.
        * 4. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
-       * 5. `neutralizeLinks` — que el «Comprar» no lleve a su carrito.
+       * 5. `neutralizeLinks` — que el «Comprar» no lleve a su carrito, sino a
+       *    la ficha de este producto si la tiene guardada. Si no la tiene va a
+       *    `#`: construir una dirección a partir del nombre se pinta igual de
+       *    bien y lleva a un 404.
        * 6. `closeOpenTags` — por si el tope de tamaño cortó algo.
        * 7. `autoplayVideos` — en la original los vídeos cortos arrancan solos y
        *    se repiten, como un GIF; en la copia salían con la barra de controles
@@ -838,7 +841,10 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       const body = autoplayVideos(
         closeOpenTags(
-          neutralizeLinks(sanitizeHtml(reveal(absolutize(unlazy(page.body), origin)))).html,
+          neutralizeLinks(
+            sanitizeHtml(reveal(absolutize(unlazy(page.body), origin))),
+            product.landingUrl,
+          ).html,
         ),
       );
 

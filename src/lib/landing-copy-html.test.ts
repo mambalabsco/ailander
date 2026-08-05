@@ -866,3 +866,48 @@ test("lo que no es un vídeo se queda igual", () => {
 
   assert.equal(autoplayVideos(html), html);
 });
+
+/* -------------------------- A dónde van los botones ------------------------- */
+
+test("sin ficha guardada, los botones no llevan a ninguna parte", () => {
+  /*
+   * Nunca se construye una dirección a partir del nombre del producto: una
+   * inventada se pinta igual de bien que una buena, se publica, y lleva a un
+   * 404 — peor que un botón que no hace nada, porque ese se nota al primer clic.
+   */
+  const out = neutralizeLinks('<a href="https://competidor.com/cart">Comprar</a>');
+
+  assert.ok(out.html.includes('href="#"'));
+  assert.equal(out.changed, 1);
+});
+
+test("con ficha guardada, los botones llevan a la tuya", () => {
+  const out = neutralizeLinks(
+    '<a href="https://competidor.com/products/x">Comprar</a>',
+    "https://mitienda.com/products/mio",
+  );
+
+  assert.ok(out.html.includes('href="https://mitienda.com/products/mio"'));
+  assert.ok(!out.html.includes("competidor"));
+});
+
+test("una ficha que no es una dirección no se mete en el href", () => {
+  /*
+   * El campo lo escribe una persona: puede poner «pendiente», el dominio sin
+   * esquema, o un `javascript:` pegado por error. Los tres acabarían en el
+   * `href` de todos los botones de la página.
+   */
+  for (const malo of ["pendiente", "mitienda.com/x", "javascript:alert(1)", "  "]) {
+    const out = neutralizeLinks('<a href="https://competidor.com/x">Comprar</a>', malo);
+    assert.ok(out.html.includes('href="#"'), malo);
+  }
+});
+
+test("los anclas internas siguen funcionando aunque haya ficha", () => {
+  // Son navegación dentro de la misma página: mandarlas a la ficha rompería el
+  // «ver la oferta» que baja a la sección de precios.
+  const out = neutralizeLinks('<a href="#precios">Ver la oferta</a>', "https://mitienda.com/x");
+
+  assert.ok(out.html.includes('href="#precios"'));
+  assert.equal(out.changed, 0);
+});

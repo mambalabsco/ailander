@@ -134,7 +134,11 @@ Devuelve la página como una lista de secciones en orden. Los tipos disponibles:
 - \`faq\` — preguntas frecuentes en \`pairs\`. De cuatro a seis, con las objeciones reales de la investigación.
 - \`separador\` — una línea, para marcar cambio de bloque.
 - \`imagen\` — un hueco de imagen. Su campo \`slot\` enlaza con \`imageSlots\`.
-- \`cta\` — llamada a la acción. El \`href\` es ${product.landingUrl || "la URL del producto"}.
+- \`cta\` — llamada a la acción. El \`href\` es ${
+    product.landingUrl
+      ? product.landingUrl
+      : 'exactamente "#", sin inventarte ninguna dirección: este producto todavía no tiene URL de ficha guardada'
+  }.
 - \`comentarios\` — dónde va el bloque social. Una sola vez, cerca del final.
 - \`aviso-legal\` — la última sección, siempre.
 
