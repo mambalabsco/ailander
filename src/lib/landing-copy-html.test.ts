@@ -22,6 +22,7 @@ import {
   scopeCss,
   stripChrome,
   unlazy,
+  autoplayVideos,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -787,4 +788,81 @@ test("ninguna frase se pierde ni cambia de orden", () => {
 
 test("sin textos no hay tandas", () => {
   assert.deepEqual(batchTexts([]), []);
+});
+
+/* ------------------------- Los vídeos, como un GIF ------------------------- */
+
+test("un vídeo con controles sale sin ellos y arrancando solo", () => {
+  /*
+   * En la original arrancan solos y se repiten; en la copia salían con la barra
+   * de controles y parados, esperando un clic que nadie da. La página deja de
+   * parecerse justo en lo que más llama la atención.
+   */
+  const out = autoplayVideos('<video controls preload="none" src="a.webm"></video>');
+
+  assert.ok(!out.includes("controls"));
+  assert.ok(out.includes("autoplay"));
+  assert.ok(out.includes("loop"));
+});
+
+test("siempre lleva muted, porque sin él no arranca", () => {
+  // No es una preferencia: todos los navegadores bloquean la reproducción
+  // automática con sonido, y el vídeo se queda en el primer fotograma sin dar
+  // ningún error.
+  assert.ok(autoplayVideos("<video src=\"a.webm\"></video>").includes("muted"));
+});
+
+test("siempre lleva playsinline, por el iPhone", () => {
+  // Sin él, iOS abre el vídeo a pantalla completa en cuanto empieza — y en un
+  // anuncio eso echa a la persona de la página.
+  assert.ok(autoplayVideos("<video src=\"a.webm\"></video>").includes("playsinline"));
+});
+
+test("un atributo que ya estaba no se duplica", () => {
+  /*
+   * Un atributo repetido no da error: el navegador se queda con el primero. Si
+   * el original traía `muted="false"`, añadir otro detrás no cambiaría nada y
+   * el vídeo seguiría sin arrancar.
+   */
+  const out = autoplayVideos('<video muted="false" loop src="a.webm"></video>');
+
+  assert.equal(out.match(/muted/g)?.length, 1);
+  assert.equal(out.match(/loop/g)?.length, 1);
+  assert.ok(!out.includes('muted="false"'));
+});
+
+test("el poster se quita", () => {
+  // Es la imagen fija de antes del play: con reproducción automática solo
+  // produce un parpadeo al arrancar.
+  assert.ok(!autoplayVideos('<video poster="p.jpg" src="a.webm"></video>').includes("poster"));
+});
+
+test("las clases y el estilo se conservan", () => {
+  // Son los que le dan el tamaño y la posición: perderlos lo dejaría suelto en
+  // mitad de la sección, que es peor que un reproductor parado.
+  const out = autoplayVideos('<video class="hero" style="width:100%" src="a.webm"></video>');
+
+  assert.ok(out.includes('class="hero"'));
+  assert.ok(out.includes('style="width:100%"'));
+});
+
+test("una etiqueta que se cierra sola sigue siendo válida", () => {
+  const out = autoplayVideos('<video src="a.webm" />');
+
+  assert.ok(out.endsWith("playsinline>"));
+  assert.ok(!out.includes("/>"));
+});
+
+test("el contenido de dentro no se toca", () => {
+  // Las `<source>` de dentro son de donde sale el archivo: tocarlas dejaría el
+  // vídeo sin nada que reproducir.
+  const out = autoplayVideos('<video controls><source src="a.webm" type="video/webm"></video>');
+
+  assert.ok(out.includes('<source src="a.webm" type="video/webm">'));
+});
+
+test("lo que no es un vídeo se queda igual", () => {
+  const html = '<img src="a.png"><div controls>texto</div>';
+
+  assert.equal(autoplayVideos(html), html);
 });

@@ -776,6 +776,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
       const {
         absolutize,
         absolutizeCss,
+        autoplayVideos,
         applyTexts,
         batchTexts,
         buildTextPrompt,
@@ -823,11 +824,22 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
        * 4. `sanitizeHtml` — y aquí se caen los `data-*`, por eso va después.
        * 5. `neutralizeLinks` — que el «Comprar» no lleve a su carrito.
        * 6. `closeOpenTags` — por si el tope de tamaño cortó algo.
+       * 7. `autoplayVideos` — en la original los vídeos cortos arrancan solos y
+       *    se repiten, como un GIF; en la copia salían con la barra de controles
+       *    y parados, esperando un clic que nadie da.
+       *
+       * `autoplayVideos` va **al final**, después de limpiar: si fuera antes,
+       * `sanitizeHtml` tendría que dejar pasar `autoplay` viniera de donde
+       * viniera, y con eso podría colarse un vídeo de la página original que
+       * arranca con sonido. Poniéndolo después, el único que decide qué vídeos
+       * arrancan solos es este paso.
        */
       await report("Limpiando el marcado");
 
-      const body = closeOpenTags(
-        neutralizeLinks(sanitizeHtml(reveal(absolutize(unlazy(page.body), origin)))).html,
+      const body = autoplayVideos(
+        closeOpenTags(
+          neutralizeLinks(sanitizeHtml(reveal(absolutize(unlazy(page.body), origin)))).html,
+        ),
       );
 
       /*
