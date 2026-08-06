@@ -26,6 +26,8 @@ import {
   pruneCss,
   externalizeCss,
   mediaKindOf,
+  pageTemplate,
+  templateSuffix,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -1101,4 +1103,45 @@ test("sin extensión reconocible se dice que no se sabe", () => {
    * que en pantalla es un icono roto — peor que una dirección legible.
    */
   assert.equal(mediaKindOf("https://cdn.ejemplo.com/imagen/12345"), "");
+});
+
+/* ------------------------- La plantilla en el tema ------------------------- */
+
+test("el sufijo solo lleva letras, números y guiones", () => {
+  /*
+   * Shopify empareja plantilla y página por el sufijo. Con un punto o un
+   * espacio dentro, acepta el archivo y **nunca lo usa** — un fallo sin error.
+   */
+  assert.equal(templateSuffix("copia-trysculptique.com-1785991428311"), "copia-trysculptique-com-1785991428311");
+  assert.equal(templateSuffix("Con Espacios Y Mayúsculas"), "con-espacios-y-may-sculas");
+});
+
+test("un slug imposible no deja el sufijo vacío", () => {
+  // Un `templates/page..liquid` no lo usa ninguna página.
+  assert.equal(templateSuffix("///"), "copia");
+  assert.equal(templateSuffix(""), "copia");
+});
+
+test("el sufijo no crece sin límite", () => {
+  assert.ok(templateSuffix("x".repeat(200)).length <= 50);
+});
+
+test("la plantilla lleva el marcado y su CSS", () => {
+  const out = pageTemplate("<div>hola</div>", ".a{color:red}");
+
+  assert.ok(out.includes("<div>hola</div>"));
+  assert.ok(out.includes(".a{color:red}"));
+});
+
+test("sin CSS no se escribe un bloque de estilos vacío", () => {
+  const out = pageTemplate("<div>hola</div>", "");
+
+  assert.ok(!out.includes("<style"));
+});
+
+test("la plantilla dice de dónde salió", () => {
+  // Quien la abra en el editor del tema tiene que saber que se sobrescribe al
+  // volver a copiar, o perderá lo que edite sin entender por qué.
+  assert.match(pageTemplate("<p></p>", ""), /Generado por la plataforma/);
+  assert.match(pageTemplate("<p></p>", ""), /se sobrescribe/);
 });

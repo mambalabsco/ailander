@@ -509,11 +509,64 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
         }
       }
 
+      /*
+       * Además de la página, una **plantilla en el tema**.
+       *
+       * El cuerpo de una página de Shopify se edita en un cuadro de texto
+       * enriquecido que reescribe el marcado: se abre, se guarda, y el editor
+       * limpia atributos y reordena etiquetas — una copia fiel deja de serlo.
+       * Una plantilla se edita como código y sale tal cual.
+       *
+       * Y de paso quita el tope: los 512 KB son del cuerpo de la página, no de
+       * los archivos del tema.
+       *
+       * Solo para las copias. Las landings generadas se pintan con nuestras
+       * secciones y no tienen marcado ajeno que preservar.
+       */
+      let suffix = "";
+      /** Lo que no salió bien pero no impide publicar. Va en el resumen. */
+      const avisos: string[] = [];
+
+      if (page.shapeId === "copia") {
+        try {
+          const { listThemes, writeThemeFilesLenient } = await import("@/lib/shopify-store");
+          const { pageTemplate, templateSuffix } = await import("@/lib/landing-copy-html");
+
+          const themes = await listThemes(store);
+          const live = themes.find((item) => item.role?.toLowerCase() === "main") ?? themes[0];
+
+          if (live) {
+            const wanted = templateSuffix(page.slug);
+
+            const done = await writeThemeFilesLenient(store, live.id, [
+              {
+                filename: `templates/page.${wanted}.liquid`,
+                content: pageTemplate(partes.html, partes.css),
+              },
+            ]);
+
+            if (done.written > 0) suffix = wanted;
+          }
+        } catch (error) {
+          /*
+           * Sin plantilla se publica igual, con el cuerpo de siempre.
+           *
+           * Falta el permiso `write_theme_code` o el tema no deja escribir; en
+           * los dos casos, una página publicada y editable a medias es mejor
+           * que ninguna. Se cuenta en el resumen, no se calla.
+           */
+          avisos.push(
+            `No se pudo crear la plantilla en el tema: ${error instanceof Error ? error.message : "sin motivo"}. La página se publica con el contenido dentro, que Shopify limita a 512 KB y su editor reescribe.`,
+          );
+        }
+      }
+
       const crear = () =>
         createPage(store, {
           title: page.title,
           handle: page.slug,
-          body: html,
+          body: suffix ? "" : html,
+          templateSuffix: suffix || undefined,
           published: true,
         });
 
@@ -532,7 +585,11 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
         try {
           published = await updatePage(store, page.shopifyPageId, {
             title: page.title,
-            body: html,
+            // Con plantilla, el cuerpo se vacía: si se dejara el marcado
+            // dentro, la página saldría dos veces —una del cuerpo y otra de la
+            // plantilla— y nada avisaría.
+            body: suffix ? "" : html,
+            templateSuffix: suffix || undefined,
             published: true,
           });
         } catch (error) {
@@ -549,9 +606,16 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
       const missing = relevant.length - relevant.filter((image) => image.shopifyUrl).length;
 
       return {
-        summary: `${recreated ? "Vuelta a crear" : "Publicada"} en ${published.url}. ${uploaded} imagen(es) subidas${
-          missing > 0 ? `, ${missing} sin subir y marcadas como hueco` : ""
-        }.`,
+        summary: [
+          `${recreated ? "Vuelta a crear" : "Publicada"} en ${published.url}.`,
+          suffix
+            ? ` Con plantilla propia en el tema (templates/page.${suffix}.liquid): se edita desde Shopify como código y no la reescribe el editor de texto.`
+            : "",
+          ` ${uploaded} imagen(es) subidas`,
+          missing > 0 ? `, ${missing} sin subir y marcadas como hueco` : "",
+          ".",
+          avisos.length > 0 ? ` ${avisos.join(" ")}` : "",
+        ].join(""),
       };
     },
   });

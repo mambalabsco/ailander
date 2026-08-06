@@ -242,7 +242,17 @@ export interface PublishedPage {
 
 export async function createPage(
   store: Store,
-  input: { title: string; handle: string; body: string; published: boolean },
+  input: {
+    title: string;
+    handle: string;
+    body: string;
+    published: boolean;
+    /**
+     * La plantilla del tema que pinta esta página, sin `templates/page.` ni
+     * `.liquid`. Sin ella, Shopify usa `page.liquid` y el cuerpo va dentro.
+     */
+    templateSuffix?: string;
+  },
 ): Promise<PublishedPage> {
   const { domain } = credentials(store);
 
@@ -264,6 +274,7 @@ export async function createPage(
         title: input.title,
         handle: input.handle,
         body: input.body,
+        templateSuffix: input.templateSuffix,
         isPublished: input.published,
       },
     },
@@ -286,7 +297,7 @@ export async function createPage(
 export async function updatePage(
   store: Store,
   id: string,
-  input: { title: string; body: string; published: boolean },
+  input: { title: string; body: string; published: boolean; templateSuffix?: string },
 ): Promise<PublishedPage> {
   const { domain } = credentials(store);
 
@@ -305,7 +316,12 @@ export async function updatePage(
     }`,
     {
       id,
-      page: { title: input.title, body: input.body, isPublished: input.published },
+      page: {
+        title: input.title,
+        body: input.body,
+        isPublished: input.published,
+        templateSuffix: input.templateSuffix,
+      },
     },
   );
 
