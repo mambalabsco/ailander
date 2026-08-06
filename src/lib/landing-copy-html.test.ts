@@ -26,7 +26,6 @@ import {
   pruneCss,
   externalizeCss,
   mediaKindOf,
-  pageTemplate,
   templateSuffix,
 } from "./landing-copy-html.ts";
 
@@ -1126,22 +1125,5 @@ test("el sufijo no crece sin límite", () => {
   assert.ok(templateSuffix("x".repeat(200)).length <= 50);
 });
 
-test("la plantilla lleva el marcado y su CSS", () => {
-  const out = pageTemplate("<div>hola</div>", ".a{color:red}");
 
-  assert.ok(out.includes("<div>hola</div>"));
-  assert.ok(out.includes(".a{color:red}"));
-});
 
-test("sin CSS no se escribe un bloque de estilos vacío", () => {
-  const out = pageTemplate("<div>hola</div>", "");
-
-  assert.ok(!out.includes("<style"));
-});
-
-test("la plantilla dice de dónde salió", () => {
-  // Quien la abra en el editor del tema tiene que saber que se sobrescribe al
-  // volver a copiar, o perderá lo que edite sin entender por qué.
-  assert.match(pageTemplate("<p></p>", ""), /Generado por la plataforma/);
-  assert.match(pageTemplate("<p></p>", ""), /se sobrescribe/);
-});

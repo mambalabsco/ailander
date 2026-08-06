@@ -530,7 +530,10 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
       if (page.shapeId === "copia") {
         try {
           const { listThemes, writeThemeFilesLenient } = await import("@/lib/shopify-store");
-          const { pageTemplate, templateSuffix } = await import("@/lib/landing-copy-html");
+          const { templateSuffix } = await import("@/lib/landing-copy-html");
+          const { sectionFile, sectionize, sectionNote, templateFor } = await import(
+            "@/lib/landing-sections"
+          );
 
           const themes = await listThemes(store);
           const live = themes.find((item) => item.role?.toLowerCase() === "main") ?? themes[0];
@@ -538,14 +541,44 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
           if (live) {
             const wanted = templateSuffix(page.slug);
 
+            /*
+             * Dos archivos: la sección y la plantilla que la coloca.
+             *
+             * Los ajustes editables viven en una **sección**, no en la
+             * plantilla: una plantilla no tiene `{% schema %}`, así que sin
+             * separarlas no habría panel donde cambiar nada.
+             */
+            const parts = sectionize(partes.html);
+
             const done = await writeThemeFilesLenient(store, live.id, [
               {
+                filename: `sections/${wanted}.liquid`,
+                content: sectionFile({
+                  liquid: parts.liquid,
+                  css: partes.css,
+                  settings: parts.settings,
+                  name: page.title,
+                }),
+              },
+              {
                 filename: `templates/page.${wanted}.liquid`,
-                content: pageTemplate(partes.html, partes.css),
+                content: templateFor(wanted),
               },
             ]);
 
-            if (done.written > 0) suffix = wanted;
+            /*
+             * Las dos, o ninguna. Con la plantilla escrita y la sección no, la
+             * página sale **en blanco**: `{% section %}` sobre un archivo que no
+             * existe no da error, no pinta nada.
+             */
+            if (done.written === 2) {
+              suffix = wanted;
+              avisos.push(sectionNote(parts, wanted));
+            } else if (done.written > 0) {
+              avisos.push(
+                `La plantilla del tema se escribió a medias (${done.failed.map((item) => `${item.filename}: ${item.reason}`).join("; ")}), así que la página se publica con el contenido dentro.`,
+              );
+            }
           }
         } catch (error) {
           /*
@@ -609,7 +642,7 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
         summary: [
           `${recreated ? "Vuelta a crear" : "Publicada"} en ${published.url}.`,
           suffix
-            ? ` Con plantilla propia en el tema (templates/page.${suffix}.liquid): se edita desde Shopify como código y no la reescribe el editor de texto.`
+            ? ` Con plantilla propia en el tema (templates/page.${suffix}.liquid).`
             : "",
           ` ${uploaded} imagen(es) subidas`,
           missing > 0 ? `, ${missing} sin subir y marcadas como hueco` : "",
