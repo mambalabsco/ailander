@@ -100,18 +100,6 @@ async function has(command: string): Promise<boolean> {
   }
 }
 
-/**
- * Si está ese programa, en booleano.
- *
- * Existe porque decidir con el **texto** de `videoToolsProblem` es frágil y ya
- * falló: ese mensaje dice «falta ffmpeg» cuando lo que falta es `ffprobe`, y
- * quien lo leía con una expresión regular daba por ausente un ffmpeg que estaba
- * instalado. Un booleano no se puede malinterpretar.
- */
-export async function hasTool(command: "ffmpeg" | "ffprobe" | "yt-dlp"): Promise<boolean> {
-  return has(command);
-}
-
 /** Qué le falta al servidor, o cadena vacía si no le falta nada. */
 export async function videoToolsProblem(): Promise<string> {
   const [ffmpeg, ffprobe, ytdlp] = await Promise.all([
@@ -252,24 +240,19 @@ export async function levelAudio(
   lufs: number,
 ): Promise<{ bytes: Uint8Array; problem: string }> {
   /*
-   * Solo se comprueba **ffmpeg**, y en booleano.
+   * Sin comprobación previa: se ejecuta y se cuenta lo que pase.
    *
-   * Antes esto miraba el mensaje de `videoToolsProblem` con una expresión
-   * regular, y ese mensaje dice «falta ffmpeg» cuando lo que falta es
-   * `ffprobe` — o menciona los dos al explicar cómo se instalan. Resultado: se
-   * daba por ausente un ffmpeg instalado y la música se quedaba sin ajustar
-   * culpando al servidor.
+   * Aquí hubo dos versiones y las dos mintieron. La primera decidía mirando el
+   * texto de un diagnóstico con una expresión regular; la segunda preguntaba
+   * antes con `hasTool`, que **se traga el motivo** —`catch { return false }`—
+   * y por tanto solo sabía decir «no está», que era falso: el binario estaba en
+   * `/usr/bin` y en el PATH del servicio.
    *
-   * Para normalizar audio no hacen falta ni `ffprobe` ni `yt-dlp`. Exigirlos
-   * era pedir cosas que este trabajo no usa.
+   * Preguntar antes es un proceso más y un modo de fallo más, y no aporta nada:
+   * si ffmpeg no se puede ejecutar, intentarlo lo dice igual **y con el error
+   * de verdad**. Un «no está instalado» inventado manda a instalar algo que ya
+   * está, y eso cuesta más que no decir nada.
    */
-  if (!(await hasTool("ffmpeg"))) {
-    return {
-      bytes: new Uint8Array(),
-      problem:
-        "ffmpeg no responde en el servidor. Comprueba que está en el PATH del proceso que sirve la plataforma: instalado para tu usuario no basta si el servicio arranca con otro entorno.",
-    };
-  }
 
   const dir = await mkdtemp(join(tmpdir(), "musica-"));
 
@@ -285,7 +268,28 @@ export async function levelAudio(
 
     await writeFile(entra, Buffer.from(await response.arrayBuffer()));
 
-    const ran = await run("ffmpeg", loudnormArgs(entra, sale, lufs), FFMPEG_MS);
+    let ran;
+
+    try {
+      ran = await run("ffmpeg", loudnormArgs(entra, sale, lufs), FFMPEG_MS);
+    } catch (error) {
+      /*
+       * Aquí es donde se sabe de verdad si falta.
+       *
+       * `spawn` lanza `ENOENT` cuando el programa no existe en el PATH del
+       * proceso, y ese error trae el nombre y el código. Cualquier otra cosa
+       * —permisos, memoria, el plazo agotado— llega con su propio mensaje en
+       * vez de convertirse en «no está instalado».
+       */
+      const why = error instanceof Error ? error.message : String(error);
+
+      return {
+        bytes: new Uint8Array(),
+        problem: /ENOENT/i.test(why)
+          ? "el proceso de la plataforma no encuentra ffmpeg en su PATH (instalado para tu usuario no basta si el servicio arranca con otro entorno)."
+          : `no se pudo ejecutar ffmpeg: ${why.slice(0, 160)}`,
+      };
+    }
 
     if (ran.code !== 0) {
       // La última línea de ffmpeg es la que dice qué pasó; el resto es ruido.
