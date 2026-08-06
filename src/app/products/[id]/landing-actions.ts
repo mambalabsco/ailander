@@ -530,8 +530,8 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
       if (page.shapeId === "copia") {
         try {
           const { listThemes, writeThemeFilesLenient } = await import("@/lib/shopify-store");
-          const { templateSuffix } = await import("@/lib/landing-copy-html");
-          const { sectionFile, sectionize, sectionNote, templateFor } = await import(
+          const { pruneCss, templateSuffix } = await import("@/lib/landing-copy-html");
+          const { sectionFile, sectionize, sectionNote, splitTopLevel, templateFor } = await import(
             "@/lib/landing-sections"
           );
 
@@ -548,32 +548,67 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              * plantilla: una plantilla no tiene `{% schema %}`, así que sin
              * separarlas no habría panel donde cambiar nada.
              */
-            const parts = sectionize(partes.html);
+            /*
+             * Una sección por bloque de la página, no una con todo dentro.
+             *
+             * Con una sola, el panel del editor es una lista de cien ajustes
+             * sin orden. Con varias, cada tramo se abre, se edita, se mueve y
+             * se quita por separado — que es lo que se pidió.
+             */
+            const bloques = splitTopLevel(partes.html);
+
+            const hechas = bloques.map((bloque, at) => {
+              const parts = sectionize(bloque);
+
+              /*
+               * El CSS se poda **por sección**, contra su propio marcado.
+               *
+               * Repetir la hoja entera en veinte archivos serían varios megas
+               * de tema y veinte veces las mismas reglas descargadas por quien
+               * visita la página. Cada sección se lleva solo lo que usa.
+               */
+              return {
+                name: `${wanted}-${String(at + 1).padStart(2, "0")}`,
+                parts,
+                css: pruneCss(partes.css, bloque),
+              };
+            });
 
             const done = await writeThemeFilesLenient(store, live.id, [
-              {
-                filename: `sections/${wanted}.liquid`,
+              ...hechas.map((hecha) => ({
+                filename: `sections/${hecha.name}.liquid`,
                 content: sectionFile({
-                  liquid: parts.liquid,
-                  css: partes.css,
-                  settings: parts.settings,
-                  name: page.title,
+                  liquid: hecha.parts.liquid,
+                  css: hecha.css,
+                  settings: hecha.parts.settings,
+                  name: `${page.title} ${hecha.name.slice(-2)}`,
                 }),
-              },
+              })),
               {
                 filename: `templates/page.${wanted}.liquid`,
-                content: templateFor(wanted),
+                content: hechas.map((hecha) => templateFor(hecha.name)).join("\n"),
               },
             ]);
 
             /*
-             * Las dos, o ninguna. Con la plantilla escrita y la sección no, la
-             * página sale **en blanco**: `{% section %}` sobre un archivo que no
-             * existe no da error, no pinta nada.
+             * Todas o ninguna. Con la plantilla escrita y una sección sin
+             * escribir, ese tramo sale **en blanco**: `{% section %}` sobre un
+             * archivo que no existe no da error, no pinta nada — y la página
+             * publicada tiene un hueco que nadie relaciona con esto.
              */
-            if (done.written === 2) {
+            if (done.written === hechas.length + 1) {
               suffix = wanted;
-              avisos.push(sectionNote(parts, wanted));
+
+              const total = hechas.reduce(
+                (sum, hecha) => ({
+                  liquid: "",
+                  settings: [...sum.settings, ...hecha.parts.settings],
+                  skipped: sum.skipped + hecha.parts.skipped,
+                }),
+                { liquid: "", settings: [] as typeof hechas[number]["parts"]["settings"], skipped: 0 },
+              );
+
+              avisos.push(`${hechas.length} secciones. ${sectionNote(total, wanted)}`);
             } else if (done.written > 0) {
               avisos.push(
                 `La plantilla del tema se escribió a medias (${done.failed.map((item) => `${item.filename}: ${item.reason}`).join("; ")}), así que la página se publica con el contenido dentro.`,

@@ -51,6 +51,89 @@ export interface Sectioned {
 
 const MAX_IMAGES = 40;
 const MAX_HEADINGS = 20;
+/** Por sección. Repartida en varias, cabe editar el texto sin llenar el panel. */
+const MAX_TEXTS = 15;
+
+/**
+ * Parte el marcado por sus bloques de primer nivel.
+ *
+ * ## Para qué
+ *
+ * Para que en el editor de temas salgan **varias** secciones —una por bloque de
+ * la página— en vez de una sola con todo dentro. Con una sola, el panel es una
+ * lista de cien ajustes sin orden; con varias, cada tramo se abre, se edita, se
+ * mueve y se quita por separado.
+ *
+ * ## Y lo que cuesta, que hay que saberlo
+ *
+ * Shopify envuelve cada sección en su propio contenedor. Una regla de CSS que
+ * relacione **dos bloques hermanos** —`.a + .b`— deja de aplicar cuando esos dos
+ * bloques quedan en secciones distintas. Las reglas de descendencia, que son la
+ * mayoría, siguen valiendo porque cada trozo conserva su envoltorio `.copiado`.
+ *
+ * Se cuentan las llaves de las etiquetas, no se parte por `</div>`: partir por
+ * el cierre trocearía los `div` anidados por la mitad, que es marcado inválido
+ * y una página descolocada, no un error.
+ */
+export function splitTopLevel(html: string, maxParts = 20): string[] {
+  const inner = /^\s*<div class="copiado">([\s\S]*)<\/div>\s*$/.exec(html.trim());
+  const body = inner ? inner[1] : html;
+
+  const parts: string[] = [];
+
+  let at = 0;
+  let depth = 0;
+  let start = -1;
+
+  const tags = [...body.matchAll(/<(\/?)([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/g)];
+
+  for (const tag of tags) {
+    const closing = tag[1] === "/";
+    const selfClosing = tag[3] === "/" || /^(img|br|hr|input|source|meta|link)$/i.test(tag[2]);
+
+    if (selfClosing) {
+      if (depth === 0) {
+        parts.push(body.slice(tag.index, tag.index + tag[0].length));
+        at = tag.index + tag[0].length;
+      }
+      continue;
+    }
+
+    if (!closing) {
+      if (depth === 0) start = tag.index;
+      depth += 1;
+      continue;
+    }
+
+    depth = Math.max(0, depth - 1);
+
+    if (depth === 0 && start >= 0) {
+      parts.push(body.slice(start, tag.index + tag[0].length));
+      at = tag.index + tag[0].length;
+      start = -1;
+    }
+  }
+
+  // Lo que quedara suelto al final —texto sin etiqueta, o una etiqueta sin
+  // cerrar— no se tira: iría a parar a ningún sitio y faltaría en la página.
+  const rest = body.slice(at).trim();
+  if (rest) parts.push(rest);
+
+  const clean = parts.map((part) => part.trim()).filter(Boolean);
+
+  if (clean.length <= maxParts) return clean.map((part) => `<div class="copiado">${part}</div>`);
+
+  /*
+   * Con más bloques que el tope, los últimos se juntan en uno.
+   *
+   * Cincuenta secciones en el editor son inmanejables, y quedarse solo con las
+   * primeras veinte perdería media página — que es peor que una sección larga.
+   */
+  const head = clean.slice(0, maxParts - 1);
+  const tail = clean.slice(maxParts - 1).join("");
+
+  return [...head, tail].map((part) => `<div class="copiado">${part}</div>`);
+}
 
 /** Para que un texto quepa en la etiqueta de un ajuste sin romper el panel. */
 function short(value: string, max = 40): string {
@@ -171,6 +254,40 @@ export function sectionize(html: string): Sectioned {
       return `${open}{{ section.settings.${id} }}${close}`;
     },
   );
+
+  /*
+   * Los párrafos, ahora que la página va repartida en varias secciones.
+   *
+   * Con una sola sección eran cientos de ajustes y un panel inservible; con
+   * quince por sección se editan los de ese tramo y ya. Solo los de texto
+   * plano: un `<p>` con un `<a>` o un `<strong>` dentro se deja, porque
+   * cambiarlo por un campo de texto se comería el enlace o la negrita.
+   */
+  let texts = 0;
+
+  out = out.replace(/(<p\b[^>]*>)([^<]+)(<\/p>)/gi, (match, open: string, text: string, close: string) => {
+    const clean = text.trim();
+
+    // Los muy cortos no son párrafos: son separadores, «·», precios sueltos.
+    if (clean.length < 25) return match;
+
+    if (texts >= MAX_TEXTS) {
+      skipped += 1;
+      return match;
+    }
+
+    texts += 1;
+    const id = `texto_${texts}`;
+
+    settings.push({
+      type: "textarea",
+      id,
+      label: `Texto ${texts}`,
+      default: clean,
+    });
+
+    return `${open}{{ section.settings.${id} }}${close}`;
+  });
 
   return { liquid: out, settings, skipped };
 }

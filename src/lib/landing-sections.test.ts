@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sectionFile, sectionize, sectionNote, templateFor } from "./landing-sections.ts";
+import {
+  sectionFile,
+  sectionize,
+  sectionNote,
+  splitTopLevel,
+  templateFor,
+} from "./landing-sections.ts";
 
 test("la imagen se hace editable sin perder sus atributos", () => {
   /*
@@ -67,11 +73,26 @@ test("un titular con marcado dentro no se toca", () => {
   assert.equal(out.settings.length, 0);
 });
 
-test("los párrafos se quedan como están", () => {
-  // Cientos de ajustes de párrafo hacen el panel inservible.
-  const out = sectionize("<p>Un texto largo de la página</p>");
+test("los párrafos también se editan, ahora que hay varias secciones", () => {
+  // Con una sola sección eran cientos de ajustes; con quince por sección se
+  // editan los de ese tramo y ya.
+  const out = sectionize("<p>Un texto suficientemente largo de la página</p>");
 
+  assert.equal(out.settings[0].type, "textarea");
+  assert.ok(out.liquid.includes("{{ section.settings.texto_1 }}"));
+});
+
+test("un párrafo con enlace o negrita no se toca", () => {
+  // Cambiarlo por un campo de texto se comería el `<a>` o el `<strong>`.
+  const out = sectionize('<p>Mira <a href="#">esta oferta</a> antes de que acabe hoy</p>');
+
+  assert.ok(out.liquid.includes("<a href=\"#\">"));
   assert.equal(out.settings.length, 0);
+});
+
+test("los textos muy cortos no son párrafos", () => {
+  // Son separadores, «·», precios sueltos: llenarían el panel de ajustes vacíos.
+  assert.equal(sectionize("<p>19,90 €</p>").settings.length, 0);
 });
 
 test("lo que pasa del tope se cuenta, no se corta en silencio", () => {
@@ -120,4 +141,60 @@ test("la plantilla solo coloca la sección", () => {
 
 test("sin CSS no se escribe un bloque de estilos vacío", () => {
   assert.ok(!sectionFile({ liquid: "<p></p>", css: "", settings: [], name: "x" }).includes("<style"));
+});
+
+/* -------------------------- Partir en varias secciones --------------------- */
+
+test("la página se parte por sus bloques de primer nivel", () => {
+  /*
+   * Con una sola sección, el panel del editor es una lista de cien ajustes sin
+   * orden. Con varias, cada tramo se abre, se edita, se mueve y se quita.
+   */
+  const parts = splitTopLevel('<div class="copiado"><section>A</section><section>B</section></div>');
+
+  assert.equal(parts.length, 2);
+  assert.ok(parts[0].includes("A"));
+  assert.ok(parts[1].includes("B"));
+});
+
+test("cada trozo conserva su envoltorio, o pierde todo su CSS", () => {
+  // El CSS de la copia está acotado a `.copiado`: un trozo sin ese envoltorio
+  // sale sin un solo estilo.
+  for (const part of splitTopLevel("<section>A</section><section>B</section>")) {
+    assert.ok(part.startsWith('<div class="copiado">'));
+  }
+});
+
+test("los bloques anidados no se trocean por la mitad", () => {
+  /*
+   * Partir por `</div>` cortaría los `div` anidados, que es marcado inválido —
+   * y eso no da error, da una página descolocada.
+   */
+  const parts = splitTopLevel("<div><div>dentro</div>fuera</div><p>otro</p>");
+
+  assert.equal(parts.length, 2);
+  assert.ok(parts[0].includes("<div>dentro</div>fuera"));
+});
+
+test("las etiquetas que se cierran solas no abren un bloque", () => {
+  const parts = splitTopLevel('<img src="a.jpg"><p>texto</p>');
+
+  assert.equal(parts.length, 2);
+});
+
+test("con demasiados bloques, los últimos se juntan en vez de perderse", () => {
+  // Cincuenta secciones son inmanejables; quedarse con veinte perdería media
+  // página, que es peor que una sección larga.
+  const muchos = Array.from({ length: 50 }, (_, at) => `<p>${at}</p>`).join("");
+  const parts = splitTopLevel(muchos, 20);
+
+  assert.equal(parts.length, 20);
+  assert.ok(parts[19].includes("49"));
+});
+
+test("lo que quede suelto al final no se tira", () => {
+  // Iría a parar a ningún sitio y faltaría en la página.
+  const parts = splitTopLevel("<p>uno</p>texto suelto");
+
+  assert.ok(parts.some((part) => part.includes("texto suelto")));
 });
