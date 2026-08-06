@@ -532,7 +532,7 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
           const { listThemeFiles, listThemes, writeThemeFilesLenient } = await import(
             "@/lib/shopify-store"
           );
-          const { pruneCss, templateSuffix } = await import("@/lib/landing-copy-html");
+          const { templateSuffix } = await import("@/lib/landing-copy-html");
           const { sectionFile, sectionize, sectionNote, splitTopLevel, templateFor } = await import(
             "@/lib/landing-sections"
           );
@@ -559,36 +559,38 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              */
             const bloques = splitTopLevel(partes.html);
 
-            const hechas = bloques.map((bloque, at) => {
-              const parts = sectionize(bloque);
+            const hechas = bloques.map((bloque, at) => ({
+              name: `${wanted}-${String(at + 1).padStart(2, "0")}`,
+              parts: sectionize(bloque),
+            }));
 
-              /*
-               * El CSS se poda **por sección**, contra su propio marcado.
-               *
-               * Repetir la hoja entera en veinte archivos serían varios megas
-               * de tema y veinte veces las mismas reglas descargadas por quien
-               * visita la página. Cada sección se lleva solo lo que usa.
-               */
-              return {
-                name: `${wanted}-${String(at + 1).padStart(2, "0")}`,
-                parts,
-                css: pruneCss(partes.css, bloque),
-              };
-            });
+            /*
+             * El CSS va **una vez**, en un asset que carga la plantilla.
+             *
+             * Repetirlo en cada sección tenía dos problemas y el primero rompía
+             * de verdad: un archivo de tema no puede pasar de 256 KB, y el CSS
+             * de una copia ronda los 240 — la primera sección se pasaba y
+             * Shopify la rechazaba, dejando la página con «is not a valid
+             * section type», que no dice nada de tamaños.
+             *
+             * El segundo es que once secciones con la misma hoja son once
+             * descargas de lo mismo. Un asset lo sirve su CDN con caché.
+             */
+            const cssAsset = `${wanted}.css`;
 
             const done = await writeThemeFilesLenient(store, live.id, [
+              { filename: `assets/${cssAsset}`, content: partes.css },
               ...hechas.map((hecha) => ({
                 filename: `sections/${hecha.name}.liquid`,
                 content: sectionFile({
                   liquid: hecha.parts.liquid,
-                  css: hecha.css,
                   settings: hecha.parts.settings,
                   name: `${page.title} ${hecha.name.slice(-2)}`,
                 }),
               })),
               {
                 filename: `templates/page.${wanted}.liquid`,
-                content: hechas.map((hecha) => templateFor(hecha.name)).join("\n"),
+                content: templateFor(cssAsset, hechas.map((hecha) => hecha.name)),
               },
             ]);
 
@@ -611,7 +613,10 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              * Leerlas de vuelta cuesta una consulta y convierte una suposición
              * en un hecho.
              */
-            const esperadas = hechas.map((hecha) => `sections/${hecha.name}.liquid`);
+            const esperadas = [
+              `assets/${cssAsset}`,
+              ...hechas.map((hecha) => `sections/${hecha.name}.liquid`),
+            ];
 
             /*
              * Se espera un poco a que aparezcan, en vez de rendirse a la
@@ -634,7 +639,7 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
               faltan = esperadas.filter((name) => !puestas.has(name));
             }
 
-            if (done.written === hechas.length + 1 && faltan.length === 0) {
+            if (done.written === hechas.length + 2 && faltan.length === 0) {
               suffix = wanted;
 
               const total = hechas.reduce(
@@ -656,7 +661,16 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
                * contenido dentro, que al menos se ve entera.
                */
               avisos.push(
-                `Shopify no llegó a guardar ${faltan.length} de las ${esperadas.length} secciones —las escribe en segundo plano y se esperó diez segundos—, así que la página se publica con el contenido dentro. Vuelve a publicar y usará las secciones.`,
+                /*
+                  El motivo, no solo la cuenta.
+                  «No llegó a guardar 1 de 11» no dice si fue el plazo, el
+                  tamaño o el permiso — y las tres se arreglan distinto.
+                */
+                `Shopify no guardó ${faltan.length} de ${esperadas.length} archivos del tema (${faltan.join(", ")})${
+                  done.failed.length > 0
+                    ? `: ${done.failed.map((item) => `${item.filename} → ${item.reason}`).join("; ")}`
+                    : " y no dio motivo"
+                }. La página se publica con el contenido dentro.`,
               );
             } else if (done.written > 0) {
               avisos.push(
@@ -683,7 +697,15 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
           title: page.title,
           handle: page.slug,
           body: suffix ? "" : html,
-          templateSuffix: suffix || undefined,
+          /*
+           * Cadena vacía y no `undefined`.
+           *
+           * En Shopify, `undefined` significa «no lo cambies»: una página que
+           * ya apuntaba a una plantilla rota se quedaba apuntando a ella
+           * aunque el contenido volviera dentro, y seguía saliendo el error de
+           * la sección que falta.
+           */
+          templateSuffix: suffix,
           published: true,
         });
 
@@ -706,7 +728,9 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
             // dentro, la página saldría dos veces —una del cuerpo y otra de la
             // plantilla— y nada avisaría.
             body: suffix ? "" : html,
-            templateSuffix: suffix || undefined,
+            // Vacío quita la plantilla; `undefined` la dejaría puesta. Ver
+            // arriba: es lo que mantenía el error de la sección que falta.
+            templateSuffix: suffix,
             published: true,
           });
         } catch (error) {

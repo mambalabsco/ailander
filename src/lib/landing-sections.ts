@@ -301,7 +301,6 @@ export function sectionize(html: string): Sectioned {
  */
 export function sectionFile(options: {
   liquid: string;
-  css: string;
   settings: Setting[];
   name: string;
 }): string {
@@ -328,7 +327,16 @@ export function sectionFile(options: {
     "  temas, en los ajustes de esta sección. El resto es el marcado original.",
     "  Al volver a copiar esa misma página se sobrescribe.",
     "{% endcomment %}",
-    options.css ? `<style>\n${options.css}\n</style>` : "",
+    /*
+     * El CSS **no** va aquí: va en un asset que carga la plantilla.
+     *
+     * Un archivo de tema no puede pasar de 256 KB, y repitiendo la hoja en cada
+     * sección la primera se pasaba y Shopify la rechazaba — dejando la página
+     * con «is not a valid section type», que no dice nada de tamaños.
+     *
+     * Y aunque cupiera: once secciones con el mismo CSS son once descargas de
+     * lo mismo para quien visita la página.
+     */
     options.liquid,
     "",
     "{% schema %}",
@@ -339,9 +347,21 @@ export function sectionFile(options: {
     .join("\n");
 }
 
-/** La plantilla de página, que solo coloca la sección. */
-export function templateFor(sectionName: string): string {
-  return `{% section '${sectionName}' %}`;
+/**
+ * La plantilla de página: la hoja de estilos y las secciones, en orden.
+ *
+ * El CSS se carga desde un asset y no desde un `<style>` dentro de la
+ * plantilla, por dos motivos que van juntos: un archivo de tema no puede pasar
+ * de 256 KB y el CSS de una copia ronda los 240, y un asset lo sirve el CDN de
+ * Shopify con caché en vez de repetirlo en cada carga de la página.
+ */
+export function templateFor(cssAsset: string, sectionNames: string[]): string {
+  return [
+    cssAsset ? `{{ '${cssAsset}' | asset_url | stylesheet_tag }}` : "",
+    ...sectionNames.map((name) => `{% section '${name}' %}`),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** Lo que se le cuenta a quien acaba de publicar. */

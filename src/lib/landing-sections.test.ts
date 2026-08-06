@@ -111,7 +111,7 @@ test("el esquema es JSON válido", () => {
    * causó.
    */
   const out = sectionize('<h2>Con "comillas" y \\n saltos</h2><img src="https://x/a.jpg">');
-  const file = sectionFile({ liquid: out.liquid, css: ".a{}", settings: out.settings, name: "Copia" });
+  const file = sectionFile({ liquid: out.liquid, settings: out.settings, name: "Copia" });
 
   const raw = /{% schema %}([\s\S]*?){% endschema %}/.exec(file);
   assert.ok(raw);
@@ -120,7 +120,7 @@ test("el esquema es JSON válido", () => {
 
 test("el nombre de la sección no se pasa de largo", () => {
   // El panel del editor lo recorta y deja dos secciones con el mismo nombre.
-  const file = sectionFile({ liquid: "", css: "", settings: [], name: "x".repeat(80) });
+  const file = sectionFile({ liquid: "", settings: [], name: "x".repeat(80) });
   const schema = JSON.parse(/{% schema %}([\s\S]*?){% endschema %}/.exec(file)![1]);
 
   assert.ok(schema.name.length <= 25);
@@ -129,18 +129,39 @@ test("el nombre de la sección no se pasa de largo", () => {
 test("la sección no se puede insertar por error en otra página", () => {
   // Sin `presets` no aparece en «añadir sección»: la coloca la plantilla y
   // nadie mete la página de otro en la portada sin querer.
-  const file = sectionFile({ liquid: "", css: "", settings: [], name: "Copia" });
+  const file = sectionFile({ liquid: "", settings: [], name: "Copia" });
   const schema = JSON.parse(/{% schema %}([\s\S]*?){% endschema %}/.exec(file)![1]);
 
   assert.equal(schema.presets, undefined);
 });
 
-test("la plantilla solo coloca la sección", () => {
-  assert.equal(templateFor("copia-x"), "{% section 'copia-x' %}");
+test("la plantilla carga la hoja y coloca las secciones en orden", () => {
+  const out = templateFor("copia-x.css", ["copia-x-01", "copia-x-02"]);
+
+  assert.ok(out.includes("'copia-x.css' | asset_url | stylesheet_tag"));
+  assert.ok(out.indexOf("copia-x-01") < out.indexOf("copia-x-02"));
 });
 
-test("sin CSS no se escribe un bloque de estilos vacío", () => {
-  assert.ok(!sectionFile({ liquid: "<p></p>", css: "", settings: [], name: "x" }).includes("<style"));
+test("la sección no lleva CSS dentro", () => {
+  /*
+   * Un archivo de tema no puede pasar de 256 KB, y repitiendo la hoja en cada
+   * sección la primera se pasaba: Shopify la rechazaba y la página salía con
+   * «is not a valid section type», que no dice nada de tamaños.
+   */
+  const file = sectionFile({ liquid: "<p></p>", settings: [], name: "x" });
+
+  assert.ok(!file.includes("<style"));
+});
+
+test("ninguna sección se acerca al tope de tamaño", () => {
+  // El marcado de un bloque son unos kilobytes; era el CSS lo que lo hinchaba.
+  const file = sectionFile({
+    liquid: "<div>".repeat(500) + "</div>".repeat(500),
+    settings: [],
+    name: "x",
+  });
+
+  assert.ok(Buffer.byteLength(file, "utf8") < 256 * 1024);
 });
 
 /* -------------------------- Partir en varias secciones --------------------- */
