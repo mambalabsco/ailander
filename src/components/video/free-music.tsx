@@ -97,6 +97,31 @@ export function FreeMusic({
         </Button>
       </div>
 
+      {/*
+        De dónde más se puede sacar música, dicho aquí.
+
+        Porque la pregunta que viene después de ver este buscador es siempre la
+        misma: «¿y una de YouTube?». La respuesta corta es que no —casi todo lo
+        que suena ahí tiene copyright, y en un anuncio eso son retiradas y
+        reclamaciones— pero la respuesta útil es que YouTube **regala** una
+        biblioteca propia y que esa sí se puede usar, bajándola y subiéndola
+        con «Subir la mía».
+      */}
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        ¿Tienes una pista de otro sitio? Súbela con «Subir la mía». Sirve la{" "}
+        <a
+          href="https://studio.youtube.com/channel/UC/music"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+        >
+          Biblioteca de audio de YouTube
+        </a>{" "}
+        —gratis y para uso comercial— o cualquier catálogo de pago que tengas.
+        Una canción sacada de un vídeo de YouTube no: casi siempre tiene
+        copyright y en un anuncio acaba en retirada.
+      </p>
+
       <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
         <input
           type="checkbox"

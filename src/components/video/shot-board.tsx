@@ -264,7 +264,15 @@ export function ShotBoard({
         pista a nivel normal tapa la voz y el anuncio deja de entenderse, y eso
         no se arregla después.
       */}
-      {withClip.length > 0 ? (
+      {/*
+        La música se puede elegir en cuanto hay voz, no solo cuando hay clips.
+
+        Antes esperaba a los clips, y para entonces ya has pasado por delante de
+        esta sección varias veces sin verla. Lo que hace falta para elegir
+        música es saber **cuánto tiene que durar**, y eso lo dice la voz: en
+        cuanto están los cortes, se sabe.
+      */}
+      {withCuts.length > 0 || withClip.length > 0 ? (
         <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
           <p className="text-sm font-medium">
             Música de fondo{" "}

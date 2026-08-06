@@ -845,8 +845,19 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
   if (!/^audio\//.test(file.type)) {
     return { ok: false, message: "Eso no es un archivo de audio." };
   }
-  if (file.size > 25 * 1024 * 1024) {
-    return { ok: false, message: "La música pesa más de 25 MB." };
+  /*
+   * El mismo tope que el almacenamiento, no uno más bajo.
+   *
+   * Estaba en 25 MB cuando el bucket admite 192, así que una pista descargada
+   * de una biblioteca de audio —que suelen venir en WAV— se rechazaba aquí sin
+   * que hubiera ningún motivo para rechazarla. Dos topes distintos para lo
+   * mismo siempre acaban así: manda el que nadie recuerda que existe.
+   */
+  if (file.size > 192 * 1024 * 1024) {
+    return {
+      ok: false,
+      message: `La música pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB y el tope son 192. Súbela en MP3: ocupa unas diez veces menos que un WAV y en una cama de fondo no se nota.`,
+    };
   }
 
   try {
