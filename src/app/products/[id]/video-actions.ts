@@ -886,7 +886,10 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
       const levelled = await normalizeLoudness(url, level.lufs);
 
       const ajustada = await fetch(levelled, { cache: "no-store" });
-      if (!ajustada.ok) throw new Error("no se pudo descargar");
+
+      if (!ajustada.ok) {
+        throw new Error(`el servicio devolvió el audio pero no se pudo descargar (${ajustada.status}).`);
+      }
 
       const stored = await uploadVideoAsset({
         videoId,
@@ -902,14 +905,25 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
         ok: true,
         message: `Música puesta y bajada a ${level.label.toLowerCase()}: ${belowVoice(level)} LU por debajo de la voz.`,
       };
-    } catch {
+    } catch (error) {
       await updateVideo(videoId, { musicUrl: url });
       revalidatePath(`/products/${productId}`);
 
+      /*
+       * El motivo va en el mensaje, no al vacío.
+       *
+       * Esto decía «no se pudo bajarle el volumen» y se comía la excepción. Un
+       * mensaje así no se puede arreglar ni investigar: no distingue entre la
+       * cuenta sin saldo, un formato que el ajustador no admite y un archivo
+       * que no se deja descargar desde fuera — y las tres se arreglan de forma
+       * distinta. Tragarse la causa convierte un fallo de un minuto en una
+       * tarde.
+       */
+      const why = error instanceof Error ? error.message : "sin motivo";
+
       return {
         ok: true,
-        message:
-          "Música puesta, pero no se pudo bajarle el volumen. Dale a uno de los botones de volumen antes de montar: el montaje mezcla sin control y una pista a nivel normal tapa la voz.",
+        message: `Música puesta, pero no se pudo bajarle el volumen: ${why} Dale a uno de los botones de volumen antes de montar: el montaje mezcla sin control y una pista a nivel normal tapa la voz.`,
       };
     }
   } catch (error) {
