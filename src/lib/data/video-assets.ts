@@ -75,8 +75,20 @@ export async function uploadVideoAsset(options: {
      * Con eso delante, lo que parece es que el arreglo no funcionó.
      */
     if (/exceeded the maximum allowed size/i.test(error.message)) {
+      /*
+       * Hay **dos** topes, y manda el más pequeño.
+       *
+       * El del bucket, que se sube por migración, y uno **global del proyecto**
+       * que está en los ajustes de Storage y limita todos los buckets a la vez.
+       * Un bucket a 192 MB con el global en 50 rechaza a los 50, y el mensaje
+       * de Supabase no dice cuál de los dos saltó.
+       *
+       * Este mensaje llegó a acusar solo a la migración, y eso mandó a mirar
+       * —y a aplicar— algo que ya estaba bien. Un error que señala el sitio
+       * equivocado cuesta más que uno que no señala ninguno.
+       */
       throw new Error(
-        `El almacenamiento rechazó ${megas.toFixed(1)} MB aunque la plataforma admite ${MAX_MB}. El tope del bucket «${BUCKET}» sigue siendo el viejo: falta aplicar la migración «20260805000600_video_assets_192» en el servidor.`,
+        `El almacenamiento rechazó ${megas.toFixed(1)} MB. Hay dos topes y manda el más bajo: el del bucket «${BUCKET}» (que la migración «20260805000600_video_assets_192» deja en ${MAX_MB} MB) y el **global del proyecto**, en Supabase → Storage → Settings → «Upload file size limit», que en el plan gratuito son 50 MB como máximo. Si el bucket ya está bien, el que sobra es el global.`,
       );
     }
 

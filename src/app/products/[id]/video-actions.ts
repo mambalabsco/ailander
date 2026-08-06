@@ -921,9 +921,23 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
        */
       const why = error instanceof Error ? error.message : "sin motivo";
 
+      /*
+       * El consejo que de verdad lo arregla, cuando el problema es el tamaño.
+       *
+       * El ajuste devuelve **WAV**, que ocupa unas diez veces más que un MP3:
+       * una canción de ocho minutos son casi noventa megas aunque el anuncio
+       * dure dos. Y de esos ocho minutos solo se usan los que dura el vídeo —
+       * el resto se normaliza, se sube y se tira.
+       *
+       * Recortarla antes no se puede: el servicio no tiene recorte de audio, y
+       * el que hay devuelve vídeo. Así que lo que queda es decirlo.
+       */
+      const largo =
+        " El ajuste devuelve WAV, que ocupa unas diez veces más que un MP3: una canción entera puede pasar de ochenta megas aunque el anuncio dure dos minutos, y del resto no se usa nada. Sube una pista de duración parecida al anuncio.";
+
       return {
         ok: true,
-        message: `Música puesta, pero no se pudo bajarle el volumen: ${why} Dale a uno de los botones de volumen antes de montar: el montaje mezcla sin control y una pista a nivel normal tapa la voz.`,
+        message: `Música puesta, pero no se pudo bajarle el volumen: ${why}${largo} Dale a uno de los botones de volumen antes de montar: el montaje mezcla sin control y una pista a nivel normal tapa la voz.`,
       };
     }
   } catch (error) {
