@@ -159,6 +159,57 @@ export function LandingViewer({
         ))}
       </div>
 
+      {/*
+          Comentarios para una copia, opcional y repetible.
+
+          No se hacen al copiar porque copiar ya son varios minutos y hay
+          copias que se hacen solo para estudiar la estructura. Y el botón
+          deja **repetirlos**, que con la prueba social es lo normal: el
+          primer hilo casi nunca convence.
+
+          Lee lo que promete la página antes de escribirlos. Un hilo genérico
+          sobre sentirse mejor, en una página que argumenta el hígado graso y
+          el cardo mariano, se lee como pegado — y es lo que hace sospechar.
+          */}
+      {page.shapeId === "copia" ? (
+          <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+            <p className="text-sm font-medium">Comentarios del bloque social</p>
+            <p className="mt-1 mb-3 text-sm text-slate-600 dark:text-slate-300">
+          {page.comments.length > 0
+              ? `Hay ${page.comments.length}. Volver a escribirlos los sustituye.`
+              : "Una copia llega sin ellos. Se escriben leyendo lo que promete esta página y la investigación del producto, para que hablen de lo mismo."}
+            </p>
+
+          {/*
+            Los dos formatos, como en el otro creador.
+
+            No son el mismo texto con otro adorno: un hilo convence porque
+            parece capturado, con sus faltas y sus escépticos; un testimonio
+            convence porque es concreto. Ofrecer solo uno obliga a quedarse
+            con el que no encaja en esa página.
+            */}
+            <div className="flex flex-wrap gap-2">
+            <GenerateButton
+              variant="secondary"
+              action={() => copyCommentsAction({ landingId: page.id, productId })}
+              label={page.comments.length > 0 ? "Rehacer el hilo" : "Hilo de Facebook"}
+              hint="Doce comentarios con respuestas y algún escéptico. Después hay que volver a publicar."
+            />
+
+            <GenerateButton
+              variant="secondary"
+              action={() =>
+              copyCommentsAction({ landingId: page.id, productId, style: "testimonios" })
+              }
+              label="Testimonios"
+              hint="Seis, con nombre, edad y qué cambió. Sustituyen a los que haya."
+            />
+            </div>
+          </div>
+          ) : null}
+
+
+
       {tab === "prueba" ? <LandingAb productId={productId} page={page} /> : null}
 
       {tab === "vista" ? (
@@ -304,55 +355,6 @@ export function LandingViewer({
               </div>
             </div>
           ))}
-
-          {/*
-            Comentarios para una copia, opcional y repetible.
-
-            No se hacen al copiar porque copiar ya son varios minutos y hay
-            copias que se hacen solo para estudiar la estructura. Y el botón
-            deja **repetirlos**, que con la prueba social es lo normal: el
-            primer hilo casi nunca convence.
-
-            Lee lo que promete la página antes de escribirlos. Un hilo genérico
-            sobre sentirse mejor, en una página que argumenta el hígado graso y
-            el cardo mariano, se lee como pegado — y es lo que hace sospechar.
-          */}
-          {page.shapeId === "copia" ? (
-            <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
-              <p className="text-sm font-medium">Comentarios del bloque social</p>
-              <p className="mt-1 mb-3 text-sm text-slate-600 dark:text-slate-300">
-                {page.comments.length > 0
-                  ? `Hay ${page.comments.length}. Volver a escribirlos los sustituye.`
-                  : "Una copia llega sin ellos. Se escriben leyendo lo que promete esta página y la investigación del producto, para que hablen de lo mismo."}
-              </p>
-
-              {/*
-                Los dos formatos, como en el otro creador.
-
-                No son el mismo texto con otro adorno: un hilo convence porque
-                parece capturado, con sus faltas y sus escépticos; un testimonio
-                convence porque es concreto. Ofrecer solo uno obliga a quedarse
-                con el que no encaja en esa página.
-              */}
-              <div className="flex flex-wrap gap-2">
-                <GenerateButton
-                  variant="secondary"
-                  action={() => copyCommentsAction({ landingId: page.id, productId })}
-                  label={page.comments.length > 0 ? "Rehacer el hilo" : "Hilo de Facebook"}
-                  hint="Doce comentarios con respuestas y algún escéptico. Después hay que volver a publicar."
-                />
-
-                <GenerateButton
-                  variant="secondary"
-                  action={() =>
-                    copyCommentsAction({ landingId: page.id, productId, style: "testimonios" })
-                  }
-                  label="Testimonios"
-                  hint="Seis, con nombre, edad y qué cambió. Sustituyen a los que haya."
-                />
-              </div>
-            </div>
-          ) : null}
 
           {pending.length > 0 ? (
             <AdVisualSender
