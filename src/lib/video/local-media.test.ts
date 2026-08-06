@@ -11,6 +11,8 @@ import {
   readProbe,
   readVideoUrl,
   loudnormArgs,
+  speedArgs,
+  SPEEDS,
 } from "./local-media.ts";
 
 /* ------------------------------ Lo que falta -------------------------------- */
@@ -258,4 +260,67 @@ test("faltando solo yt-dlp no se menciona ffmpeg como ausente", () => {
 
   assert.match(texto, /yt-dlp/);
   assert.ok(!/le falta ffmpeg/.test(texto));
+});
+
+/* ------------------------------ Acelerar un poco --------------------------- */
+
+test("la imagen y el sonido se aceleran a la vez", () => {
+  /*
+   * Aplicar solo `setpts` es el error clásico: el vídeo dura menos, el audio
+   * sigue igual y el montador lo recorta. No da error — sale un anuncio en el
+   * que la boca va por delante de la voz y falta la última frase.
+   */
+  const args = speedArgs("/a.mp4", "/b.mp4", 1.1, true);
+  const filtro = args[args.indexOf("-filter_complex") + 1];
+
+  assert.match(filtro, /setpts=PTS\/1\.1/);
+  assert.match(filtro, /atempo=1\.1/);
+});
+
+test("se usa atempo y no asetrate, para no cambiar el tono", () => {
+  // Con `asetrate` la voz subiría de tono y sonaría a dibujo animado.
+  const args = speedArgs("/a.mp4", "/b.mp4", 1.2, true);
+
+  assert.ok(!args.some((arg) => /asetrate/.test(arg)));
+});
+
+test("un vídeo sin audio no monta el filtro de sonido", () => {
+  // Montarlo sobre una pista que no existe hace que ffmpeg falle al construir
+  // el grafo, antes de tocar un solo fotograma.
+  const args = speedArgs("/a.mp4", "/b.mp4", 1.1, false);
+  const filtro = args[args.indexOf("-filter_complex") + 1];
+
+  assert.ok(!filtro.includes("atempo"));
+  assert.ok(!args.includes("[a]"));
+});
+
+test("una velocidad imposible se recorta al rango de atempo", () => {
+  // Fuera de 0,5–2 ffmpeg aborta y el vídeo se queda sin acelerar.
+  const rapido = speedArgs("/a", "/b", 9, true)[
+    speedArgs("/a", "/b", 9, true).indexOf("-filter_complex") + 1
+  ];
+
+  assert.match(rapido, /atempo=2/);
+});
+
+test("todas las velocidades ofrecidas caben en atempo", () => {
+  for (const speed of SPEEDS) {
+    assert.ok(speed >= 0.5 && speed <= 2, String(speed));
+  }
+});
+
+test("solo se ofrecen aceleraciones pequeñas", () => {
+  /*
+   * A 1,1x se lee como más enérgico y no se nota; a 1,5x se nota, y lo que se
+   * nota deja de convencer y parece un truco.
+   */
+  assert.ok(SPEEDS.every((speed) => speed > 1 && speed <= 1.2));
+});
+
+test("un solo núcleo y preajuste rápido", () => {
+  // Re-codifica vídeo en un servidor de dos núcleos que además sirve páginas.
+  const args = speedArgs("/a", "/b", 1.1, true);
+
+  assert.equal(args[args.indexOf("-threads") + 1], "1");
+  assert.equal(args[args.indexOf("-preset") + 1], "veryfast");
 });

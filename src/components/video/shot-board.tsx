@@ -14,6 +14,7 @@ import {
   MUSIC_STYLES,
 } from "@/lib/video/music";
 import { findMusicLevel, MUSIC_LEVELS } from "@/lib/video/loudness";
+import { SPEEDS } from "@/lib/video/local-media";
 import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voice-settings";
 import { GenerateButton } from "@/components/generate-button";
 import {
@@ -23,6 +24,7 @@ import {
   generateMusicAction,
   setSubtitlePresetAction,
   levelMusicAction,
+  speedUpVideoAction,
   uploadMusicAction,
   generateClipsAction,
   generateKeyframesAction,
@@ -768,6 +770,40 @@ export function ShotBoard({
           >
             Descargar el vídeo
           </a>
+
+          {/*
+            Acelerar un poco.
+
+            Es de lo que más cambia el ritmo de un anuncio sin tocar nada más.
+            Solo aceleraciones pequeñas: a 1,1x se lee como más enérgico y no se
+            nota; a 1,5x se nota, y lo que se nota deja de convencer.
+
+            Va en segundo plano porque **re-codifica el vídeo**. Es lo único de
+            este pipeline que lo hace en el servidor —el montaje va fuera
+            precisamente por eso— y en dos núcleos tarda unos minutos.
+          */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Acelerar a</span>
+
+            {SPEEDS.map((speed) => (
+              <GenerateButton
+                key={speed}
+                action={() =>
+                  speedUpVideoAction({ videoId: video.id, productId, factor: speed })
+                }
+                label={`${speed}x`}
+                hint={
+                  video.voiceSeconds > 0
+                    ? `De ${Math.round(video.voiceSeconds)} s a ${Math.round(video.voiceSeconds / speed)} s. Re-codifica el vídeo: tarda unos minutos y el tono de la voz no cambia.`
+                    : "Re-codifica el vídeo: tarda unos minutos y el tono de la voz no cambia."
+                }
+              />
+            ))}
+          </div>
+
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Sustituye el vídeo montado. Si te pasas, vuelve a montar y quedas como estabas.
+          </p>
         </div>
       ) : null}
 

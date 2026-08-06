@@ -225,6 +225,88 @@ export function loudnormArgs(input: string, out: string, lufs: number): string[]
   ];
 }
 
+/**
+ * Las velocidades que se pueden pedir.
+ *
+ * Solo aceleraciones pequeñas. Un anuncio a 1,1x se lee como más enérgico y no
+ * se nota; a 1,5x se nota, y lo que se nota deja de convencer y empieza a
+ * parecer un truco. Y por debajo de 1 no está a propósito: ralentizar una
+ * locución la vuelve pastosa, y para eso se regenera la voz.
+ */
+export const SPEEDS = [1.05, 1.1, 1.15, 1.2] as const;
+
+/**
+ * Los argumentos para acelerar un vídeo sin desincronizar el audio.
+ *
+ * ## Las dos mitades tienen que ir juntas
+ *
+ * `setpts` cambia el tiempo de la **imagen** y `atempo` el del **sonido**.
+ * Aplicar solo el primero es el error clásico: el vídeo dura menos, el audio
+ * sigue durando lo mismo, y el montador lo recorta al final. No da ningún
+ * error — sale un anuncio en el que la boca va por delante de la voz y la
+ * última frase falta.
+ *
+ * `atempo` cambia la velocidad **sin cambiar el tono**. Con `asetrate` la voz
+ * subiría de tono y sonaría a dibujo animado, que es lo que pasa cuando se
+ * acelera un vídeo en un editor sin cuidado.
+ *
+ * ## Y por qué `atempo` acepta este rango
+ *
+ * Va de 0,5 a 2. Todas las velocidades de `SPEEDS` caben de sobra, así que no
+ * hace falta encadenar filtros; el tope se comprueba igual porque un valor
+ * fuera de rango no se ignora: ffmpeg aborta y el vídeo se queda sin acelerar.
+ *
+ * ## Sin audio también vale
+ *
+ * Un clip suelto puede no tenerlo, y montar el filtro de sonido sobre una pista
+ * que no existe hace que ffmpeg falle al construir el grafo — antes de tocar un
+ * solo fotograma.
+ */
+export function speedArgs(
+  input: string,
+  out: string,
+  factor: number,
+  hasAudio: boolean,
+): string[] {
+  const speed = Math.max(0.5, Math.min(2, Number(factor) || 1));
+
+  return [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    input,
+    "-filter_complex",
+    hasAudio
+      ? `[0:v]setpts=PTS/${speed}[v];[0:a]atempo=${speed}[a]`
+      : `[0:v]setpts=PTS/${speed}[v]`,
+    "-map",
+    "[v]",
+    ...(hasAudio ? ["-map", "[a]"] : []),
+    "-c:v",
+    "libx264",
+    /*
+     * `veryfast` y un solo núcleo.
+     *
+     * Esto **re-codifica vídeo**, que es lo que el proyecto evita en este
+     * servidor: dos núcleos que además sirven las páginas. Con el preajuste
+     * rápido un anuncio de dos minutos tarda unos minutos en vez de muchos, y
+     * la diferencia de calidad en 720x1280 no se ve.
+     */
+    "-preset",
+    "veryfast",
+    "-crf",
+    "20",
+    "-pix_fmt",
+    "yuv420p",
+    ...(hasAudio ? ["-c:a", "aac", "-b:a", "160k"] : []),
+    "-threads",
+    "1",
+    "-y",
+    out,
+  ];
+}
+
 /** Los argumentos para preguntar cuánto dura y de qué tamaño es. */
 export function probeArgs(input: string): string[] {
   return [

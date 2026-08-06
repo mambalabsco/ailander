@@ -1661,3 +1661,73 @@ export async function levelMusicAction(input: unknown): Promise<{
     };
   }
 }
+
+/**
+ * Acelera un poco el vídeo montado.
+ *
+ * ## Por qué en segundo plano y no en un botón que espera
+ *
+ * Porque **re-codifica vídeo**. Es lo único de este pipeline que lo hace en el
+ * servidor: el montaje va fuera precisamente porque en dos núcleos dejaría la
+ * plataforma arrastrándose. Aquí no hay salida —ningún servicio del pipeline
+ * cambia la velocidad— así que se hace aquí, despacio y sin bloquear a nadie.
+ *
+ * ## Y por qué se guarda aparte
+ *
+ * Porque acelerar es una decisión que se revisa mirando el resultado, y pisar
+ * el montaje original dejaría sin comparación: si a 1,2x va demasiado rápido,
+ * el que estaba antes ya no existe y hay que volver a montar.
+ */
+export async function speedUpVideoAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const videoId = readText(raw.videoId);
+  const productId = readText(raw.productId);
+  const factor = Number(raw.factor) || 1.1;
+
+  if (!videoId || !productId) throw new Error("Falta el vídeo.");
+  await guard();
+
+  const video = await readVideo(videoId);
+  if (!video) throw new Error("Ese vídeo ya no existe.");
+  if (!video.finalUrl) throw new Error("Todavía no hay vídeo montado que acelerar.");
+
+  const source = video.finalUrl;
+
+  return runInBackground({
+    productId,
+    // Mismo tipo que el resto de trabajos de vídeo: es lo que hace que salgan
+    // juntos en el panel de trabajos en marcha.
+    kind: "imagenes",
+    label: `Acelerar a ${factor}x`,
+    revalidate: `/products/${productId}`,
+    resume: { videoId, productId, factor },
+    work: async (report) => {
+      await report(`Acelerando a ${factor}x — re-codifica el vídeo, así que tarda unos minutos`);
+
+      const { speedUpVideo } = await import("@/lib/video/fetch-video");
+      const done = await speedUpVideo(source, factor);
+
+      if (done.problem) throw new Error(done.problem);
+
+      const stored = await uploadVideoAsset({
+        videoId,
+        name: `acelerado-${String(factor).replace(".", "-")}.mp4`,
+        data: Buffer.from(done.bytes),
+        contentType: "video/mp4",
+      });
+
+      await updateVideo(videoId, { finalUrl: stored });
+
+      const antes = video.voiceSeconds > 0 ? Math.round(video.voiceSeconds) : 0;
+      const ahora = antes > 0 ? Math.round(antes / factor) : 0;
+
+      return {
+        summary:
+          antes > 0
+            ? `Acelerado a ${factor}x: de ${antes} s a ${ahora} s. El tono de la voz no cambia.`
+            : `Acelerado a ${factor}x. El tono de la voz no cambia.`,
+      };
+    },
+  });
+}

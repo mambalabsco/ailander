@@ -15,6 +15,7 @@ import {
   readProbe,
   readVideoUrl,
   loudnormArgs,
+  speedArgs,
 } from "@/lib/video/local-media";
 
 /**
@@ -306,6 +307,96 @@ export async function levelAudio(
   } finally {
     // Como el resto: en un disco pequeño, unos cuantos temporales olvidados lo
     // llenan, y un disco lleno no da un error claro — da fallos raros en todo.
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Acelera un vídeo un poco, en el servidor.
+ *
+ * ## Lo que cuesta, dicho de frente
+ *
+ * Esto **re-codifica vídeo**, que es justo lo que el proyecto manda fuera: el
+ * montaje va a un servicio porque en dos núcleos dejaría la plataforma
+ * arrastrándose. Aquí no hay alternativa —ningún servicio del pipeline cambia
+ * la velocidad— así que se hace con el preajuste rápido, un solo núcleo y un
+ * plazo generoso, y quien llama debe lanzarlo en segundo plano.
+ *
+ * ## Se pregunta antes si hay audio
+ *
+ * Porque montar el filtro de sonido sobre una pista que no existe hace que
+ * ffmpeg falle al construir el grafo, antes de tocar un fotograma. Y aquí sí
+ * merece la pena preguntar: `ffprobe` cuesta milisegundos y evita una
+ * codificación entera tirada.
+ */
+export async function speedUpVideo(
+  source: string,
+  factor: number,
+): Promise<{ bytes: Uint8Array; problem: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "acelerar-"));
+
+  try {
+    const response = await fetch(source, { cache: "no-store" });
+
+    if (!response.ok) {
+      return { bytes: new Uint8Array(), problem: `no se pudo descargar el vídeo (${response.status}).` };
+    }
+
+    const entra = join(dir, "entra.mp4");
+    const sale = join(dir, "sale.mp4");
+
+    await writeFile(entra, Buffer.from(await response.arrayBuffer()));
+
+    /*
+     * Si `ffprobe` no contesta se sigue **con** audio.
+     *
+     * Es el caso que casi siempre acierta —un anuncio montado lleva voz— y
+     * equivocarse hacia el otro lado entregaría un vídeo mudo sin avisar, que
+     * es mucho peor que un fallo que se lee.
+     */
+    let hasAudio = true;
+
+    try {
+      const probe = await run(
+        "ffprobe",
+        ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", entra],
+        15_000,
+      );
+
+      hasAudio = probe.stdout.trim().length > 0;
+    } catch {
+      hasAudio = true;
+    }
+
+    let ran;
+
+    try {
+      // Cinco minutos: en dos núcleos, un anuncio de dos minutos tarda unos
+      // pocos. El plazo corto de los fotogramas aquí mataría el trabajo a medias.
+      ran = await run("ffmpeg", speedArgs(entra, sale, factor, hasAudio), 300_000);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+
+      return {
+        bytes: new Uint8Array(),
+        problem: /ENOENT/i.test(why)
+          ? "el proceso de la plataforma no encuentra ffmpeg en su PATH."
+          : `no se pudo ejecutar ffmpeg: ${why.slice(0, 160)}`,
+      };
+    }
+
+    if (ran.code !== 0) {
+      const last = ran.stderr.trim().split("\n").pop() ?? "";
+      return { bytes: new Uint8Array(), problem: `ffmpeg falló: ${last.slice(0, 160)}` };
+    }
+
+    return { bytes: new Uint8Array(await readFile(sale)), problem: "" };
+  } catch (error) {
+    return {
+      bytes: new Uint8Array(),
+      problem: error instanceof Error ? error.message : "no se pudo acelerar.",
+    };
+  } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
