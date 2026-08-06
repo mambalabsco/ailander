@@ -511,3 +511,8 @@ export const LANDING_COMMENTS_SCHEMA = object({
     }),
   },
 });
+
+/** Un nombre por tramo de una página copiada, en el mismo orden. */
+export const SECTION_NAMES_SCHEMA = object({
+  names: { type: "array", items: str },
+});

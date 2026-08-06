@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  sectionFile,
+  buildSectionNamesPrompt,
+  readSectionNames,
+sectionFile,
   sectionize,
   sectionNote,
   splitTopLevel,
@@ -341,4 +343,54 @@ test("las anclas internas no se convierten en ajuste", () => {
   const out = sectionize('<a href="#precios">Ver la oferta</a>');
 
   assert.equal(out.settings.length, 0);
+});
+
+/* ----------------------- Nombres que se reconocen ------------------------- */
+
+test("el encargo lleva un tramo por bloque, con su texto", () => {
+  /*
+   * En el editor salen once secciones «Copia de trysculptique 01, 02, 03…».
+   * Para mover el bloque de testimonios hay que abrirlas una a una.
+   */
+  const prompt = buildSectionNamesPrompt(["Ocho razones", "Lo que dicen"]);
+
+  assert.ok(prompt.includes("Tramo 1"));
+  assert.ok(prompt.includes("Tramo 2"));
+  assert.ok(prompt.includes("Ocho razones"));
+});
+
+test("un nombre que falte deja el número, no desplaza al resto", () => {
+  /*
+   * Un nombre desplazado es peor que ninguno: pondría «La oferta» sobre los
+   * testimonios y el orden se cambiaría al revés de lo que se quería.
+   */
+  const names = readSectionNames(["Titular", "", "La oferta"], 3, "Copia");
+
+  assert.deepEqual(names, ["Titular", "Copia 02", "La oferta"]);
+});
+
+test("faltando nombres, los que sobran se numeran", () => {
+  assert.deepEqual(readSectionNames(["Titular"], 3, "Copia"), [
+    "Titular",
+    "Copia 02",
+    "Copia 03",
+  ]);
+});
+
+test("un nombre repetido no distingue, así que se numera", () => {
+  // Es el problema que esto viene a resolver: dos filas iguales en una lista.
+  assert.deepEqual(readSectionNames(["Testimonios", "Testimonios"], 2, "Copia"), [
+    "Testimonios",
+    "Copia 02",
+  ]);
+});
+
+test("lo que no sea una lista no rompe nada", () => {
+  assert.equal(readSectionNames(null, 2, "Copia").length, 2);
+  assert.equal(readSectionNames("Titular", 1, "Copia")[0], "Copia 01");
+});
+
+test("un nombre kilométrico se recorta", () => {
+  // El panel del editor lo corta y deja dos filas que empiezan igual.
+  assert.ok(readSectionNames(["x".repeat(90)], 1, "Copia")[0].length <= 24);
 });

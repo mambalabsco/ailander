@@ -551,3 +551,63 @@ export function sectionNote(result: Sectioned, sectionName: string): string {
 }
 
 export { json };
+
+/**
+ * El encargo para ponerle nombre a cada sección.
+ *
+ * ## Por qué hace falta
+ *
+ * Porque en el editor de temas salen once secciones llamadas «Copia de
+ * trysculptique 01», «… 02», «… 03». Para mover el bloque de testimonios hay
+ * que abrirlas una a una hasta dar con él, y con la página larga eso es
+ * exactamente lo que hace que nadie las toque.
+ *
+ * Con el nombre puesto —«Testimonios», «La oferta», «Garantía»— la lista se lee
+ * de un vistazo y el orden se cambia arrastrando.
+ *
+ * ## Se le da el texto, no el marcado
+ *
+ * Lo que distingue una sección de otra es lo que dice, no sus etiquetas. Y el
+ * marcado de once bloques no cabe en una petición.
+ */
+export function buildSectionNamesPrompt(blocks: string[]): string {
+  return [
+    "Pon nombre a cada tramo de una página de venta, para que se reconozca en una lista.",
+    "",
+    "Devuelve **exactamente** un nombre por tramo, en el mismo orden.",
+    "Dos o tres palabras, en español, describiendo qué es ese tramo dentro de la página:",
+    "«Titular y gancho», «El problema», «Cómo funciona», «Testimonios», «La oferta»,",
+    "«Preguntas frecuentes», «Garantía», «Aviso legal».",
+    "",
+    "No repitas el mismo nombre dos veces: si hay dos tramos de testimonios,",
+    "llámalos «Testimonios» y «Más testimonios». Un nombre repetido en una lista",
+    "no distingue nada, que es el problema que esto viene a resolver.",
+    "",
+    ...blocks.map((text, at) => `--- Tramo ${at + 1} ---\n${text.slice(0, 900)}`),
+  ].join("\n");
+}
+
+/**
+ * Los nombres que devolvió el modelo, comprobados contra los tramos.
+ *
+ * Si faltan, sobran o vienen vacíos, ese tramo se queda con su número. Un
+ * nombre desplazado es peor que ninguno: pondría «La oferta» sobre los
+ * testimonios y el orden se cambiaría al revés de lo que se quería.
+ */
+export function readSectionNames(names: unknown, count: number, fallback: string): string[] {
+  const list = Array.isArray(names) ? names : [];
+
+  const seen = new Set<string>();
+
+  return Array.from({ length: count }, (_, at) => {
+    const raw = typeof list[at] === "string" ? (list[at] as string).trim() : "";
+    const clean = raw.replace(/\s+/g, " ").slice(0, 24);
+
+    if (!clean || seen.has(clean.toLowerCase())) {
+      return `${fallback} ${String(at + 1).padStart(2, "0")}`;
+    }
+
+    seen.add(clean.toLowerCase());
+    return clean;
+  });
+}

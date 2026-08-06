@@ -8,7 +8,11 @@ import { readAngles, readCopies } from "@/lib/copy-store";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { generateStructured } from "@/lib/generators";
-import { LANDING_COMMENTS_SCHEMA, LANDING_PAGE_SCHEMA } from "@/lib/generation-schemas";
+import {
+  LANDING_COMMENTS_SCHEMA,
+  LANDING_PAGE_SCHEMA,
+  SECTION_NAMES_SCHEMA,
+} from "@/lib/generation-schemas";
 import { buildLandingPrompt } from "@/lib/landing-prompt";
 import { findModelPage } from "@/lib/store-blueprint";
 import { AVATAR_POOL_SIZE, avatarSlot, buildAvatarPrompt } from "@/lib/avatar-prompts";
@@ -573,8 +577,44 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              */
             const bloques = splitTopLevel(partes.html);
 
+            /*
+             * Cada sección con el nombre de lo que es.
+             *
+             * En el editor salían once «Copia de trysculptique 01, 02, 03…»:
+             * para mover el bloque de testimonios había que abrirlas una a una,
+             * que es justo lo que hace que nadie las toque.
+             *
+             * Si el modelo falla se numeran, como antes. Quedarse sin plantilla
+             * por no haber podido nombrarla sería cambiar un inconveniente por
+             * una página sin secciones.
+             */
+            const { buildSectionNamesPrompt, readSectionNames } = await import(
+              "@/lib/landing-sections"
+            );
+            const { readableText } = await import("@/lib/landing-copy-html");
+
+            let titulos = readSectionNames(null, bloques.length, page.title.slice(0, 18));
+
+            try {
+              const puestos = await generateStructured<{ names: string[] }>({
+                prompt: buildSectionNamesPrompt(bloques.map((bloque) => readableText(bloque, 900))),
+                schema: SECTION_NAMES_SCHEMA,
+                role: "copy",
+                maxTokens: 2_000,
+              });
+
+              titulos = readSectionNames(
+                puestos.data.names,
+                bloques.length,
+                page.title.slice(0, 18),
+              );
+            } catch {
+              // Se quedan los números. No merece parar la publicación por esto.
+            }
+
             const hechas = bloques.map((bloque, at) => ({
               name: `${wanted}-${String(at + 1).padStart(2, "0")}`,
+              title: titulos[at],
               parts: sectionize(bloque),
             }));
 
@@ -599,7 +639,7 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
                 content: sectionFile({
                   liquid: hecha.parts.liquid,
                   settings: hecha.parts.settings,
-                  name: `${page.title} ${hecha.name.slice(-2)}`,
+                  name: hecha.title,
                   cssAsset,
                 }),
               })),
