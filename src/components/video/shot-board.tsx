@@ -22,6 +22,7 @@ import {
   deleteMusicAction,
   generateMusicAction,
   setSubtitlePresetAction,
+  levelMusicAction,
   uploadMusicAction,
   generateClipsAction,
   generateKeyframesAction,
@@ -68,6 +69,9 @@ export function ShotBoard({
   const [musicLevel, setMusicLevel] = useState("normal");
   const [tone, setTone] = useState(DEFAULT_PRESET);
   const [isPending, startTransition] = useTransition();
+  /** El ajuste de volumen va en su propia transición: tarda y no debe bloquear el resto. */
+  const [levelling, startLevelling] = useTransition();
+  const [levelNote, setLevelNote] = useState("");
   const musicRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -431,6 +435,51 @@ export function ShotBoard({
             con una pista que ya existe y que dura lo que tiene que durar. Solo
             se ofrecen licencias que permiten anuncios.
           */}
+          {/*
+            Nivelar lo que esté puesto, venga de donde venga.
+
+            La generada ya sale nivelada; la subida y la del catálogo vienen al
+            volumen del máster —pensado para escucharlas solas— y encima de una
+            locución la tapan. El montaje no tiene control de volumen: lo que se
+            guarda es lo que suena.
+
+            Y no se arregla oyéndolo: se oye perfectamente que está alta, pero
+            para entonces el vídeo ya está montado.
+          */}
+          {video.musicUrl ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Bajar la música puesta a
+              </span>
+
+              {MUSIC_LEVELS.map((level) => (
+                <Button
+                  key={level.id}
+                  variant="ghost"
+                  disabled={levelling}
+                  onClick={() =>
+                    startLevelling(async () => {
+                      const result = await levelMusicAction({
+                        videoId: video.id,
+                        productId,
+                        level: level.id,
+                      });
+
+                      setLevelNote(result.message);
+                      if (result.ok) router.refresh();
+                    })
+                  }
+                >
+                  {level.label}
+                </Button>
+              ))}
+
+              {levelNote ? (
+                <span className="text-xs text-slate-600 dark:text-slate-300">{levelNote}</span>
+              ) : null}
+            </div>
+          ) : null}
+
           <FreeMusic
             seconds={musicSeconds}
             onUse={(track: Track) => {

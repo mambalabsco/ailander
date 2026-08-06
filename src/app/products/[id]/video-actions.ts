@@ -1513,3 +1513,77 @@ export async function addCatalogTrackAction(input: unknown): Promise<{
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo poner." };
   }
 }
+
+/**
+ * Deja la música que esté puesta al volumen elegido.
+ *
+ * ## Por qué hace falta para todas y no solo para la generada
+ *
+ * Porque la generada ya salía nivelada y las otras dos no. Una pista subida o
+ * traída de un catálogo viene al volumen del máster —pensado para escucharla
+ * sola— y encima de una locución la tapa. El montaje **no tiene control de
+ * volumen**: lo que se guarda es lo que suena, así que si no se ajusta aquí no
+ * se ajusta en ningún sitio.
+ *
+ * Y no se arregla oyéndolo: se oye perfectamente que la música está alta, pero
+ * para entonces el vídeo ya está montado y hay que rehacerlo entero.
+ *
+ * ## Por qué en LUFS y no en un porcentaje
+ *
+ * Porque un 12 % de una pista suave y un 12 % de una comprimida suenan a cosas
+ * distintas. Lo que hace que una cama acompañe sin competir es su sonoridad, y
+ * eso es lo que mide el LUFS.
+ */
+export async function levelMusicAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const videoId = readText(raw.videoId);
+  const productId = readText(raw.productId);
+  const levelId = readText(raw.level);
+
+  if (!videoId || !productId) return { ok: false, message: "Falta el vídeo." };
+
+  try {
+    await guard();
+
+    const video = await readVideo(videoId);
+    if (!video) return { ok: false, message: "Ese vídeo ya no existe." };
+    if (!video.musicUrl) return { ok: false, message: "No hay ninguna música puesta." };
+
+    const level = findMusicLevel(levelId);
+
+    const levelled = await normalizeLoudness(video.musicUrl, level.lufs);
+
+    /*
+     * Se descarga y se vuelve a guardar en nuestro almacenamiento.
+     *
+     * La dirección que devuelve el servicio caduca, y una música que caduca es
+     * un montaje que un día sale mudo sin que nada haya cambiado.
+     */
+    const response = await fetch(levelled, { cache: "no-store" });
+    if (!response.ok) throw new Error("No se pudo descargar la música ya ajustada.");
+
+    const stored = await uploadVideoAsset({
+      videoId,
+      name: `musica-${level.id}.wav`,
+      data: Buffer.from(await response.arrayBuffer()),
+      contentType: "audio/wav",
+    });
+
+    await updateVideo(videoId, { musicUrl: stored });
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: true,
+      message: `Ajustada a ${level.label.toLowerCase()}: ${belowVoice(level)} LU por debajo de la voz.`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo ajustar el volumen.",
+    };
+  }
+}
