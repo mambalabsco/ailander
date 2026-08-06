@@ -45,6 +45,8 @@ export function AdVisualSender({
   adId,
   landingId,
   visuals,
+  label,
+  compact = false,
 }: {
   productId: string;
   /** Ata las imágenes al copy, para poder enseñarlas dentro de su anuncio. */
@@ -54,6 +56,16 @@ export function AdVisualSender({
   /** O a la página, cuando son los huecos de una landing. */
   landingId?: string;
   visuals: Visual[];
+  /** El texto del botón. Por defecto, el de generar un lote. */
+  label?: string;
+  /**
+   * Sin selector de modelo ni lista de casillas.
+   *
+   * Para rehacer **un** hueco, elegir qué generar de una lista de uno es un
+   * paso vacío, y repetir el selector de modelo en setenta y cinco huecos
+   * llenaría la pantalla de desplegables idénticos.
+   */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -96,6 +108,21 @@ export function AdVisualSender({
       }
     });
   };
+
+  if (compact) {
+    return (
+      <div>
+        <Button variant="secondary" onClick={run} disabled={isPending}>
+          {isPending ? "Generando…" : (label ?? "Generar")}
+        </Button>
+
+        {notice ? (
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{notice}</p>
+        ) : null}
+        {error ? <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{error}</p> : null}
+      </div>
+    );
+  }
 
   return (
     <div>

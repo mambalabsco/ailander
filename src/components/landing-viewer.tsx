@@ -270,6 +270,37 @@ export function LandingViewer({
               <CopyableBlock value={slot.prompt} label="Prompt" maxHeightClass="max-h-32">
                 <pre className="whitespace-pre-wrap font-mono text-xs leading-5">{slot.prompt}</pre>
               </CopyableBlock>
+
+              {/*
+                Rehacer este hueco, y solo este.
+
+                El generador de abajo solo recibe los huecos **sin imagen**: en
+                cuanto uno se llena desaparece de la lista, y una imagen que
+                salió mal se quedaba así para siempre. Volver a generar la
+                página entera para arreglar una cuesta las setenta y cinco.
+
+                Va por hueco y no por lote porque rehacer es una decisión que se
+                toma mirando **una** imagen.
+              */}
+              <div className="mt-2">
+                <AdVisualSender
+                  productId={productId}
+                  landingId={page.id}
+                  visuals={[
+                    {
+                      title: `${page.title} · ${slot.slot}`,
+                      prompt: slot.prompt,
+                      aspectRatio: slot.aspectRatio,
+                      concept: slot.slot,
+                      origin: page.title,
+                    },
+                  ]}
+                  label={images.some((image) => image.concept === slot.slot)
+                    ? "Rehacer esta"
+                    : "Generar esta"}
+                  compact
+                />
+              </div>
             </div>
           ))}
 

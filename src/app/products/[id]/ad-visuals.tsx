@@ -96,6 +96,46 @@ export function AdVisuals({
         </div>
       ) : null}
 
+      {/*
+        Rehacer una creatividad suelta.
+
+        El bloque de arriba genera **la tanda**, y para arreglar una que salió
+        mal había que lanzarlas todas otra vez y pagarlas todas otra vez.
+        Rehacer es una decisión que se toma mirando una imagen, así que el botón
+        va con cada una.
+      */}
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        {visuals.map((visual) => (
+          <li
+            key={visual.title}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"
+          >
+            <span className="min-w-40 flex-1 truncate text-sm">{visual.title}</span>
+
+            <AdVisualSender
+              productId={productId}
+              copyId={copyId}
+              visuals={[
+                {
+                  title: visual.title,
+                  prompt: visual.prompt,
+                  aspectRatio: visual.aspectRatio,
+                  concept: visual.concept,
+                  origin: visual.title,
+                  withReference: referenceFor(visual),
+                },
+              ]}
+              label={
+                generated.some((image) => image.concept === visual.concept)
+                  ? "Rehacer"
+                  : "Generar esta"
+              }
+              compact
+            />
+          </li>
+        ))}
+      </ul>
+
       {/* Las ya generadas, aquí mismo. Antes había que ir a la galería del
           producto y adivinar cuál salió de este anuncio. */}
       <ImageDownloads images={generated} title="Creatividades de este anuncio" />
