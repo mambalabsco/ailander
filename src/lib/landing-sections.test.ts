@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  buildSectionNamesPrompt,
+  bandClasses,
+buildSectionNamesPrompt,
   readSectionNames,
 sectionFile,
   sectionize,
@@ -393,4 +394,65 @@ test("lo que no sea una lista no rompe nada", () => {
 test("un nombre kilométrico se recorta", () => {
   // El panel del editor lo corta y deja dos filas que empiezan igual.
   assert.ok(readSectionNames(["x".repeat(90)], 1, "Copia")[0].length <= 24);
+});
+
+/* --------------------- Cortar donde cambia el fondo ------------------------ */
+
+test("una clase con fondo propio cuenta como banda", () => {
+  /*
+   * Lo que hace que alguien vea «aquí empieza otra sección» casi siempre es un
+   * cambio de fondo. Está en el CSS, así que se puede leer sin renderizar nada.
+   */
+  const bands = bandClasses(".hero{background:#f4f4f4}.texto{color:#111}");
+
+  assert.ok(bands.has("hero"));
+  assert.ok(!bands.has("texto"));
+});
+
+test("el blanco y lo transparente no separan nada", () => {
+  // Tomarlos por banda partiría la página en cada `div`.
+  const bands = bandClasses(".a{background:#fff}.b{background:transparent}.c{background:none}");
+
+  assert.equal(bands.size, 0);
+});
+
+test("una banda a todo el ancho también cuenta", () => {
+  assert.ok(bandClasses(".ancho{width:100vw}").has("ancho"));
+});
+
+test("los tramos que no abren banda se pegan al de arriba", () => {
+  /*
+   * Un titular y su fondo en secciones distintas se ven en el editor como dos
+   * secciones que no se pueden mover por separado sin romper la página.
+   */
+  const bands = bandClasses(".banda{background:#eee}");
+  const largo = "y".repeat(4000);
+
+  const parts = splitTopLevel(
+    `<div><div class="banda">A${largo}</div><p>suelto</p><div class="banda">B${largo}</div></div>`,
+    20,
+    bands,
+  );
+
+  assert.equal(parts.length, 2);
+  assert.ok(parts[0].includes("suelto"));
+});
+
+test("section y header son banda por sí mismos", () => {
+  // El marcado ya lo dice: no hace falta que el CSS lo repita.
+  const largo = "y".repeat(4000);
+  const parts = splitTopLevel(
+    `<div><section>A${largo}</section><section>B${largo}</section></div>`,
+    20,
+    new Set(["algo"]),
+  );
+
+  assert.equal(parts.length, 2);
+});
+
+test("sin bandas conocidas se parte como antes", () => {
+  const largo = "y".repeat(4000);
+  const parts = splitTopLevel(`<div><p>A${largo}</p><p>B${largo}</p></div>`, 20, new Set());
+
+  assert.equal(parts.length, 2);
 });

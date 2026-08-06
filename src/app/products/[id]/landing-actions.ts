@@ -551,9 +551,8 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
             "@/lib/shopify-store"
           );
           const { templateSuffix } = await import("@/lib/landing-copy-html");
-          const { sectionFile, sectionize, sectionNote, splitTopLevel, templateFor } = await import(
-            "@/lib/landing-sections"
-          );
+          const { bandClasses, sectionFile, sectionize, sectionNote, splitTopLevel, templateFor } =
+            await import("@/lib/landing-sections");
 
           const themes = await listThemes(store);
           const live = themes.find((item) => item.role?.toLowerCase() === "main") ?? themes[0];
@@ -575,7 +574,17 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              * sin orden. Con varias, cada tramo se abre, se edita, se mueve y
              * se quita por separado — que es lo que se pidió.
              */
-            const bloques = splitTopLevel(partes.html);
+            /*
+             * Se corta donde cambia el fondo, no solo por el anidamiento.
+             *
+             * Lo que hace ver «aquí empieza otra sección» casi siempre es un
+             * cambio de fondo o una banda a todo el ancho, y eso está escrito
+             * en el CSS de la copia. Leerlo sale gratis; mirar una captura
+             * exigiría un navegador headless en un servidor de dos núcleos que
+             * además sirve las páginas.
+             */
+            const bandas = bandClasses(partes.css);
+            const bloques = splitTopLevel(partes.html, 20, bandas);
 
             /*
              * Cada sección con el nombre de lo que es.

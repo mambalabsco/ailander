@@ -55,6 +55,44 @@ const MAX_HEADINGS = 20;
 const MAX_TEXTS = 15;
 
 /**
+ * Las clases que el CSS pinta como una banda: fondo propio o ancho completo.
+ *
+ * ## Por qué esto sustituye a mirar una captura
+ *
+ * Lo que hace que una persona vea «aquí empieza otra sección» casi siempre es
+ * un **cambio de fondo** o una banda a todo el ancho. Eso está escrito en el
+ * CSS de la página copiada, así que se puede leer sin renderizar nada.
+ *
+ * La alternativa —hacer una captura y mirarla— exige un navegador headless en
+ * el servidor. Este tiene dos núcleos y sirve las páginas con ellos; arrancar
+ * Chrome por cada copia es justo lo que el resto del proyecto evita.
+ *
+ * Se ignoran los fondos transparentes y el blanco: no separan nada, y tomarlos
+ * por banda partiría la página en cada `div`.
+ */
+export function bandClasses(css: string): Set<string> {
+  const found = new Set<string>();
+
+  for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const body = rule[2];
+
+    const fondo = /background(?:-color)?\s*:\s*([^;]+)/i.exec(body)?.[1]?.trim().toLowerCase();
+    const ancho = /width\s*:\s*100(?:vw|%)/i.test(body) || /max-width\s*:\s*none/i.test(body);
+
+    const pinta =
+      Boolean(fondo) &&
+      !/^(?:none|transparent|inherit|initial|unset)$/.test(fondo ?? "") &&
+      !/^(?:#fff(?:fff)?|white|rgba?\(\s*255\s*,\s*255\s*,\s*255)/.test(fondo ?? "");
+
+    if (!pinta && !ancho) continue;
+
+    for (const name of rule[1].matchAll(/\.([\w-]+)/g)) found.add(name[1]);
+  }
+
+  return found;
+}
+
+/**
  * El troceo crudo: los bloques de primer nivel de ese marcado.
  *
  * Va aparte de `splitTopLevel` para que la bajada de nivel pueda usarlo **sin
@@ -136,7 +174,7 @@ function topLevelChunks(body: string): string[] {
  * el cierre trocearía los `div` anidados por la mitad, que es marcado inválido
  * y una página descolocada, no un error.
  */
-export function splitTopLevel(html: string, maxParts = 20): string[] {
+export function splitTopLevel(html: string, maxParts = 20, bands?: Set<string>): string[] {
   const inner = /^\s*<div class="copiado">([\s\S]*)<\/div>\s*$/.exec(html.trim());
   const body = inner ? inner[1] : html;
 
@@ -177,6 +215,32 @@ export function splitTopLevel(html: string, maxParts = 20): string[] {
       /^<[a-z][^>]*>/i.test(mayor) ? mayor.replace(/^<[^>]*>/, "").replace(/<\/[^>]*>$/, "") : mayor,
     ).filter((part) => hasSomething(part));
 
+    /*
+     * Si dentro hay bandas, se corta por ellas y se juntan las migajas.
+     *
+     * Un tramo que no empieza una banda pertenece a la de arriba: pegarlo allí
+     * es lo que evita que un titular y su fondo acaben en secciones distintas,
+     * que en el editor se ve como dos secciones que no se pueden mover por
+     * separado sin romper la página.
+     */
+    if (bands && bands.size > 0) {
+      const juntos: string[] = [];
+
+      for (const trozo of dentro) {
+        if (juntos.length > 0 && !startsBand(trozo, bands)) {
+          juntos[juntos.length - 1] += trozo;
+        } else {
+          juntos.push(trozo);
+        }
+      }
+
+      if (juntos.length > 1) {
+        const at = clean.indexOf(mayor);
+        clean = [...clean.slice(0, at), ...juntos, ...clean.slice(at + 1)];
+        continue;
+      }
+    }
+
     // Si dentro solo hay uno, bajar otra vez daría lo mismo: se para.
     if (dentro.length <= 1) break;
 
@@ -196,6 +260,16 @@ export function splitTopLevel(html: string, maxParts = 20): string[] {
   const tail = clean.slice(maxParts - 1).join("");
 
   return [...head, tail].map((part) => `<div class="copiado">${part}</div>`);
+}
+
+/** Si ese trozo abre una banda: su etiqueta lleva una clase de fondo propio. */
+function startsBand(html: string, bands: Set<string>): boolean {
+  // `<section>` y `<header>` son bandas por sí mismos: el marcado ya lo dice.
+  if (/^<(?:section|header|footer)\b/i.test(html.trim())) return true;
+
+  const classes = /^<[^>]*\sclass="([^"]*)"/i.exec(html.trim())?.[1] ?? "";
+
+  return classes.split(/\s+/).some((name) => name && bands.has(name));
 }
 
 /**
