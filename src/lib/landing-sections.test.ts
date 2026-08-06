@@ -135,11 +135,36 @@ test("la sección no se puede insertar por error en otra página", () => {
   assert.equal(schema.presets, undefined);
 });
 
-test("la plantilla carga la hoja y coloca las secciones en orden", () => {
-  const out = templateFor("copia-x.css", ["copia-x-01", "copia-x-02"]);
+test("la plantilla es JSON, que es lo que el editor deja tocar", () => {
+  /*
+   * Con `{% section %}` fijos en un `.liquid`, el editor enseña las secciones y
+   * no deja ocultarlas, moverlas ni añadir otras.
+   */
+  const out = JSON.parse(templateFor(["copia-x-01", "copia-x-02"]));
 
-  assert.ok(out.includes("'copia-x.css' | asset_url | stylesheet_tag"));
-  assert.ok(out.indexOf("copia-x-01") < out.indexOf("copia-x-02"));
+  const tipos = Object.values(out.sections as Record<string, { type: string }>).map(
+    (item) => item.type,
+  );
+
+  assert.deepEqual(tipos, ["copia-x-01", "copia-x-02"]);
+});
+
+test("el orden va en `order`, no en las claves", () => {
+  // Un objeto JSON no garantiza el orden de sus claves, y con veinte secciones
+  // eso es una página barajada.
+  const out = JSON.parse(templateFor(["a", "b", "c"]));
+
+  assert.equal(out.order.length, 3);
+  assert.equal(out.sections[out.order[0]].type, "a");
+  assert.equal(out.sections[out.order[2]].type, "c");
+});
+
+test("cada sección carga la hoja de estilos", () => {
+  // Una plantilla JSON no admite Liquid suelto, así que no hay dónde ponerla
+  // una sola vez; el navegador se queda con una descarga aunque salga varias.
+  const file = sectionFile({ liquid: "<p></p>", settings: [], name: "x", cssAsset: "copia.css" });
+
+  assert.ok(file.includes("'copia.css' | asset_url | stylesheet_tag"));
 });
 
 test("la sección no lleva CSS dentro", () => {
@@ -218,4 +243,66 @@ test("lo que quede suelto al final no se tira", () => {
   const parts = splitTopLevel("<p>uno</p>texto suelto");
 
   assert.ok(parts.some((part) => part.includes("texto suelto")));
+});
+
+/* ------------------- Lo que impedía sustituir una imagen ------------------- */
+
+test("se quita el srcset, que es el que ganaba", () => {
+  /*
+   * El navegador prefiere `srcset` sobre `src` cuando están los dos. Cambiando
+   * solo el `src`, la imagen nueva se escribía y **seguía viéndose la del
+   * original**.
+   */
+  const out = sectionize('<img src="https://x/a.jpg" srcset="https://x/a-2x.jpg 2x" sizes="100vw">');
+
+  assert.ok(!out.liquid.includes("srcset"));
+  assert.ok(!out.liquid.includes("sizes="));
+  assert.ok(out.liquid.includes("section.settings.img_1"));
+});
+
+test("los source de un picture no se quedan pisando la imagen", () => {
+  // Un `<picture>` con `<source srcset>` no mira el `src` del `<img>`: si se
+  // dejan, sustituir la imagen no cambia nada de lo que se ve.
+  const out = sectionize('<picture><source srcset="https://x/a.webp"><img src="https://x/a.jpg"></picture>');
+
+  assert.ok(!out.liquid.includes("a.webp"));
+  assert.ok(out.liquid.includes("<picture>"));
+});
+
+test("los source de vídeo sí se quedan", () => {
+  // Ahí es de donde sale el archivo: quitarlos deja el vídeo sin nada.
+  const out = sectionize('<video><source src="https://x/a.webm" type="video/webm"></video>');
+
+  assert.ok(out.liquid.includes("a.webm"));
+});
+
+test("cada imagen tiene subida y dirección, y manda la subida", () => {
+  const out = sectionize('<img src="https://x/a.jpg">');
+
+  assert.ok(out.settings.some((setting) => setting.id === "img_1"));
+  assert.ok(out.settings.some((setting) => setting.id === "img_1_url"));
+
+  // El orden del `if` es la prioridad: subida, dirección, original.
+  const at = (needle: string) => out.liquid.indexOf(needle);
+  assert.ok(at("{% if section.settings.img_1 %}") < at("elsif section.settings.img_1_url"));
+  assert.ok(at("elsif section.settings.img_1_url") < at("https://x/a.jpg"));
+});
+
+/* ------------------- Las secciones que no se entendían --------------------- */
+
+test("un bloque sin nada visible no llega a ser sección", () => {
+  /*
+   * Un `<div>` vacío o el contenedor de un script ya quitado sueltan una
+   * sección más en el editor: aparece en la lista, no se puede editar y nadie
+   * sabe qué trae.
+   */
+  const parts = splitTopLevel('<div class="a"></div><p>texto de verdad</p><div>&nbsp;</div>');
+
+  assert.equal(parts.length, 1);
+  assert.ok(parts[0].includes("texto de verdad"));
+});
+
+test("un bloque con solo una imagen sí cuenta", () => {
+  // No tiene texto y es contenido: quitarlo dejaría un hueco en la página.
+  assert.equal(splitTopLevel('<div><img src="https://x/a.jpg"></div>').length, 1);
 });

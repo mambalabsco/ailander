@@ -586,11 +586,17 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
                   liquid: hecha.parts.liquid,
                   settings: hecha.parts.settings,
                   name: `${page.title} ${hecha.name.slice(-2)}`,
+                  cssAsset,
                 }),
               })),
               {
-                filename: `templates/page.${wanted}.liquid`,
-                content: templateFor(cssAsset, hechas.map((hecha) => hecha.name)),
+                /*
+                  JSON y no Liquid: es la única forma de que en el editor de
+                  temas las secciones se puedan ocultar, mover y añadir. Con
+                  `{% section %}` fijos, el editor las enseña y no deja tocarlas.
+                */
+                filename: `templates/page.${wanted}.json`,
+                content: templateFor(hechas.map((hecha) => hecha.name)),
               },
             ]);
 

@@ -119,7 +119,18 @@ export function splitTopLevel(html: string, maxParts = 20): string[] {
   const rest = body.slice(at).trim();
   if (rest) parts.push(rest);
 
-  const clean = parts.map((part) => part.trim()).filter(Boolean);
+  /*
+   * Los bloques sin nada visible se caen.
+   *
+   * Un `<div>` vacío, un contenedor de un script ya quitado o un separador
+   * sueltan una sección más en el editor: aparece en la lista, no se puede
+   * editar y nadie sabe qué trae. Con once secciones, tres de ellas así
+   * convierten el panel en un adivinanza.
+   */
+  const clean = parts
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => hasSomething(part));
 
   if (clean.length <= maxParts) return clean.map((part) => `<div class="copiado">${part}</div>`);
 
@@ -133,6 +144,25 @@ export function splitTopLevel(html: string, maxParts = 20): string[] {
   const tail = clean.slice(maxParts - 1).join("");
 
   return [...head, tail].map((part) => `<div class="copiado">${part}</div>`);
+}
+
+/**
+ * Si ese trozo enseña algo.
+ *
+ * Se mira que tenga texto, una imagen, un vídeo o un fondo. Un `<div>` con
+ * clases y nada dentro ocupa una sección del editor y no se puede tocar.
+ */
+function hasSomething(html: string): boolean {
+  if (/<(?:img|video|source|iframe|svg)\b/i.test(html)) return true;
+
+  // El texto que quede al quitar las etiquetas. Los espacios duros cuentan como
+  // vacío: son separadores, no contenido.
+  const text = html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+
+  return text.length > 0;
 }
 
 /** Para que un texto quepa en la etiqueta de un ajuste sin romper el panel. */
@@ -176,12 +206,14 @@ export function sectionize(html: string): Sectioned {
    * sobreviven `class`, `style`, `loading`, `srcset` y todo lo que le daba su
    * tamaño y su sitio. Reconstruir la etiqueta es donde se pierde el maquetado.
    */
-  let out = html.replace(/(<img\b[^>]*?\ssrc=)"([^"]*)"/gi, (match, before: string, url: string) => {
-    if (!url || url.startsWith("data:")) return match;
+  let out = html.replace(/<img\b[^>]*>/gi, (tag: string) => {
+    const url = /\ssrc="([^"]*)"/i.exec(tag)?.[1] ?? "";
+
+    if (!url || url.startsWith("data:")) return tag;
 
     if (images >= MAX_IMAGES) {
       skipped += 1;
-      return match;
+      return tag;
     }
 
     images += 1;
@@ -191,16 +223,49 @@ export function sectionize(html: string): Sectioned {
       type: "image_picker",
       id,
       label: `Imagen ${images}`,
-      info: "Vacío deja la del original.",
+      info: "Si subes una, manda sobre la del original.",
+    });
+
+    settings.push({
+      type: "url",
+      id: `${id}_url`,
+      label: `Imagen ${images} · por dirección`,
+      info: "Para usar una que ya esté en otro sitio. La subida manda sobre esta.",
     });
 
     /*
-     * `image_url` sin `width` devuelve la original sin redimensionar, que en
-     * una foto de móvil son varios megas por imagen. Con ancho, Shopify sirve
-     * la versión que toca desde su CDN.
+     * Se quita `srcset`, y aquí está el fallo que hacía que sustituir la imagen
+     * no sirviera de nada.
+     *
+     * El navegador prefiere `srcset` sobre `src` cuando están los dos. Al
+     * cambiar solo el `src`, la imagen nueva se escribía y **seguía viéndose la
+     * del original**, porque el `srcset` con las direcciones de la página
+     * copiada seguía ahí ganando.
      */
-    return `${before}"{% if section.settings.${id} %}{{ section.settings.${id} | image_url: width: 1600 }}{% else %}${url}{% endif %}"`;
+    const clean = tag
+      .replace(/\s(?:srcset|data-srcset)="[^"]*"/gi, "")
+      .replace(/\ssizes="[^"]*"/gi, "");
+
+    /*
+     * Tres orígenes, con prioridad: lo subido, luego la dirección escrita, y de
+     * respaldo la del original. `image_picker` no admite valor por defecto, así
+     * que sin el respaldo la página saldría sin imágenes hasta rellenarlas una
+     * a una.
+     */
+    const value = `{% if section.settings.${id} %}{{ section.settings.${id} | image_url: width: 1600 }}{% elsif section.settings.${id}_url != blank %}{{ section.settings.${id}_url }}{% else %}${url}{% endif %}`;
+
+    return clean.replace(/\ssrc="[^"]*"/i, ` src="${value}"`);
   });
+
+  /*
+   * Los `<source>` de un `<picture>` también mandan sobre el `<img>`.
+   *
+   * Un `<picture>` con `<source srcset>` no mira el `src` del `<img>` de
+   * dentro: si se dejan, sustituir la imagen no cambia nada de lo que se ve.
+   */
+  out = out.replace(/<source\b[^>]*\ssrcset="[^"]*"[^>]*>/gi, (tag: string) =>
+    /type="video/i.test(tag) ? tag : "",
+  );
 
   // Los vídeos, con el mismo criterio.
   let videos = 0;
@@ -303,6 +368,8 @@ export function sectionFile(options: {
   liquid: string;
   settings: Setting[];
   name: string;
+  /** El asset con la hoja de estilos de la copia. */
+  cssAsset?: string;
 }): string {
   const schema = {
     name: short(options.name, 25),
@@ -328,7 +395,16 @@ export function sectionFile(options: {
     "  Al volver a copiar esa misma página se sobrescribe.",
     "{% endcomment %}",
     /*
-     * El CSS **no** va aquí: va en un asset que carga la plantilla.
+     * La hoja se carga desde **cada** sección, no desde la plantilla.
+     *
+     * Una plantilla JSON no admite Liquid suelto, así que no hay dónde ponerla
+     * una sola vez. El navegador se queda con una descarga aunque el `<link>`
+     * salga varias veces, y así la página sigue con sus estilos aunque se
+     * oculte o se borre cualquier sección.
+     */
+    options.cssAsset ? `{{ '${options.cssAsset}' | asset_url | stylesheet_tag }}` : "",
+    /*
+     * El CSS en sí **no** va aquí: va en un asset.
      *
      * Un archivo de tema no puede pasar de 256 KB, y repitiendo la hoja en cada
      * sección la primera se pasaba y Shopify la rechazaba — dejando la página
@@ -355,13 +431,29 @@ export function sectionFile(options: {
  * de 256 KB y el CSS de una copia ronda los 240, y un asset lo sirve el CDN de
  * Shopify con caché en vez de repetirlo en cada carga de la página.
  */
-export function templateFor(cssAsset: string, sectionNames: string[]): string {
-  return [
-    cssAsset ? `{{ '${cssAsset}' | asset_url | stylesheet_tag }}` : "",
-    ...sectionNames.map((name) => `{% section '${name}' %}`),
-  ]
-    .filter(Boolean)
-    .join("\n");
+export function templateFor(sectionNames: string[]): string {
+  /*
+   * JSON y no Liquid, y esa es toda la diferencia.
+   *
+   * Una plantilla `.liquid` con `{% section %}` fijos coloca las secciones y
+   * ahí se acaba: en el editor no se pueden ocultar, ni mover, ni añadir otras.
+   * Una plantilla `.json` es la que Shopify trata como editable — el orden vive
+   * en el archivo y el editor lo reescribe al arrastrar.
+   *
+   * Se guarda el orden en `order` y no en el orden de las claves: un objeto
+   * JSON no garantiza el orden de sus claves, y con veinte secciones eso es una
+   * página barajada.
+   */
+  const sections: Record<string, { type: string }> = {};
+  const order: string[] = [];
+
+  for (const [at, name] of sectionNames.entries()) {
+    const key = `s${at + 1}`;
+    sections[key] = { type: name };
+    order.push(key);
+  }
+
+  return JSON.stringify({ sections, order }, null, 2);
 }
 
 /** Lo que se le cuenta a quien acaba de publicar. */
