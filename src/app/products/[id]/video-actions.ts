@@ -883,19 +883,27 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
     const level = findMusicLevel(readText(form.get("level")));
 
     try {
-      const levelled = await normalizeLoudness(url, level.lufs);
+      /*
+       * Se ajusta **aquí**, con ffmpeg, y no en el servicio de fuera.
+       *
+       * Aquel devuelve WAV sin comprimir: con un MP3 de dos megas devolvía
+       * ochenta y siete, que no caben en el almacenamiento. Y aunque cupieran,
+       * sería guardar cuarenta veces lo que hace falta para una cama de fondo.
+       *
+       * Normalizar audio no es como montar vídeo: no decodifica imagen, son
+       * unos segundos, y por eso este sí puede correr en un servidor de dos
+       * núcleos.
+       */
+      const { levelAudio } = await import("@/lib/video/fetch-video");
+      const ajustada = await levelAudio(url, level.lufs);
 
-      const ajustada = await fetch(levelled, { cache: "no-store" });
-
-      if (!ajustada.ok) {
-        throw new Error(`el servicio devolvió el audio pero no se pudo descargar (${ajustada.status}).`);
-      }
+      if (ajustada.problem) throw new Error(ajustada.problem);
 
       const stored = await uploadVideoAsset({
         videoId,
-        name: `musica-${level.id}.wav`,
-        data: Buffer.from(await ajustada.arrayBuffer()),
-        contentType: "audio/wav",
+        name: `musica-${level.id}.mp3`,
+        data: Buffer.from(ajustada.bytes),
+        contentType: "audio/mpeg",
       });
 
       await updateVideo(videoId, { musicUrl: stored });
@@ -1620,22 +1628,23 @@ export async function levelMusicAction(input: unknown): Promise<{
 
     const level = findMusicLevel(levelId);
 
-    const levelled = await normalizeLoudness(video.musicUrl, level.lufs);
-
     /*
-     * Se descarga y se vuelve a guardar en nuestro almacenamiento.
+     * Con ffmpeg del servidor, y sale MP3.
      *
-     * La dirección que devuelve el servicio caduca, y una música que caduca es
-     * un montaje que un día sale mudo sin que nada haya cambiado.
+     * El servicio de fuera devuelve WAV: un MP3 de dos megas volvía convertido
+     * en ochenta y siete, que el almacenamiento rechaza. Aquí entra y sale del
+     * mismo tamaño.
      */
-    const response = await fetch(levelled, { cache: "no-store" });
-    if (!response.ok) throw new Error("No se pudo descargar la música ya ajustada.");
+    const { levelAudio } = await import("@/lib/video/fetch-video");
+    const ajustada = await levelAudio(video.musicUrl, level.lufs);
+
+    if (ajustada.problem) throw new Error(ajustada.problem);
 
     const stored = await uploadVideoAsset({
       videoId,
-      name: `musica-${level.id}.wav`,
-      data: Buffer.from(await response.arrayBuffer()),
-      contentType: "audio/wav",
+      name: `musica-${level.id}.mp3`,
+      data: Buffer.from(ajustada.bytes),
+      contentType: "audio/mpeg",
     });
 
     await updateVideo(videoId, { musicUrl: stored });

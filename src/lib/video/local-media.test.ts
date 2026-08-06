@@ -10,6 +10,7 @@ import {
   probeArgs,
   readProbe,
   readVideoUrl,
+  loudnormArgs,
 } from "./local-media.ts";
 
 /* ------------------------------ Lo que falta -------------------------------- */
@@ -180,4 +181,57 @@ test("la red interna no se toca", () => {
 
 test("vacío pide la dirección en vez de fallar raro", () => {
   assert.match(readVideoUrl("   ").problem, /Pega la dirección/);
+});
+
+/* ------------------------- Nivelar música en el servidor ------------------- */
+
+test("la salida es MP3, que es la razón de hacerlo aquí", () => {
+  /*
+   * El servicio de fuera devuelve WAV sin comprimir: se le manda un MP3 de dos
+   * megas y devuelve ochenta y siete. Eso no cabe en el almacenamiento, y
+   * aunque cupiera sería guardar cuarenta veces lo que hace falta.
+   */
+  const args = loudnormArgs("/tmp/entra.mp3", "/tmp/sale.mp3", -30);
+
+  assert.ok(args.includes("libmp3lame"));
+  assert.ok(!args.some((arg) => /wav/i.test(arg)));
+});
+
+test("el volumen pedido va en el filtro", () => {
+  const args = loudnormArgs("/tmp/a.mp3", "/tmp/b.mp3", -27);
+
+  assert.ok(args.some((arg) => arg.includes("loudnorm=I=-27")));
+});
+
+test("un volumen imposible se recorta al rango del filtro", () => {
+  // Un valor fuera de rango no se ignora: ffmpeg aborta y la pista se queda
+  // sin ajustar, que es peor que ajustarla mal.
+  assert.ok(loudnormArgs("/a", "/b", -900).some((arg) => arg.includes("I=-70")));
+  assert.ok(loudnormArgs("/a", "/b", 40).some((arg) => arg.includes("I=-5")));
+});
+
+test("lleva tope de pico", () => {
+  // Sin él, un golpe suelto satura aunque la media esté bien, y eso se oye como
+  // un chasquido encima de la voz.
+  assert.ok(loudnormArgs("/a", "/b", -30).some((arg) => arg.includes("TP=-1.5")));
+});
+
+test("descarta el vídeo, por las carátulas", () => {
+  // Hay MP3 con carátula, y sin esto ffmpeg intenta copiarla.
+  assert.ok(loudnormArgs("/a", "/b", -30).includes("-vn"));
+});
+
+test("un solo núcleo, como el resto", () => {
+  // El servidor tiene dos y sirve páginas con ellos.
+  const args = loudnormArgs("/a", "/b", -30);
+  const at = args.indexOf("-threads");
+
+  assert.equal(args[at + 1], "1");
+});
+
+test("la entrada y la salida van donde se dice", () => {
+  const args = loudnormArgs("/tmp/entra.mp3", "/tmp/sale.mp3", -30);
+
+  assert.equal(args[args.indexOf("-i") + 1], "/tmp/entra.mp3");
+  assert.equal(args[args.length - 1], "/tmp/sale.mp3");
 });

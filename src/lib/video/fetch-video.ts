@@ -1,7 +1,7 @@
 import "server-only";
 
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -14,6 +14,7 @@ import {
   probeArgs,
   readProbe,
   readVideoUrl,
+  loudnormArgs,
 } from "@/lib/video/local-media";
 
 /**
@@ -212,6 +213,75 @@ export async function fetchVideo(
     // Pase lo que pase. Unos cuantos vídeos olvidados llenan el disco de un
     // servidor pequeño, y un disco lleno no da un error claro: da fallos raros
     // en todo lo demás.
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Deja una pista de música al volumen pedido, en el servidor.
+ *
+ * ## Por qué esta sí va aquí y el montaje no
+ *
+ * El montaje codifica **vídeo** —unos cincuenta segundos por minuto en
+ * dieciséis núcleos— y en los dos de este servidor dejaría la plataforma
+ * arrastrándose varios minutos. Normalizar audio no decodifica imagen: son unos
+ * segundos para una pista de dos minutos.
+ *
+ * Y hacerlo fuera tenía un problema que no se arregla pagando: el servicio
+ * devuelve **WAV sin comprimir**. Se le mandaba un MP3 de dos megas y devolvía
+ * ochenta y siete, que no caben en el almacenamiento — y aunque cupieran, sería
+ * guardar cuarenta veces lo que hace falta para una cama de fondo.
+ *
+ * Devuelve los bytes ya en MP3. Quien llame decide dónde guardarlos: este
+ * archivo no sabe de almacenamiento y así se puede usar desde cualquier sitio.
+ */
+export async function levelAudio(
+  source: string,
+  lufs: number,
+): Promise<{ bytes: Uint8Array; problem: string }> {
+  const missing = await videoToolsProblem();
+
+  /*
+   * Sin ffmpeg no se inventa nada: se dice y quien llama decide.
+   *
+   * Devolver el original sin ajustar sería lo peor de las dos opciones — una
+   * pista a volumen de máster encima de la locución, y nadie enterado.
+   */
+  if (/ffmpeg/i.test(missing)) {
+    return { bytes: new Uint8Array(), problem: "ffmpeg no está instalado en el servidor." };
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), "musica-"));
+
+  try {
+    const response = await fetch(source, { cache: "no-store" });
+
+    if (!response.ok) {
+      return { bytes: new Uint8Array(), problem: `no se pudo descargar la pista (${response.status}).` };
+    }
+
+    const entra = join(dir, "entra");
+    const sale = join(dir, "sale.mp3");
+
+    await writeFile(entra, Buffer.from(await response.arrayBuffer()));
+
+    const ran = await run("ffmpeg", loudnormArgs(entra, sale, lufs), FFMPEG_MS);
+
+    if (ran.code !== 0) {
+      // La última línea de ffmpeg es la que dice qué pasó; el resto es ruido.
+      const last = ran.stderr.trim().split("\n").pop() ?? "";
+      return { bytes: new Uint8Array(), problem: `ffmpeg falló: ${last.slice(0, 160)}` };
+    }
+
+    return { bytes: new Uint8Array(await readFile(sale)), problem: "" };
+  } catch (error) {
+    return {
+      bytes: new Uint8Array(),
+      problem: error instanceof Error ? error.message : "no se pudo ajustar.",
+    };
+  } finally {
+    // Como el resto: en un disco pequeño, unos cuantos temporales olvidados lo
+    // llenan, y un disco lleno no da un error claro — da fallos raros en todo.
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }

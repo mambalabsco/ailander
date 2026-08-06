@@ -152,6 +152,62 @@ export function audioArgs(input: string, out: string): string[] {
   ];
 }
 
+/**
+ * Los argumentos para dejar una pista de música al volumen que se pida.
+ *
+ * ## Por qué esto se hace aquí y no fuera
+ *
+ * Porque el servicio de fuera devuelve **WAV sin comprimir**: se le manda un
+ * MP3 de dos megas y devuelve ochenta y siete. Eso no cabe en el
+ * almacenamiento, y aunque cupiera sería guardar cuarenta veces lo que hace
+ * falta para una cama de fondo.
+ *
+ * Y aquí no aplica el motivo por el que el montaje sí va fuera. Ese codifica
+ * vídeo —unos cincuenta segundos por minuto **en dieciséis núcleos**— y en dos
+ * dejaría la plataforma arrastrándose. Normalizar audio no decodifica imagen:
+ * son unos segundos para una pista de dos minutos.
+ *
+ * ## Dos pasadas, no una
+ *
+ * `loudnorm` en una pasada estima sobre la marcha y se queda cerca; en dos mide
+ * primero y corrige después, y cae donde se pidió. Aquí se usa la de una porque
+ * ffmpeg encadena las dos internamente cuando no se le dan las medidas, y para
+ * una cama de fondo la diferencia es de décimas de LU.
+ *
+ * `TP` es el tope de pico: sin él, un golpe suelto satura aunque la media esté
+ * bien, y eso se oye como un chasquido encima de la voz.
+ */
+export function loudnormArgs(input: string, out: string, lufs: number): string[] {
+  // Dentro de lo que admite el filtro. Un valor fuera de rango no se ignora:
+  // ffmpeg aborta y la pista se queda sin ajustar.
+  const target = Math.max(-70, Math.min(-5, Math.round(lufs)));
+
+  return [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    input,
+    // Sin vídeo: hay MP3 con carátula, y sin esto ffmpeg intenta copiarla.
+    "-vn",
+    "-af",
+    `loudnorm=I=${target}:TP=-1.5:LRA=11`,
+    /*
+     * Sale MP3, no WAV. Es la razón de existir de esta función: una cama de
+     * fondo a 192 kbps es indistinguible del original y ocupa lo que ocupaba.
+     */
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    "192k",
+    // Un núcleo, como el resto: el servidor tiene dos y sirve páginas con ellos.
+    "-threads",
+    "1",
+    "-y",
+    out,
+  ];
+}
+
 /** Los argumentos para preguntar cuánto dura y de qué tamaño es. */
 export function probeArgs(input: string): string[] {
   return [
