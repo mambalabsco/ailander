@@ -455,7 +455,16 @@ export function ShotBoard({
               {MUSIC_LEVELS.map((level) => (
                 <Button
                   key={level.id}
-                  variant="ghost"
+                  /*
+                    Con borde y no `ghost`.
+
+                    La variante `ghost` no tiene ni borde ni fondo hasta que
+                    pasas el ratón por encima: en una fila de tres se lee como
+                    tres palabras sueltas, no como algo en lo que se pueda
+                    pulsar. Un botón que no parece un botón es un botón que no
+                    existe.
+                  */
+                  variant="secondary"
                   disabled={levelling}
                   onClick={() =>
                     startLevelling(async () => {

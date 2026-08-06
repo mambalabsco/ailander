@@ -54,7 +54,8 @@ export function FreeMusic({
 
   if (!open) {
     return (
-      <Button variant="ghost" onClick={() => setOpen(true)}>
+      /* Con borde: sin él se lee como un título de sección y nadie lo pulsa. */
+      <Button variant="secondary" onClick={() => setOpen(true)}>
         Buscar música libre de derechos
       </Button>
     );
