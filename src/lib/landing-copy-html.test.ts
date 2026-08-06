@@ -27,6 +27,8 @@ import {
   externalizeCss,
   mediaKindOf,
   templateSuffix,
+  buildCommentsPrompt,
+  readableText,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -1125,5 +1127,52 @@ test("el sufijo no crece sin límite", () => {
   assert.ok(templateSuffix("x".repeat(200)).length <= 50);
 });
 
+/* ------------------------ Comentarios de una copia ------------------------- */
 
+test("el texto legible pierde el marcado y conserva los saltos", () => {
+  // Sin los saltos entre bloques se juntan dos frases que no tenían relación, y
+  // el modelo lee un argumento que la página no hace.
+  const out = readableText("<h2>Titular</h2><p>Uno</p><p>Dos</p>");
 
+  assert.ok(!out.includes("<"));
+  assert.equal(out, "Titular\nUno\nDos");
+});
+
+test("los scripts y los estilos no llegan al modelo", () => {
+  const out = readableText("<style>.a{color:red}</style><script>x=1</script><p>Hola</p>");
+
+  assert.ok(!out.includes("color:red"));
+  assert.ok(!out.includes("x=1"));
+  assert.ok(out.includes("Hola"));
+});
+
+test("el encargo lleva lo que dice la página y lo del producto", () => {
+  /*
+   * Un comentario que no habla de lo que promete la página se nota: es lo que
+   * hace sospechar de la prueba social.
+   */
+  const prompt = buildCommentsPrompt({
+    pageText: "El hígado graso y el cardo mariano",
+    productContext: "Sculptique, 60 cápsulas",
+    countryName: "Chile",
+  });
+
+  assert.ok(prompt.includes("cardo mariano"));
+  assert.ok(prompt.includes("Sculptique"));
+  assert.ok(prompt.includes("Chile"));
+  assert.match(prompt, /lo que esta página promete/);
+});
+
+test("pide hilos con escépticos", () => {
+  // Un hilo donde todos están encantados se lee como comprado.
+  assert.match(
+    buildCommentsPrompt({ pageText: "x", productContext: "y", countryName: "México" }),
+    /escépticos o tibios/,
+  );
+});
+
+test("el número de comentarios se queda en un rango razonable", () => {
+  // Cuatro no son un hilo y cuarenta no los lee nadie.
+  assert.match(buildCommentsPrompt({ pageText: "x", productContext: "y", countryName: "z", howMany: 200 }), /20 comentarios/);
+  assert.match(buildCommentsPrompt({ pageText: "x", productContext: "y", countryName: "z", howMany: 1 }), /4 comentarios/);
+});

@@ -488,3 +488,26 @@ export const IMAGE_READING_SCHEMA = object({
   suggestedText: str,
   brandNames: strList,
 });
+
+/**
+ * Solo los comentarios, para añadirlos a una página ya copiada.
+ *
+ * Reutiliza la misma forma que dentro de `LANDING_PAGE_SCHEMA`: si aquí se
+ * escribiera otra, un cambio en una y no en la otra daría comentarios que se
+ * guardan y no se pintan, sin que nada falle.
+ */
+export const LANDING_COMMENTS_SCHEMA = object({
+  comments: {
+    type: "array",
+    items: object({
+      name: str,
+      timeAgo: str,
+      text: str,
+      likes: num,
+      replies: {
+        type: "array",
+        items: object({ name: str, text: str, timeAgo: str }),
+      },
+    }),
+  },
+});

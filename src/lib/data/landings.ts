@@ -186,3 +186,24 @@ export async function updateLandingSettings(
   const { error } = await supabase.from("landing_pages").update(changes).eq("id", id);
   if (error) throw new Error(`No se pudieron guardar los ajustes: ${error.message}`);
 }
+
+/**
+ * Cambia solo los comentarios de una página.
+ *
+ * Va aparte de `saveLanding` porque esa crea una fila nueva: usarla para
+ * añadirle comentarios a una copia dejaría dos páginas, la de antes sin ellos y
+ * la de después con ellos, y publicando la que no toca.
+ */
+export async function updateLandingComments(
+  id: string,
+  comments: LandingComment[],
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("landing_pages")
+    .update({ comments })
+    .eq("id", id);
+
+  if (error) throw new Error(`No se pudieron guardar los comentarios: ${error.message}`);
+}

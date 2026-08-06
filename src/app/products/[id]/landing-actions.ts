@@ -8,7 +8,7 @@ import { readAngles, readCopies } from "@/lib/copy-store";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { generateStructured } from "@/lib/generators";
-import { LANDING_PAGE_SCHEMA } from "@/lib/generation-schemas";
+import { LANDING_COMMENTS_SCHEMA, LANDING_PAGE_SCHEMA } from "@/lib/generation-schemas";
 import { buildLandingPrompt } from "@/lib/landing-prompt";
 import { findModelPage } from "@/lib/store-blueprint";
 import { AVATAR_POOL_SIZE, avatarSlot, buildAvatarPrompt } from "@/lib/avatar-prompts";
@@ -1347,6 +1347,106 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         result: { landingId: saved.id, warnings },
         inputTokens,
         outputTokens,
+      };
+    },
+  });
+}
+
+/**
+ * Escribe los comentarios de una página copiada.
+ *
+ * ## Por qué no se hacen al copiar
+ *
+ * Porque copiar ya son varios minutos y muchas llamadas, y los comentarios son
+ * opcionales: hay copias que se hacen solo para estudiar la estructura. Poner
+ * un botón aparte deja elegir, y sobre todo deja **repetirlos** si el primer
+ * hilo no convence, que es lo normal con la prueba social.
+ *
+ * ## Y por qué lee la página antes
+ *
+ * Porque un comentario que no habla de lo que promete la página se nota. Si el
+ * texto insiste en el hígado graso, un hilo genérico sobre sentirse con más
+ * energía se lee como pegado — y es justo lo que hace sospechar de la prueba
+ * social. Se le manda lo que la página dice, sin marcado, más lo que sabemos
+ * del producto.
+ */
+export async function copyCommentsAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const landingId = readText(raw.landingId);
+  const productId = readText(raw.productId);
+  const howMany = Number(raw.howMany) || 12;
+
+  if (!landingId || !productId) throw new Error("Falta la página.");
+
+  if (!(await hasActiveProviderKey())) {
+    throw new Error("No hay clave de API configurada. Añádela en Configuración.");
+  }
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  return runInBackground({
+    productId,
+    kind: "landing",
+    label: "Comentarios de la copia",
+    revalidate: `/products/${productId}`,
+    resume: { landingId, productId, howMany },
+    work: async (report) => {
+      const { readLanding, updateLandingComments } = await import("@/lib/data/landings");
+      const { buildCommentsPrompt, readableText } = await import("@/lib/landing-copy-html");
+
+      const page = await readLanding(landingId);
+      if (!page) throw new Error("Esa página ya no existe.");
+
+      await report("Leyendo lo que promete la página");
+
+      /*
+       * El texto de todas sus secciones, no solo el de la primera.
+       *
+       * El argumento de una landing se construye a lo largo de la página: el
+       * problema arriba, el mecanismo en medio y la oferta al final. Con solo
+       * el principio, los comentarios hablan del problema y ninguno de lo que
+       * se vende.
+       */
+      const pageText = readableText(page.sections.map((section) => section.html ?? "").join("\n"));
+
+      if (pageText.length < 200) {
+        throw new Error("De esa página no se pudo leer texto suficiente para escribir comentarios que cuadren.");
+      }
+
+      const research = await readProductResearch(productId);
+      const store = product.storeId ? await findStore(product.storeId) : null;
+      const { buildProductContext } = await import("@/lib/copy-prompts");
+
+      await report(`Escribiendo ${howMany} comentarios`);
+
+      const outcome = await generateStructured<{ comments: LandingComment[] }>({
+        prompt: buildCommentsPrompt({
+          pageText,
+          productContext: buildProductContext(product, research, store),
+          // El país sale del producto: es de donde salen también los nombres y
+        // el registro del idioma en el resto de la plataforma.
+        countryName: product.country || "España",
+          howMany,
+        }),
+        schema: LANDING_COMMENTS_SCHEMA,
+        role: "copy",
+        maxTokens: 16_000,
+      });
+
+      const comments = outcome.data.comments ?? [];
+
+      if (comments.length === 0) {
+        throw new Error("El modelo no devolvió ningún comentario. Vuelve a intentarlo.");
+      }
+
+      await updateLandingComments(landingId, comments);
+
+      return {
+        summary: `${comments.length} comentarios escritos a partir de lo que dice la página. Se ven en la vista previa; vuelve a publicar para que salgan en Shopify.`,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
       };
     },
   });
