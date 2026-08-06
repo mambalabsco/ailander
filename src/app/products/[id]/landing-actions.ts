@@ -490,9 +490,23 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
 
       let html = rendered;
 
+      /*
+       * Los enlaces se releen **al publicar**, no solo al copiar.
+       *
+       * Antes se fijaban en el momento de copiar: si el producto todavía no
+       * tenía su ficha guardada, los botones quedaban en `#` para siempre, y
+       * rellenar «Datos del producto → landing page» después no cambiaba nada
+       * en la página publicada. Ahora se toma la que hay ahora.
+       *
+       * Es idempotente: volver a apuntar al mismo sitio no cambia nada, y las
+       * anclas internas se quedan como están.
+       */
+      const { neutralizeLinks: apuntar } = await import("@/lib/landing-copy-html");
+      const conEnlaces = apuntar(rendered, product.landingUrl).html;
+
       // Sin dirección todavía: esta pasada solo sirve para saber si hay CSS que
       // sacar y cuánto pesa. La buena se hace abajo, ya con el enlace.
-      const partes = externalizeCss(rendered, "");
+      const partes = externalizeCss(conEnlaces, "");
 
       if (partes.css) {
         try {
@@ -503,9 +517,9 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
             contentType: "text/css",
           });
 
-          html = externalizeCss(rendered, href).html;
+          html = externalizeCss(conEnlaces, href).html;
         } catch {
-          html = rendered;
+          html = conEnlaces;
         }
       }
 
