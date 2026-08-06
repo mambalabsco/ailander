@@ -529,7 +529,9 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
 
       if (page.shapeId === "copia") {
         try {
-          const { listThemes, writeThemeFilesLenient } = await import("@/lib/shopify-store");
+          const { listThemeFiles, listThemes, writeThemeFilesLenient } = await import(
+            "@/lib/shopify-store"
+          );
           const { pruneCss, templateSuffix } = await import("@/lib/landing-copy-html");
           const { sectionFile, sectionize, sectionNote, splitTopLevel, templateFor } = await import(
             "@/lib/landing-sections"
@@ -596,7 +598,43 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              * archivo que no existe no da error, no pinta nada — y la página
              * publicada tiene un hueco que nadie relaciona con esto.
              */
-            if (done.written === hechas.length + 1) {
+            /*
+             * Se comprueba que estén, no se da por hecho.
+             *
+             * `themeFilesUpsert` **procesa en segundo plano**: confirma los
+             * archivos y devuelve un trabajo aparte. Contar los confirmados y
+             * publicar a continuación es una carrera — y cuando se pierde, la
+             * página sale con «'…-01' is not a valid section type», que es
+             * Shopify diciendo que la plantilla busca una sección que todavía
+             * no existe.
+             *
+             * Leerlas de vuelta cuesta una consulta y convierte una suposición
+             * en un hecho.
+             */
+            const esperadas = hechas.map((hecha) => `sections/${hecha.name}.liquid`);
+
+            /*
+             * Se espera un poco a que aparezcan, en vez de rendirse a la
+             * primera.
+             *
+             * Lo que tarda es el trabajo en segundo plano de Shopify, y son
+             * segundos. Publicar ya llevaba minutos —subir las imágenes—, así
+             * que esperar unos pocos más para que la página salga bien es un
+             * cambio que nadie nota; mandar a republicar sí se nota.
+             */
+            let faltan = esperadas;
+
+            for (let intento = 0; intento < 4 && faltan.length > 0; intento += 1) {
+              if (intento > 0) await new Promise((listo) => setTimeout(listo, 2500));
+
+              const puestas = await listThemeFiles(store, live.id, esperadas)
+                .then((files) => new Set(files.map((file) => file.filename)))
+                .catch(() => new Set<string>());
+
+              faltan = esperadas.filter((name) => !puestas.has(name));
+            }
+
+            if (done.written === hechas.length + 1 && faltan.length === 0) {
               suffix = wanted;
 
               const total = hechas.reduce(
@@ -609,6 +647,17 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
               );
 
               avisos.push(`${hechas.length} secciones. ${sectionNote(total, wanted)}`);
+            } else if (faltan.length > 0) {
+              /*
+               * Con secciones a medias no se usa la plantilla.
+               *
+               * Usarla dejaría la página con «is not a valid section type» —o
+               * con tramos en blanco— y eso es peor que publicarla con el
+               * contenido dentro, que al menos se ve entera.
+               */
+              avisos.push(
+                `Shopify no llegó a guardar ${faltan.length} de las ${esperadas.length} secciones —las escribe en segundo plano y se esperó diez segundos—, así que la página se publica con el contenido dentro. Vuelve a publicar y usará las secciones.`,
+              );
             } else if (done.written > 0) {
               avisos.push(
                 `La plantilla del tema se escribió a medias (${done.failed.map((item) => `${item.filename}: ${item.reason}`).join("; ")}), así que la página se publica con el contenido dentro.`,
