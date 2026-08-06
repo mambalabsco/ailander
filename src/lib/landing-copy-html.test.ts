@@ -25,6 +25,7 @@ import {
   autoplayVideos,
   pruneCss,
   externalizeCss,
+  mediaKindOf,
 } from "./landing-copy-html.ts";
 
 /* -------------------------------- La limpieza ------------------------------- */
@@ -1070,4 +1071,34 @@ test("sin dirección se quita el CSS pero no se enlaza", () => {
 
   assert.ok(!out.html.includes("<link"));
   assert.equal(out.css, ".a{color:red}");
+});
+
+/* -------------------------- Vista previa de un hueco ----------------------- */
+
+test("reconoce imágenes y vídeos por la extensión", () => {
+  assert.equal(mediaKindOf("https://cdn.shopify.com/a/b.jpg"), "imagen");
+  assert.equal(mediaKindOf("https://cdn.shopify.com/a/b.PNG"), "imagen");
+  assert.equal(mediaKindOf("https://cdn.shopify.com/v/c.webm"), "video");
+  assert.equal(mediaKindOf("https://cdn.shopify.com/v/c.mp4"), "video");
+});
+
+test("los parámetros de la dirección no despistan", () => {
+  // Las de Shopify llevan siempre `?v=` y `&width=`.
+  assert.equal(mediaKindOf("https://cdn.shopify.com/a/b.jpg?v=1&width=800"), "imagen");
+});
+
+test("lo que no es una dirección no se intenta pintar", () => {
+  // En las páginas generadas el prompt es un encargo escrito, no una URL.
+  assert.equal(mediaKindOf("Una mujer de 45 años mirando a cámara"), "");
+  assert.equal(mediaKindOf(""), "");
+  assert.equal(mediaKindOf("ftp://x/y.jpg"), "");
+});
+
+test("sin extensión reconocible se dice que no se sabe", () => {
+  /*
+   * Los CDN sirven imágenes sin extensión y aquí se pierden algunas vistas
+   * previas. Equivocarse al revés pondría un `<img>` sobre algo que no lo es,
+   * que en pantalla es un icono roto — peor que una dirección legible.
+   */
+  assert.equal(mediaKindOf("https://cdn.ejemplo.com/imagen/12345"), "");
 });

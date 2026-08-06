@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
+import { mediaKindOf } from "@/lib/landing-copy-html";
 import { CopyableBlock } from "@/components/copyable";
 import { AdVisualSender } from "@/components/ad-visual-sender";
 import { ImageDownloads } from "@/components/image-downloads";
@@ -228,6 +229,44 @@ export function LandingViewer({
                 {slot.slot} · {slot.aspectRatio}
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-300">{slot.purpose}</p>
+
+              {/*
+                La original, a la vista.
+
+                En una página copiada el «prompt» de cada hueco **es la
+                dirección de la imagen original**: es el único campo donde
+                cabía. Pintada como texto, lo que se ve es una URL de
+                doscientos caracteres en vez de la foto que hay que revisar — y
+                con setenta y cinco huecos, decidir cuál adaptar primero
+                obligaba a abrir cada una en otra pestaña.
+
+                La dirección sigue debajo, en el bloque copiable: hace falta
+                para pegarla en el generador.
+              */}
+              {mediaKindOf(slot.prompt) === "imagen" ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={slot.prompt}
+                  alt={slot.alt || slot.slot}
+                  loading="lazy"
+                  className="mt-2 max-h-48 rounded-xl border border-slate-200 dark:border-slate-800"
+                />
+              ) : mediaKindOf(slot.prompt) === "video" ? (
+                /*
+                  Silenciado y en bucle, como en la página copiada: setenta y
+                  cinco reproductores sonando a la vez al abrir la pestaña sería
+                  insoportable.
+                */
+                <video
+                  src={slot.prompt}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="mt-2 max-h-48 rounded-xl border border-slate-200 dark:border-slate-800"
+                />
+              ) : null}
+
               <CopyableBlock value={slot.prompt} label="Prompt" maxHeightClass="max-h-32">
                 <pre className="whitespace-pre-wrap font-mono text-xs leading-5">{slot.prompt}</pre>
               </CopyableBlock>
