@@ -67,7 +67,16 @@ async function get(url: string, timeoutMs: number): Promise<string> {
 
 /** Las hojas que enlaza la página, resueltas contra su origen. */
 function sheetUrls(html: string, origin: string): string[] {
-  const urls: string[] = [];
+    /*
+   * Un conjunto y no una lista: la misma hoja puede estar enlazada dos veces.
+   *
+   * No es raro ni es un error de la página: una app de Shopify la mete en la
+   * cabecera y la plantilla vuelve a meterla en su sección. Medido en
+   * trysculptique, `kaching-cart.css` venía **dos veces** y son 97 KB cada una —
+   * casi cien kilobytes de CSS idéntico descargado, guardado y servido dos
+   * veces, sin que nada falle.
+   */
+  const urls = new Set<string>();
 
   for (const tag of html.matchAll(/<link\b[^>]*>/gi)) {
     const markup = tag[0];
@@ -84,10 +93,10 @@ function sheetUrls(html: string, origin: string): string[] {
           ? href
           : "";
 
-    if (url) urls.push(url);
+    if (url) urls.add(url);
   }
 
-  return urls.slice(0, MAX_SHEETS);
+  return [...urls].slice(0, MAX_SHEETS);
 }
 
 export type { ReferenceSection } from "@/lib/page-sections";
