@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createQueue } from "@/lib/queue";
+import { explainProvider } from "@/lib/video/provider-errors";
 import { buildLipsyncBody, isTerminal, lipsyncError, type LipsyncRequest } from "@/lib/video/lipsync";
 
 import { createCache } from "@/lib/ttl-cache";
@@ -597,7 +598,7 @@ export async function compose(tracks: Track[]): Promise<{ videoUrl: string; thum
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
-    throw new Error(`El montaje respondió ${response.status}. ${detail.slice(0, 300)}`);
+    throw falProblem("el montaje", response.status, detail);
   }
 
   const payload = (await response.json()) as { video_url?: string; thumbnail_url?: string };
@@ -738,7 +739,7 @@ export async function mergeVideos(urls: string[]): Promise<string> {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
-    throw new Error(`El encadenado respondió ${response.status}. ${detail.slice(0, 200)}`);
+    throw falProblem("el encadenado", response.status, detail);
   }
 
   const payload = (await response.json()) as { video?: { url?: string } };
@@ -833,8 +834,7 @@ export async function makeMusic(options: {
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    if (response.status === 401) throw new Error("fal rechazó la clave. Comprueba FAL_KEY.");
-    throw new Error(`${model.label} respondió ${response.status}. ${detail.slice(0, 200)}`);
+    throw falProblem(`la música con ${model.label}`, response.status, detail);
   }
 
   const url = readMusicUrl(model, await response.json());
@@ -880,7 +880,7 @@ export async function normalizeLoudness(url: string, lufs: number): Promise<stri
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`El ajuste de volumen respondió ${response.status}. ${detail.slice(0, 200)}`);
+    throw falProblem("el ajuste de volumen", response.status, detail);
   }
 
   const payload = (await response.json()) as { audio?: { url?: string } };
@@ -1000,6 +1000,17 @@ export async function cloneVoice(options: {
   voiceCache.forget("voices");
 
   return { voiceId: payload.voice_id };
+}
+
+/**
+ * El error del proveedor, ya traducido y como excepción.
+ *
+ * La clasificación vive en `provider-errors.ts`, que es puro y está probado:
+ * decide qué se le dice a alguien que acaba de perder una generación, y de eso
+ * depende si lo arregla en un minuto o si mira el código equivocado.
+ */
+function falProblem(what: string, status: number, detail: string): Error {
+  return new Error(explainProvider(what, status, detail).message);
 }
 
 /* --------------------------------- Lipsync --------------------------------- */
