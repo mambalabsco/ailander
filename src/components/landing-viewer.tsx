@@ -326,12 +326,31 @@ export function LandingViewer({
                   : "Una copia llega sin ellos. Se escriben leyendo lo que promete esta página y la investigación del producto, para que hablen de lo mismo."}
               </p>
 
-              <GenerateButton
-                variant="secondary"
-                action={() => copyCommentsAction({ landingId: page.id, productId })}
-                label={page.comments.length > 0 ? "Escribirlos otra vez" : "Escribir los comentarios"}
-                hint="Una petición. Después hay que volver a publicar para que salgan en Shopify."
-              />
+              {/*
+                Los dos formatos, como en el otro creador.
+
+                No son el mismo texto con otro adorno: un hilo convence porque
+                parece capturado, con sus faltas y sus escépticos; un testimonio
+                convence porque es concreto. Ofrecer solo uno obliga a quedarse
+                con el que no encaja en esa página.
+              */}
+              <div className="flex flex-wrap gap-2">
+                <GenerateButton
+                  variant="secondary"
+                  action={() => copyCommentsAction({ landingId: page.id, productId })}
+                  label={page.comments.length > 0 ? "Rehacer el hilo" : "Hilo de Facebook"}
+                  hint="Doce comentarios con respuestas y algún escéptico. Después hay que volver a publicar."
+                />
+
+                <GenerateButton
+                  variant="secondary"
+                  action={() =>
+                    copyCommentsAction({ landingId: page.id, productId, style: "testimonios" })
+                  }
+                  label="Testimonios"
+                  hint="Seis, con nombre, edad y qué cambió. Sustituyen a los que haya."
+                />
+              </div>
             </div>
           ) : null}
 

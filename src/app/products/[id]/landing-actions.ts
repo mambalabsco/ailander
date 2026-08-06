@@ -1425,6 +1425,9 @@ export async function copyCommentsAction(input: unknown): Promise<LaunchResult> 
   const landingId = readText(raw.landingId);
   const productId = readText(raw.productId);
   const howMany = Number(raw.howMany) || 12;
+  // Los dos formatos del otro creador. Por defecto el hilo, que es el que más
+  // se usa en un publirreportaje.
+  const style = readText(raw.style) === "testimonios" ? "testimonios" : "facebook";
 
   if (!landingId || !productId) throw new Error("Falta la página.");
 
@@ -1438,9 +1441,9 @@ export async function copyCommentsAction(input: unknown): Promise<LaunchResult> 
   return runInBackground({
     productId,
     kind: "landing",
-    label: "Comentarios de la copia",
+    label: style === "testimonios" ? "Testimonios de la copia" : "Comentarios de la copia",
     revalidate: `/products/${productId}`,
-    resume: { landingId, productId, howMany },
+    resume: { landingId, productId, howMany, style },
     work: async (report) => {
       const { readLanding, updateLandingComments } = await import("@/lib/data/landings");
       const { buildCommentsPrompt, readableText } = await import("@/lib/landing-copy-html");
@@ -1493,7 +1496,7 @@ export async function copyCommentsAction(input: unknown): Promise<LaunchResult> 
       await updateLandingComments(landingId, comments);
 
       return {
-        summary: `${comments.length} comentarios escritos a partir de lo que dice la página. Se ven en la vista previa; vuelve a publicar para que salgan en Shopify.`,
+        summary: `${comments.length} ${style === "testimonios" ? "testimonios" : "comentarios"} escritos a partir de lo que dice la página. Se ven en la vista previa; vuelve a publicar para que salgan en Shopify.`,
         inputTokens: outcome.inputTokens,
         outputTokens: outcome.outputTokens,
       };

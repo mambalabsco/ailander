@@ -1176,3 +1176,38 @@ test("el número de comentarios se queda en un rango razonable", () => {
   assert.match(buildCommentsPrompt({ pageText: "x", productContext: "y", countryName: "z", howMany: 200 }), /20 comentarios/);
   assert.match(buildCommentsPrompt({ pageText: "x", productContext: "y", countryName: "z", howMany: 1 }), /4 comentarios/);
 });
+
+test("los testimonios se piden distinto que el hilo", () => {
+  /*
+   * No son el mismo texto con otro adorno: un hilo convence porque parece
+   * capturado, con sus faltas y sus escépticos; un testimonio convence porque
+   * es concreto. Con el mismo encargo, los dos salen a medio camino.
+   */
+  const hilo = buildCommentsPrompt({ pageText: "x", productContext: "y", countryName: "Chile" });
+  const test = buildCommentsPrompt({
+    pageText: "x",
+    productContext: "y",
+    countryName: "Chile",
+    style: "testimonios",
+  });
+
+  assert.match(hilo, /Facebook/);
+  assert.match(hilo, /escépticos/);
+
+  assert.match(test, /qué pasaba antes/);
+  assert.ok(!/escépticos/.test(test));
+});
+
+test("un testimonio no lleva reacciones ni respuestas", () => {
+  // Son de un hilo, y un testimonio no lo es: dejarlos daría una sección que
+  // imita Facebook sin serlo, que se lee peor que cualquiera de los dos.
+  const out = buildCommentsPrompt({
+    pageText: "x",
+    productContext: "y",
+    countryName: "Chile",
+    style: "testimonios",
+  });
+
+  assert.match(out, /`likes` a cero/);
+  assert.match(out, /Sin respuestas/);
+});
