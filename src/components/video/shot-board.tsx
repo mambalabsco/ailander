@@ -613,9 +613,17 @@ export function ShotBoard({
                 onChange={(event) => setMusicChosen((event.target.files?.length ?? 0) > 0)}
                 className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm dark:file:bg-slate-800"
               />
+              {/*
+                El aviso decía justo lo contrario de lo que pasa ahora.
+
+                «Que venga ya baja» era cierto cuando la tuya se subía tal cual.
+                Ahora se baja al volumen que tengas elegido arriba, así que
+                dejarlo diría que hay que hacer a mano algo que ya se hace solo
+                — y quien lo lea acabará bajándola dos veces.
+              */}
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                Que venga ya baja: la tuya se sube tal cual y el montaje mezcla sin control de
-                volumen.
+                Se baja sola al volumen elegido arriba ({findMusicLevel(musicLevel).label.toLowerCase()}).
+                Súbela en MP3 si es larga: pesa unas diez veces menos que un WAV.
               </span>
             </label>
 
@@ -637,6 +645,10 @@ export function ShotBoard({
                 payload.set("videoId", video.id);
                 payload.set("productId", productId);
                 payload.set("music", file);
+                // El nivel elegido arriba viaja con el archivo: sin esto, la
+                // acción se quedaría con el valor por defecto y la pista se
+                // bajaría a un volumen que nadie pidió.
+                payload.set("level", musicLevel);
 
                 const result = await uploadMusicAction(payload);
                 setMusicNote(result.message);

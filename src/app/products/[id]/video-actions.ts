@@ -868,13 +868,50 @@ export async function uploadMusicAction(form: FormData): Promise<{ ok: boolean; 
       contentType: file.type,
     });
 
-    await updateVideo(videoId, { musicUrl: url });
-    revalidatePath(`/products/${productId}`);
+    /*
+     * Se baja al volumen elegido nada más subirla.
+     *
+     * Una pista propia viene al volumen del máster —pensada para escucharla
+     * sola— y encima de una locución la tapa. Antes esto se decía en un aviso
+     * («que venga ya baja») y se dejaba en manos de quien subiera el archivo:
+     * o sea, se descubría al montar el vídeo y había que rehacerlo.
+     *
+     * Si el ajuste falla, se queda la que subiste y **se dice**. Perder la
+     * música por no haber podido bajarle el volumen sería peor que tenerla
+     * alta, que al menos se puede volver a intentar.
+     */
+    const level = findMusicLevel(readText(form.get("level")));
 
-    return {
-      ok: true,
-      message: "Música puesta. Comprueba en el montaje que no tapa la voz: no hay control de volumen.",
-    };
+    try {
+      const levelled = await normalizeLoudness(url, level.lufs);
+
+      const ajustada = await fetch(levelled, { cache: "no-store" });
+      if (!ajustada.ok) throw new Error("no se pudo descargar");
+
+      const stored = await uploadVideoAsset({
+        videoId,
+        name: `musica-${level.id}.wav`,
+        data: Buffer.from(await ajustada.arrayBuffer()),
+        contentType: "audio/wav",
+      });
+
+      await updateVideo(videoId, { musicUrl: stored });
+      revalidatePath(`/products/${productId}`);
+
+      return {
+        ok: true,
+        message: `Música puesta y bajada a ${level.label.toLowerCase()}: ${belowVoice(level)} LU por debajo de la voz.`,
+      };
+    } catch {
+      await updateVideo(videoId, { musicUrl: url });
+      revalidatePath(`/products/${productId}`);
+
+      return {
+        ok: true,
+        message:
+          "Música puesta, pero no se pudo bajarle el volumen. Dale a uno de los botones de volumen antes de montar: el montaje mezcla sin control y una pista a nivel normal tapa la voz.",
+      };
+    }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo subir." };
   }
