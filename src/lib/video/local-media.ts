@@ -44,16 +44,33 @@ export const FRAME_WIDTH = 768;
 export function missingTools(found: { ffmpeg: boolean; ffprobe: boolean; ytdlp: boolean }): string {
   const missing: string[] = [];
 
-  if (!found.ffmpeg || !found.ffprobe) missing.push("ffmpeg");
+  /*
+     Cada binario con su nombre.
+
+     Esto metía «ffmpeg» en la lista cuando lo que faltaba era `ffprobe`, y el
+     mensaje mandaba a instalar algo que ya estaba. Vienen en el mismo paquete
+     casi siempre, pero «casi» no vale para un mensaje de error: quien lo lee
+     hace lo que dice, comprueba que ya está, y deja de creerse el aviso.
+  */
+  if (!found.ffmpeg) missing.push("ffmpeg");
+  if (!found.ffprobe) missing.push("ffprobe");
   if (!found.ytdlp) missing.push("yt-dlp");
 
   if (missing.length === 0) return "";
 
   return [
-    `Al servidor le falta ${missing.join(" y ")} para poder bajar y trocear un vídeo desde un enlace.`,
+    // Enumerado, no pegado con «y»: con tres falta queda «ffmpeg y ffprobe y
+    // yt-dlp», que se lee como si fueran dos cosas y media.
+    `Al servidor le falta ${
+      missing.length > 1
+        ? `${missing.slice(0, -1).join(", ")} y ${missing[missing.length - 1]}`
+        : missing[0]
+    } para poder bajar y trocear un vídeo desde un enlace.`,
     "Se instalan una vez:",
     "",
-    missing.includes("ffmpeg") ? "  apt-get install -y ffmpeg" : "",
+    missing.includes("ffmpeg") || missing.includes("ffprobe")
+      ? "  apt-get install -y ffmpeg   # trae también ffprobe"
+      : "",
     missing.includes("yt-dlp")
       ? "  curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp"
       : "",

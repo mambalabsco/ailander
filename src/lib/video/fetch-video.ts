@@ -100,6 +100,18 @@ async function has(command: string): Promise<boolean> {
   }
 }
 
+/**
+ * Si está ese programa, en booleano.
+ *
+ * Existe porque decidir con el **texto** de `videoToolsProblem` es frágil y ya
+ * falló: ese mensaje dice «falta ffmpeg» cuando lo que falta es `ffprobe`, y
+ * quien lo leía con una expresión regular daba por ausente un ffmpeg que estaba
+ * instalado. Un booleano no se puede malinterpretar.
+ */
+export async function hasTool(command: "ffmpeg" | "ffprobe" | "yt-dlp"): Promise<boolean> {
+  return has(command);
+}
+
 /** Qué le falta al servidor, o cadena vacía si no le falta nada. */
 export async function videoToolsProblem(): Promise<string> {
   const [ffmpeg, ffprobe, ytdlp] = await Promise.all([
@@ -239,16 +251,24 @@ export async function levelAudio(
   source: string,
   lufs: number,
 ): Promise<{ bytes: Uint8Array; problem: string }> {
-  const missing = await videoToolsProblem();
-
   /*
-   * Sin ffmpeg no se inventa nada: se dice y quien llama decide.
+   * Solo se comprueba **ffmpeg**, y en booleano.
    *
-   * Devolver el original sin ajustar sería lo peor de las dos opciones — una
-   * pista a volumen de máster encima de la locución, y nadie enterado.
+   * Antes esto miraba el mensaje de `videoToolsProblem` con una expresión
+   * regular, y ese mensaje dice «falta ffmpeg» cuando lo que falta es
+   * `ffprobe` — o menciona los dos al explicar cómo se instalan. Resultado: se
+   * daba por ausente un ffmpeg instalado y la música se quedaba sin ajustar
+   * culpando al servidor.
+   *
+   * Para normalizar audio no hacen falta ni `ffprobe` ni `yt-dlp`. Exigirlos
+   * era pedir cosas que este trabajo no usa.
    */
-  if (/ffmpeg/i.test(missing)) {
-    return { bytes: new Uint8Array(), problem: "ffmpeg no está instalado en el servidor." };
+  if (!(await hasTool("ffmpeg"))) {
+    return {
+      bytes: new Uint8Array(),
+      problem:
+        "ffmpeg no responde en el servidor. Comprueba que está en el PATH del proceso que sirve la plataforma: instalado para tu usuario no basta si el servicio arranca con otro entorno.",
+    };
   }
 
   const dir = await mkdtemp(join(tmpdir(), "musica-"));

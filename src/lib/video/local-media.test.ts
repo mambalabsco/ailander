@@ -22,7 +22,7 @@ import {
 test("lo que falta se dice con el comando para instalarlo", () => {
   const aviso = missingTools({ ffmpeg: false, ffprobe: false, ytdlp: false });
 
-  assert.match(aviso, /ffmpeg y yt-dlp/);
+  assert.match(aviso, /ffmpeg, ffprobe y yt-dlp/);
   assert.match(aviso, /apt-get install -y ffmpeg/);
   assert.match(aviso, /yt-dlp -o \/usr\/local\/bin\/yt-dlp/);
 });
@@ -234,4 +234,28 @@ test("la entrada y la salida van donde se dice", () => {
 
   assert.equal(args[args.indexOf("-i") + 1], "/tmp/entra.mp3");
   assert.equal(args[args.length - 1], "/tmp/sale.mp3");
+});
+
+test("falta ffprobe y no se acusa a ffmpeg", () => {
+  /*
+   * Esto metía «ffmpeg» en la lista cuando lo que faltaba era `ffprobe`, y el
+   * mensaje mandaba a instalar algo que ya estaba. Quien lo lee hace lo que
+   * dice, comprueba que ya está, y deja de creerse el aviso.
+   */
+  const texto = missingTools({ ffmpeg: true, ffprobe: false, ytdlp: true });
+
+  assert.match(texto, /ffprobe/);
+  assert.ok(!/falta ffmpeg\b/.test(texto));
+});
+
+test("con todo instalado no sobra ningún aviso", () => {
+  assert.equal(missingTools({ ffmpeg: true, ffprobe: true, ytdlp: true }), "");
+});
+
+test("faltando solo yt-dlp no se menciona ffmpeg como ausente", () => {
+  // Es lo que hacía creer que faltaba ffmpeg cuando estaba puesto.
+  const texto = missingTools({ ffmpeg: true, ffprobe: true, ytdlp: false });
+
+  assert.match(texto, /yt-dlp/);
+  assert.ok(!/le falta ffmpeg/.test(texto));
 });
