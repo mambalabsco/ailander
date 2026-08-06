@@ -48,6 +48,21 @@ export async function searchFreeMusic(options: {
     });
 
     if (!response.ok) {
+      /*
+       * El 401 de Openverse no es «no tienes permiso»: es «te has pasado de lo
+       * que se puede pedir sin credenciales». Lo devuelve al superar el tope de
+       * resultados por página y también al pasarse de peticiones seguidas, y
+       * confundirlo con un servicio caído hace esperar a que se arregle solo
+       * algo que no se va a arreglar.
+       */
+      if (response.status === 401) {
+        return {
+          tracks: [],
+          problem:
+            "El catálogo limita las búsquedas sin credenciales y ha rechazado esta. Espera unos segundos y prueba otra vez.",
+        };
+      }
+
       return {
         tracks: [],
         problem: `El catálogo de música no contestó (${response.status}). Vuelve a intentarlo en un momento.`,

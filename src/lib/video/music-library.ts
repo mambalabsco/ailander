@@ -452,7 +452,15 @@ export function openverseQuery(options: {
   const params = new URLSearchParams({
     q: options.text.trim() || "instrumental background",
     license: licenses.join(","),
-    page_size: "40",
+    /*
+     * Veinte, que es el tope sin credenciales.
+     *
+     * Pedir cuarenta devuelve **401**, no un aviso ni una lista recortada: la
+     * búsqueda entera falla. Estuvo a cuarenta desde el principio, así que la
+     * biblioteca no encontró nunca nada y el mensaje decía «el catálogo no
+     * contestó», que suena a que el servicio está caído.
+     */
+    page_size: "20",
     page: String(Math.max(1, Math.round(options.page ?? 1))),
   });
 

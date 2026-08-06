@@ -274,3 +274,15 @@ test("CC0 no pide atribución y CC BY sí", () => {
   assert.equal(attributionFor(libre!), "");
   assert.match(attributionFor(citada!), /Citada.*Otra.*https:\/\/fuente\/b/);
 });
+
+test("no se piden más resultados de los que el catálogo permite sin credenciales", () => {
+  /*
+   * Pedir cuarenta devuelve **401**, no un aviso ni una lista recortada: la
+   * búsqueda entera falla. Estuvo a cuarenta desde el principio, así que la
+   * biblioteca no encontró nunca nada y el mensaje decía «el catálogo no
+   * contestó», que suena a que el servicio está caído.
+   */
+  const size = Number(new URL(openverseQuery({ text: "x" })).searchParams.get("page_size"));
+
+  assert.ok(size <= 20, `page_size=${size}`);
+});
