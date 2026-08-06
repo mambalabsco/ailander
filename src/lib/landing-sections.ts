@@ -55,30 +55,14 @@ const MAX_HEADINGS = 20;
 const MAX_TEXTS = 15;
 
 /**
- * Parte el marcado por sus bloques de primer nivel.
+ * El troceo crudo: los bloques de primer nivel de ese marcado.
  *
- * ## Para qué
- *
- * Para que en el editor de temas salgan **varias** secciones —una por bloque de
- * la página— en vez de una sola con todo dentro. Con una sola, el panel es una
- * lista de cien ajustes sin orden; con varias, cada tramo se abre, se edita, se
- * mueve y se quita por separado.
- *
- * ## Y lo que cuesta, que hay que saberlo
- *
- * Shopify envuelve cada sección en su propio contenedor. Una regla de CSS que
- * relacione **dos bloques hermanos** —`.a + .b`— deja de aplicar cuando esos dos
- * bloques quedan en secciones distintas. Las reglas de descendencia, que son la
- * mayoría, siguen valiendo porque cada trozo conserva su envoltorio `.copiado`.
- *
- * Se cuentan las llaves de las etiquetas, no se parte por `</div>`: partir por
- * el cierre trocearía los `div` anidados por la mitad, que es marcado inválido
- * y una página descolocada, no un error.
+ * Va aparte de `splitTopLevel` para que la bajada de nivel pueda usarlo **sin
+ * volver a bajar**. Cuando `splitTopLevel` se llamaba a sí misma, cada llamada
+ * repetía la bajada sobre el mismo bloque dominante y no paraba nunca: pila
+ * agotada, no un resultado raro.
  */
-export function splitTopLevel(html: string, maxParts = 20): string[] {
-  const inner = /^\s*<div class="copiado">([\s\S]*)<\/div>\s*$/.exec(html.trim());
-  const body = inner ? inner[1] : html;
-
+function topLevelChunks(body: string): string[] {
   const parts: string[] = [];
 
   let at = 0;
@@ -119,6 +103,9 @@ export function splitTopLevel(html: string, maxParts = 20): string[] {
   const rest = body.slice(at).trim();
   if (rest) parts.push(rest);
 
+  return parts;
+}
+
   /*
    * Los bloques sin nada visible se caen.
    *
@@ -127,10 +114,75 @@ export function splitTopLevel(html: string, maxParts = 20): string[] {
    * editar y nadie sabe qué trae. Con once secciones, tres de ellas así
    * convierten el panel en un adivinanza.
    */
-  const clean = parts
+
+/**
+ * Parte el marcado por sus bloques de primer nivel.
+ *
+ * ## Para qué
+ *
+ * Para que en el editor de temas salgan **varias** secciones —una por bloque de
+ * la página— en vez de una sola con todo dentro. Con una sola, el panel es una
+ * lista de cien ajustes sin orden; con varias, cada tramo se abre, se edita, se
+ * mueve y se quita por separado.
+ *
+ * ## Y lo que cuesta, que hay que saberlo
+ *
+ * Shopify envuelve cada sección en su propio contenedor. Una regla de CSS que
+ * relacione **dos bloques hermanos** —`.a + .b`— deja de aplicar cuando esos dos
+ * bloques quedan en secciones distintas. Las reglas de descendencia, que son la
+ * mayoría, siguen valiendo porque cada trozo conserva su envoltorio `.copiado`.
+ *
+ * Se cuentan las llaves de las etiquetas, no se parte por `</div>`: partir por
+ * el cierre trocearía los `div` anidados por la mitad, que es marcado inválido
+ * y una página descolocada, no un error.
+ */
+export function splitTopLevel(html: string, maxParts = 20): string[] {
+  const inner = /^\s*<div class="copiado">([\s\S]*)<\/div>\s*$/.exec(html.trim());
+  const body = inner ? inner[1] : html;
+
+  const parts = topLevelChunks(body);
+
+  let clean = parts
     .map((part) => part.trim())
     .filter(Boolean)
     .filter((part) => hasSomething(part));
+
+  /*
+   * Si un solo bloque se lleva casi toda la página, se baja un nivel.
+   *
+   * Muchas landings cuelgan de un único `<div>` envolvente. Partiendo por el
+   * primer nivel sale **una sección con todo dentro** y unas cuantas migajas
+   * detrás: en el editor eso es exactamente lo que no se puede manejar.
+   *
+   * Se repite hasta tres veces. Más sería seguir bajando hasta los párrafos, y
+   * entonces cada frase es una sección.
+   */
+  for (let vuelta = 0; vuelta < 3; vuelta += 1) {
+    const total = clean.reduce((sum, part) => sum + part.length, 0);
+    const mayor = clean.reduce((top, part) => (part.length > top.length ? part : top), "");
+
+    /*
+     * Solo si el bloque es **grande de verdad**.
+     *
+     * Sin el mínimo, cualquier página con dos párrafos se sigue partiendo hasta
+     * dejar una sección por frase. Cuatro mil caracteres es un tramo de landing
+     * de los que se editan; por debajo, partirlo no arregla nada.
+     */
+    if (clean.length >= maxParts || total === 0) break;
+    if (mayor.length < 4000 || mayor.length < total * 0.6) break;
+
+    // El troceo crudo, no `splitTopLevel`: llamarse a sí misma repetía la
+    // bajada sobre el mismo bloque y agotaba la pila.
+    const dentro = topLevelChunks(
+      /^<[a-z][^>]*>/i.test(mayor) ? mayor.replace(/^<[^>]*>/, "").replace(/<\/[^>]*>$/, "") : mayor,
+    ).filter((part) => hasSomething(part));
+
+    // Si dentro solo hay uno, bajar otra vez daría lo mismo: se para.
+    if (dentro.length <= 1) break;
+
+    const at = clean.indexOf(mayor);
+    clean = [...clean.slice(0, at), ...dentro, ...clean.slice(at + 1)];
+  }
 
   if (clean.length <= maxParts) return clean.map((part) => `<div class="copiado">${part}</div>`);
 
@@ -288,6 +340,32 @@ export function sectionize(html: string): Sectioned {
       return `${before}"{% if section.settings.${id} %}{{ section.settings.${id} }}{% else %}${url}{% endif %}"`;
     },
   );
+
+  /*
+   * Los enlaces de los botones.
+   *
+   * En una copia todos apuntan a la ficha del producto, que es lo que se quiere
+   * el noventa por ciento de las veces. El otro diez —un botón que lleva a la
+   * oferta de tres, otro a la de seis— hay que poder cambiarlo sin tocar código.
+   */
+  let links = 0;
+
+  out = out.replace(/(<a\b[^>]*?\shref=)"([^"]*)"/gi, (match, before: string, url: string) => {
+    // Las anclas internas se quedan: son navegación dentro de la misma página.
+    if (!url || url.startsWith("#")) return match;
+
+    links += 1;
+    const id = `enlace_${links}`;
+
+    settings.push({
+      type: "url",
+      id,
+      label: `Enlace ${links}`,
+      default: url,
+    });
+
+    return `${before}"{{ section.settings.${id} }}"`;
+  });
 
   /*
    * Los titulares.

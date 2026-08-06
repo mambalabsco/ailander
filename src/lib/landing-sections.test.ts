@@ -306,3 +306,39 @@ test("un bloque con solo una imagen sí cuenta", () => {
   // No tiene texto y es contenido: quitarlo dejaría un hueco en la página.
   assert.equal(splitTopLevel('<div><img src="https://x/a.jpg"></div>').length, 1);
 });
+
+test("un bloque que se lleva casi toda la página se parte por dentro", () => {
+  /*
+   * Muchas landings cuelgan de un único `<div>` envolvente. Partiendo solo por
+   * el primer nivel sale **una sección con todo dentro** y unas migajas detrás
+   * — justo lo que no se puede manejar en el editor.
+   */
+  const tramo = (n: number) => `<section>${"x".repeat(3000)} ${n}</section>`;
+  const parts = splitTopLevel(`<div class="envoltorio">${tramo(1)}${tramo(2)}${tramo(3)}</div>`);
+
+  assert.ok(parts.length >= 3, `salieron ${parts.length}`);
+});
+
+test("una página pequeña no se sigue partiendo hasta la frase", () => {
+  // Sin mínimo de tamaño, cualquier página con dos párrafos acabaría con una
+  // sección por frase.
+  const parts = splitTopLevel("<div><p>uno</p><p>dos</p></div>");
+
+  assert.equal(parts.length, 1);
+});
+
+test("el enlace de un botón se puede cambiar desde el editor", () => {
+  const out = sectionize('<a class="boton" href="https://mitienda.com/products/x">Comprar</a>');
+
+  assert.ok(out.settings.some((setting) => setting.id === "enlace_1"));
+  assert.ok(out.liquid.includes("{{ section.settings.enlace_1 }}"));
+  assert.equal(out.settings.find((setting) => setting.id === "enlace_1")?.default, "https://mitienda.com/products/x");
+});
+
+test("las anclas internas no se convierten en ajuste", () => {
+  // Son navegación dentro de la misma página: un campo por cada «ver la oferta»
+  // llenaría el panel sin que nadie los cambie nunca.
+  const out = sectionize('<a href="#precios">Ver la oferta</a>');
+
+  assert.equal(out.settings.length, 0);
+});
