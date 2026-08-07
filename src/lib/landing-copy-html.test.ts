@@ -1211,3 +1211,22 @@ test("un testimonio no lleva reacciones ni respuestas", () => {
   assert.match(out, /`likes` a cero/);
   assert.match(out, /Sin respuestas/);
 });
+
+test("un `#` a secas sí se reapunta", () => {
+  /*
+   * Es el hueco que dejó la propia neutralización cuando el producto no tenía
+   * ficha. Saltárselo hacía que «apuntar los enlaces» contestara «0 enlaces»
+   * sobre una página llena de botones muertos.
+   */
+  const out = neutralizeLinks('<a href="#">Comprar</a>', "https://mitienda.com/products/x");
+
+  assert.equal(out.changed, 1);
+  assert.ok(out.html.includes("https://mitienda.com/products/x"));
+});
+
+test("una ancla con destino se sigue respetando", () => {
+  const out = neutralizeLinks('<a href="#precios">Ver la oferta</a>', "https://mitienda.com/x");
+
+  assert.equal(out.changed, 0);
+  assert.ok(out.html.includes('href="#precios"'));
+});
