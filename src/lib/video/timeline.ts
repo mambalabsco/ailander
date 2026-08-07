@@ -163,16 +163,18 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
      * porque el siguiente corte se calcula contra la siguiente **que sí está**.
      */
     /*
-     * Hasta el arranque de la siguiente; la última, hasta que se calla la voz.
+     * Hasta el arranque de la siguiente; la última, hasta donde diga su corte.
      *
-     * Estirar la última es lo que quita el negro del final. Una imagen sostenida
-     * de más se lee como un plano largo, que es una decisión de montaje normal;
-     * el negro se lee como que el vídeo se rompió.
+     * Antes la última se estiraba hasta que se callaba la voz, para que no
+     * quedara negro al final. Quitaba el negro, sí, pero a cambio el anuncio se
+     * quedaba congelado en el último plano todo lo que sobrara de audio: un
+     * vídeo de 40 s de tomas se entregaba de 93 s, con 53 s de imagen parada.
+     *
+     * Manda el montaje. Lo que sobre de voz se corta, y el final negro se evita
+     * cuadrando los cortes con la voz —o alargando el último a mano—, que es
+     * una decisión de montaje y no algo que deba pasar solo.
      */
-    const end =
-      index + 1 < usable.length
-        ? usable[index + 1].start
-        : Math.max(cut.end, input.voiceSeconds ?? 0);
+    const end = index + 1 < usable.length ? usable[index + 1].start : cut.end;
 
     const duration = Math.max(0, end - start);
 
@@ -192,8 +194,22 @@ export function buildTimeline(input: TimelineInput): TimelineResult {
       url: caption.url,
     }));
 
-  // La voz manda sobre la duración total: si sigue sonando, el vídeo sigue.
-  const total = Math.max(cursor, input.voiceSeconds ?? 0);
+  /*
+   * Mandan las escenas, no el audio.
+   *
+   * Antes mandaba la voz: si seguía sonando, el vídeo seguía. La idea era no
+   * cortar la locución a media frase, pero el resultado es un anuncio que se
+   * queda congelado en el último plano —o en negro— mientras se oye una voz
+   * sobre una imagen parada. Para un anuncio eso es peor que una frase corta.
+   *
+   * Así que la duración es la de los cortes, y lo que suene de más se corta.
+   * Si la voz no cabe, la respuesta es alargar el último corte o generar otro
+   * plano, no estirar el vídeo.
+   *
+   * Sin cortes no hay nada que mandar y vuelve a decidir el audio: es el caso
+   * de un montaje con la voz puesta antes que los planos.
+   */
+  const total = cursor > 0 ? cursor : (input.voiceSeconds ?? 0);
 
   /*
    * Los planos ya vienen encadenados en un solo vídeo.

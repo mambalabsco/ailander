@@ -217,11 +217,11 @@ test("los cortes desordenados se colocan igual", () => {
   );
 });
 
-test("la última toma se estira hasta que se calla la voz: nunca queda negro", () => {
+test("el vídeo dura lo que duran las tomas, no lo que dura el audio", () => {
   /*
-   * La imagen acababa con el último corte y la voz seguía sonando: todo ese rato
-   * quedaba a oscuras. Con la mayoría de tomas sin tiempos, «ese rato» era casi
-   * el vídeo entero — se veía el primer clip y después negro.
+   * Antes la última toma se estiraba hasta que se callaba la voz. Con tomas de
+   * 4 s y 30 s de audio se entregaba un vídeo de 30 s: 26 de imagen congelada.
+   * En un anuncio eso es peor que quedarse corto, y se entregaba sin avisar.
    */
   const result = buildTimeline({
     cuts: [{ n: "01", start: 0, end: 4 }],
@@ -232,11 +232,24 @@ test("la última toma se estira hasta que se calla la voz: nunca queda negro", (
 
   const [uno] = videoFrames(result);
 
-  assert.equal(uno.duration, 30000, "cubre toda la voz");
-  assert.equal(result.seconds, 30);
+  assert.equal(uno.duration, 4000, "el plano dura su corte, no el audio");
+  assert.equal(result.seconds, 4);
 
   const audio = result.tracks.find((track) => track.id === "voz");
-  assert.equal(audio?.keyframes[0].duration, 30000, "y la voz suena entera");
+  assert.equal(audio?.keyframes[0].duration, 4000, "y el audio se corta con él");
+});
+
+test("sin cortes manda el audio: no hay montaje que mande", () => {
+  // Es el caso de poner la voz antes que los planos. Sin tiempos que respetar,
+  // dejar el vídeo en cero lo dejaría vacío.
+  const result = buildTimeline({
+    cuts: [],
+    clips: {},
+    voiceUrl: VOZ,
+    voiceSeconds: 30,
+  });
+
+  assert.equal(result.seconds, 30);
 });
 
 test("dos tomas no pueden acabar apuntando al mismo clip", () => {

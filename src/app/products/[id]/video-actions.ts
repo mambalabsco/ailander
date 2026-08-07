@@ -1246,9 +1246,15 @@ export async function assembleVideoAction(
       await report("Montando el vídeo: esto tarda un rato");
 
       const timeline = buildTimeline({
-        musicUrl: video.musicUrl || undefined,
-        // Sin esto, la imagen se acaba con el último corte y el resto queda en
-        // negro mientras la voz sigue sonando.
+        /*
+         * La música **no** va aquí, aunque la haya.
+         *
+         * El servicio de montaje sustituye el audio por las pistas que se le
+         * pasan en vez de mezclarlo, así que mandarla aquí deja el vídeo sin
+         * voz — y además se sumaría a la que se mezcla después con ffmpeg,
+         * sonando dos veces. Se pone al final, ver más abajo.
+         */
+        musicUrl: undefined,
         voiceSeconds: video.voiceSeconds || undefined,
         cuts: video.shots
           .filter((shot) => shot.cutStart !== null && shot.cutEnd !== null)
