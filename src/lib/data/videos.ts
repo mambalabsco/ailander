@@ -46,6 +46,15 @@ export interface Video {
   updatedAt: string;
   /** El estilo de subtítulo. Vacío es sin subtítulos. */
   subtitlePreset: string;
+  /**
+   * El texto del anuncio, escrito a partir del guion. Vacío si no se ha pedido.
+   *
+   * Es del vídeo y no del copy del que salió: las tomas se recortan y se
+   * reordenan, y lo que se promete tiene que ser lo que el vídeo enseña.
+   */
+  headline: string;
+  primaryText: string;
+  description: string;
   words: TimedWord[];
   voiceSeconds: number;
   finalUrl: string | null;
@@ -126,6 +135,9 @@ export async function listVideos(productId: string): Promise<Video[]> {
     videoModel: row.video_model ?? "grok",
     updatedAt: row.updated_at,
     subtitlePreset: row.subtitle_preset ?? "hustle",
+    headline: row.headline ?? "",
+    primaryText: row.primary_text ?? "",
+    description: row.description ?? "",
     words: parseWords(row.words),
     voiceSeconds: num(row.voice_seconds),
     finalUrl: row.final_url,
@@ -287,6 +299,9 @@ export async function updateVideo(
     finalUrl?: string | null;
     thumbnailUrl?: string | null;
     voiceId?: string;
+    headline?: string;
+    primaryText?: string;
+    description?: string;
     /** Se **suma** a lo ya gastado, no lo reemplaza. */
     addSpent?: number;
   },
@@ -298,6 +313,9 @@ export async function updateVideo(
   if (patch.voiceUrl !== undefined) changes.voice_url = patch.voiceUrl;
   if (patch.musicUrl !== undefined) changes.music_url = patch.musicUrl;
   if (patch.subtitlePreset !== undefined) changes.subtitle_preset = patch.subtitlePreset;
+  if (patch.headline !== undefined) changes.headline = patch.headline;
+  if (patch.primaryText !== undefined) changes.primary_text = patch.primaryText;
+  if (patch.description !== undefined) changes.description = patch.description;
   if (patch.words !== undefined) changes.words = patch.words as unknown as TablesUpdate<"videos">["words"];
   if (patch.voiceSeconds !== undefined) changes.voice_seconds = patch.voiceSeconds.toFixed(2);
   if (patch.finalUrl !== undefined) changes.final_url = patch.finalUrl;

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { runInBackground, runStep, type StepContext } from "@/lib/background";
 import { generateStructured } from "@/lib/generators";
-import { SCRIPT_SCHEMA, STYLE_SCHEMA } from "@/lib/generation-schemas";
+import { LONG_COPY_SCHEMA, SCRIPT_SCHEMA, STYLE_SCHEMA } from "@/lib/generation-schemas";
 import { findProductAnywhere } from "@/lib/products";
 import { readCopies } from "@/lib/data/copy";
 import { hasActiveProviderKey } from "@/lib/provider-config";
@@ -16,6 +16,12 @@ import {
   updateShot,
   updateVideo,
 } from "@/lib/data/videos";
+import {
+  buildVideoCopyPrompt,
+  fitAdCopy,
+  videoScript,
+  type VideoAdCopy,
+} from "@/lib/video/ad-copy";
 import { buildScriptPrompt, buildStylePrompt } from "@/lib/video/script-prompt";
 import {
   DEFAULT_RATES,
@@ -1781,4 +1787,99 @@ export async function speedUpVideoAction(input: unknown): Promise<LaunchResult> 
       };
     },
   });
+}
+
+/**
+ * El texto del anuncio para el vídeo: título, texto principal y descripción.
+ *
+ * ## Por qué se escribe del guion y no del copy de origen
+ *
+ * Un vídeo nace de un copy largo, pero lo que se monta no es ese copy: las
+ * tomas se recortan, se reordenan y se reescriben en fonético para la voz. Si
+ * el anuncio se copiara del borrador, prometería cosas que el vídeo no enseña
+ * — y quien lo lee le da al play un segundo después y lo nota.
+ *
+ * ## Y por qué se guarda en el vídeo
+ *
+ * Porque es suyo. Del mismo copy pueden salir tres vídeos distintos, y cada uno
+ * necesita su propio texto: el que promete lo que ese montaje enseña.
+ */
+export async function generateVideoAdCopyAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const videoId = readText(raw.videoId);
+  const productId = readText(raw.productId);
+
+  if (!videoId || !productId) return { ok: false, message: "Falta el vídeo." };
+
+  try {
+    await guard();
+
+    const video = await readVideo(videoId);
+    if (!video) return { ok: false, message: "Ese vídeo ya no existe." };
+
+    const script = videoScript(video.shots);
+
+    /*
+     * Sin guion no hay nada de lo que escribir.
+     *
+     * Pasa con un vídeo recién creado, antes de generarlo. Inventar un anuncio
+     * sin guion daría un texto genérico que parece bueno y no promete lo que el
+     * vídeo enseña, que es justo lo que esto viene a evitar.
+     */
+    if (!script) {
+      return {
+        ok: false,
+        message: "Este vídeo todavía no tiene guion. Genéralo primero y luego pide el texto.",
+      };
+    }
+
+    const product = await findProductAnywhere(productId);
+    if (!product) return { ok: false, message: "Ese producto ya no existe." };
+
+    const contexto = [
+      product.targetAudience ? `Público: ${product.targetAudience}` : "",
+      product.country ? `País: ${product.country}` : "",
+      product.description ? `Producto: ${product.description}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const written = await generateStructured<VideoAdCopy>({
+      prompt: buildVideoCopyPrompt({
+        script,
+        productName: product.name,
+        context: contexto || undefined,
+        seconds: video.voiceSeconds,
+      }),
+      schema: LONG_COPY_SCHEMA,
+      role: "copy",
+      maxTokens: 4_000,
+    });
+
+    // Se recorta al guardar porque pedir los límites en el prompt no es
+    // garantizarlos, y Meta corta sin avisar en el anuncio ya publicado.
+    const copy = fitAdCopy(written.data);
+
+    await updateVideo(videoId, {
+      headline: copy.headline,
+      primaryText: copy.primaryText,
+      description: copy.description,
+    });
+
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: true,
+      message: `Texto escrito: «${copy.headline}».`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo escribir el texto.",
+    };
+  }
 }

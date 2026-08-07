@@ -17,12 +17,14 @@ import { findMusicLevel, MUSIC_LEVELS } from "@/lib/video/loudness";
 import { SPEEDS } from "@/lib/video/local-media";
 import { DEFAULT_PRESET, findVoicePreset, VOICE_PRESETS } from "@/lib/video/voice-settings";
 import { GenerateButton } from "@/components/generate-button";
+import { CopyableBlock } from "@/components/copyable";
 import {
   assembleVideoAction,
   chooseMusicAction,
   deleteMusicAction,
   generateMusicAction,
   setSubtitlePresetAction,
+  generateVideoAdCopyAction,
   levelMusicAction,
   speedUpVideoAction,
   uploadMusicAction,
@@ -74,6 +76,8 @@ export function ShotBoard({
   /** El ajuste de volumen va en su propia transición: tarda y no debe bloquear el resto. */
   const [levelling, startLevelling] = useTransition();
   const [levelNote, setLevelNote] = useState("");
+  const [writing, startWriting] = useTransition();
+  const [copyNote, setCopyNote] = useState("");
   const musicRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -804,6 +808,78 @@ export function ShotBoard({
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Sustituye el vídeo montado. Si te pasas, vuelve a montar y quedas como estabas.
           </p>
+        </div>
+      ) : null}
+
+      {/*
+        El texto del anuncio, escrito del guion.
+
+        Va aquí y no en la pestaña de copys porque es de **este** vídeo: del
+        mismo copy salen tres montajes distintos y cada uno promete lo suyo. Se
+        pide cuando hay guion, sin esperar al montaje: así el texto está listo
+        para cuando el vídeo lo esté.
+      */}
+      {video.shots.length > 0 ? (
+        <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">Texto del anuncio</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Título, texto principal y descripción, escritos a partir del guion de este
+                vídeo.
+              </p>
+            </div>
+
+            <Button
+              variant="secondary"
+              disabled={writing}
+              onClick={() =>
+                startWriting(async () => {
+                  const result = await generateVideoAdCopyAction({
+                    videoId: video.id,
+                    productId,
+                  });
+
+                  setCopyNote(result.message);
+                  if (result.ok) router.refresh();
+                })
+              }
+            >
+              {writing
+                ? "Escribiendo…"
+                : video.headline
+                  ? "Volver a escribirlo"
+                  : "Escribir el texto"}
+            </Button>
+          </div>
+
+          {copyNote ? (
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">{copyNote}</p>
+          ) : null}
+
+          {video.headline ? (
+            <div className="mt-3 grid gap-2">
+              <CopyableBlock value={video.primaryText} label="Texto principal">
+                <p className="whitespace-pre-wrap text-sm leading-6">{video.primaryText}</p>
+              </CopyableBlock>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <CopyableBlock value={video.headline} label="Título">
+                  <p className="text-sm font-medium">{video.headline}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Título · {video.headline.length}/40
+                  </p>
+                </CopyableBlock>
+
+                <CopyableBlock value={video.description} label="Descripción">
+                  <p className="text-sm font-medium">{video.description}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Descripción · {video.description.length}/30
+                  </p>
+                </CopyableBlock>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

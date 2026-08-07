@@ -731,6 +731,10 @@ type VideoRow = {
   video_model: string;
   /** El estilo de subtítulo. Vacío es sin subtítulos. */
   subtitle_preset: string;
+  /** El texto del anuncio, escrito a partir del guion. Vacío si no se ha pedido. */
+  headline: string;
+  primary_text: string;
+  description: string;
 };
 
 type VideoShotRow = {
