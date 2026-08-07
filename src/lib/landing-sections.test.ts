@@ -85,12 +85,17 @@ test("los párrafos también se editan, ahora que hay varias secciones", () => {
   assert.ok(out.liquid.includes("{{ section.settings.texto_1 }}"));
 });
 
-test("un párrafo con enlace o negrita no se toca", () => {
-  // Cambiarlo por un campo de texto se comería el `<a>` o el `<strong>`.
+test("un párrafo con enlace o negrita no se convierte en campo de texto", () => {
+  /*
+   * Cambiarlo por un campo de texto se comería el `<a>` o el `<strong>`. El
+   * enlace de dentro sí se hace editable —un `#` a secas es un botón muerto—
+   * pero el párrafo se queda con su marcado.
+   */
   const out = sectionize('<p>Mira <a href="#">esta oferta</a> antes de que acabe hoy</p>');
 
-  assert.ok(out.liquid.includes("<a href=\"#\">"));
-  assert.equal(out.settings.length, 0);
+  assert.ok(out.liquid.includes("<a href="));
+  assert.ok(out.liquid.includes("Mira "));
+  assert.ok(!out.settings.some((setting) => setting.type === "textarea"));
 });
 
 test("los textos muy cortos no son párrafos", () => {
@@ -455,4 +460,64 @@ test("sin bandas conocidas se parte como antes", () => {
   const parts = splitTopLevel(`<div><p>A${largo}</p><p>B${largo}</p></div>`, 20, new Set());
 
   assert.equal(parts.length, 2);
+});
+
+test("un botón con `>` dentro de un atributo sí recibe su campo editable", () => {
+  /*
+   * Marcado real de un constructor de páginas: `aria-label` lleva un `>` dentro
+   * del valor. Cualquier expresión con `[^>]*` corta ahí, no llega al `href` y
+   * no crea el ajuste — el botón se queda sin campo en el editor de temas y
+   * nada falla.
+   */
+  const tag = '<a aria-label="<p>QUIERO COMPRAR</p>" href="https://mitienda.com/p" class="boton">Ir</a>';
+  const out = sectionize(tag);
+
+  assert.ok(out.settings.some((setting) => setting.id === "enlace_1"), "no creó el ajuste");
+  assert.ok(out.liquid.includes("{{ section.settings.enlace_1 }}"));
+  assert.equal(out.settings.find((setting) => setting.id === "enlace_1")?.default, "https://mitienda.com/p");
+});
+
+test("el atributo con `>` no se destroza al reescribir", () => {
+  // Perderlo cambiaría lo que lee un lector de pantalla, y eso no se ve.
+  const tag = '<a aria-label="<p>Comprar</p>" href="https://x.com/p">Ir</a>';
+
+  assert.ok(sectionize(tag).liquid.includes('aria-label="<p>Comprar</p>"'));
+});
+
+test("una etiqueta sin cerrar no se reescribe a ciegas", () => {
+  // Reescribir media página por una etiqueta partida es peor que dejarla.
+  const roto = '<a href="https://x.com/p" class="sin cerrar';
+
+  assert.equal(sectionize(roto).liquid, roto);
+});
+
+test("el caso real: el botón de trysculptique queda editable y entero", () => {
+  /*
+   * Es el marcado que falló en producción. Tres cosas tenían que salir bien a
+   * la vez, y fallaba la tercera: leer la etiqueta hasta su cierre de verdad,
+   * crear el ajuste del enlace, y **no** tratar el `<p>` de dentro del
+   * `aria-label` como un párrafo. Ese último partía la etiqueta y se llevaba el
+   * `href` por delante, dejando el botón sin campo y sin destino.
+   */
+  const tag =
+    '<a aria-label="<p>QUIERO DESHINCHARME AHORA</p>" href="https://sculptchile.com/products/x?utm_content=adv37" class="gp-button-base"><span><p>QUIERO DESHINCHARME AHORA</p></span></a>';
+
+  const out = sectionize(tag);
+
+  assert.ok(out.settings.some((setting) => setting.id === "enlace_1"), "sin campo editable");
+  assert.ok(out.liquid.includes("{{ section.settings.enlace_1 }}"), "sin liquid en el href");
+  assert.ok(out.liquid.includes('aria-label="<p>QUIERO DESHINCHARME AHORA</p>"'), "atributo roto");
+});
+
+test("un `<p>` dentro de un atributo no es un párrafo", () => {
+  // Tratarlo como marcado reescribe el valor del atributo y parte la etiqueta.
+  const out = sectionize('<a aria-label="<p>Un texto suficientemente largo aquí</p>" href="https://x/p">Ir</a>');
+
+  assert.ok(!out.settings.some((setting) => setting.type === "textarea"));
+});
+
+test("un titular dentro de un atributo tampoco", () => {
+  const out = sectionize('<div data-tip="<h2>Oferta</h2>"><h2>Oferta de verdad</h2></div>');
+
+  assert.equal(out.settings.filter((setting) => setting.type === "text").length, 1);
 });

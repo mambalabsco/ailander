@@ -262,6 +262,58 @@ export function splitTopLevel(html: string, maxParts = 20, bands?: Set<string>):
   return [...head, tail].map((part) => `<div class="copiado">${part}</div>`);
 }
 
+/**
+ * Recorre las etiquetas de un tipo, leyéndolas enteras.
+ *
+ * ## Por qué no vale una expresión regular
+ *
+ * Porque `[^>]*` corta en el primer `>`, y hay atributos que lo llevan **dentro
+ * del valor**: `aria-label="<p>QUIERO COMPRAR</p>"` es marcado real de un
+ * constructor de páginas. Con la etiqueta cortada, el `href` que va detrás no
+ * existe para el código — y eso no da error, deja el botón sin ajuste y a nadie
+ * mirando por qué.
+ *
+ * Aquí se cuenta si se está dentro de comillas, así que un `>` dentro de un
+ * valor no termina nada.
+ */
+function replaceTags(html: string, name: string, change: (tag: string) => string): string {
+  const open = new RegExp(`<${name}\\b`, "gi");
+
+  let out = "";
+  let at = 0;
+
+  for (const found of [...html.matchAll(open)]) {
+    const start = found.index;
+    if (start < at) continue;
+
+    let cursor = start + found[0].length;
+    let quote = "";
+
+    while (cursor < html.length) {
+      const char = html[cursor];
+
+      if (quote) {
+        if (char === quote) quote = "";
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === ">") {
+        break;
+      }
+
+      cursor += 1;
+    }
+
+    // Sin cierre, la etiqueta está partida: se deja tal cual antes que
+    // reescribir a ciegas media página.
+    if (cursor >= html.length) break;
+
+    out += html.slice(at, start) + change(html.slice(start, cursor + 1));
+    at = cursor + 1;
+  }
+
+  return out + html.slice(at);
+}
+
 /** Si ese trozo abre una banda: su etiqueta lleva una clase de fondo propio. */
 function startsBand(html: string, bands: Set<string>): boolean {
   // `<section>` y `<header>` son bandas por sí mismos: el marcado ya lo dice.
@@ -424,21 +476,28 @@ export function sectionize(html: string): Sectioned {
    */
   let links = 0;
 
-  out = out.replace(/(<a\b[^>]*?\shref=)"([^"]*)"/gi, (match, before: string, url: string) => {
-    // Las anclas internas se quedan: son navegación dentro de la misma página.
-    if (!url || url.startsWith("#")) return match;
+  /*
+   * Las etiquetas `<a>` se leen **respetando las comillas**, no hasta el primer
+   * `>`.
+   *
+   * Aquí estaba el fallo que dejaba los botones sin campo editable. Un
+   * constructor de páginas escribe `aria-label="<p>QUIERO COMPRAR</p>"`, con un
+   * `>` **dentro del valor**: cualquier expresión con `[^>]*` corta ahí, no
+   * llega al `href` y no crea el ajuste. La etiqueta se queda como estaba y en
+   * el editor de temas no hay nada que cambiar.
+   */
+  out = replaceTags(out, "a", (tag) => {
+    const url = /\shref="([^"]*)"/i.exec(tag)?.[1] ?? "";
+
+    // Las anclas con destino se quedan: son navegación dentro de la página.
+    if (!url || (url.length > 1 && url.startsWith("#"))) return tag;
 
     links += 1;
     const id = `enlace_${links}`;
 
-    settings.push({
-      type: "url",
-      id,
-      label: `Enlace ${links}`,
-      default: url,
-    });
+    settings.push({ type: "url", id, label: `Enlace ${links}`, default: url });
 
-    return `${before}"{{ section.settings.${id} }}"`;
+    return tag.replace(/\shref="[^"]*"/i, ` href="{{ section.settings.${id} }}"`);
   });
 
   /*
@@ -450,7 +509,11 @@ export function sectionize(html: string): Sectioned {
    */
   out = out.replace(
     /(<h([1-3])\b[^>]*>)([^<]+)(<\/h\2>)/gi,
-    (match, open: string, _level: string, text: string, close: string) => {
+    (match, open: string, _level: string, text: string, close: string, at: number, whole: string) => {
+      // Mismo motivo que en los párrafos: un titular dentro de un atributo no
+      // es un titular, y reescribirlo parte la etiqueta que lo contiene.
+      if (whole[at - 1] === '"' || whole[at - 1] === "'") return match;
+
       if (!text.trim()) return match;
 
       if (headings >= MAX_HEADINGS) {
@@ -482,7 +545,17 @@ export function sectionize(html: string): Sectioned {
    */
   let texts = 0;
 
-  out = out.replace(/(<p\b[^>]*>)([^<]+)(<\/p>)/gi, (match, open: string, text: string, close: string) => {
+  out = out.replace(/(<p\b[^>]*>)([^<]+)(<\/p>)/gi, (match, open: string, text: string, close: string, at: number, whole: string) => {
+    /*
+     * Un `<p>` **dentro de un atributo** no es marcado.
+     *
+     * `aria-label="<p>QUIERO COMPRAR</p>"` es marcado real de un constructor de
+     * páginas. Tratarlo como párrafo reescribía el valor del atributo, partía
+     * la etiqueta `<a>` y con ella se perdía el `href` — el botón se quedaba
+     * sin campo editable y sin destino, y nada fallaba.
+     */
+    if (whole[at - 1] === '"' || whole[at - 1] === "'") return match;
+
     const clean = text.trim();
 
     // Los muy cortos no son párrafos: son separadores, «·», precios sueltos.
