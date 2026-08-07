@@ -374,6 +374,16 @@ export function mixMusicArgs(video: string, music: string, out: string): string[
     "aac",
     "-b:a",
     "160k",
+    /*
+     * Y `-shortest` además del `duration=first`.
+     *
+     * Los dos cortan y no sobra ninguno: el filtro decide cuánto dura la
+     * mezcla, y esto decide cuánto dura el archivo. Ya di por cortada la música
+     * dos veces —la primera poniéndole duración al fotograma del servicio de
+     * montaje, que la ignoraba— así que aquí el corte no depende de una sola
+     * cosa.
+     */
+    "-shortest",
     "-threads",
     "1",
     "-y",

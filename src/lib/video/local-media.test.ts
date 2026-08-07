@@ -352,10 +352,15 @@ test("se mezclan las dos pistas, no se sustituye una", () => {
   assert.match(filtro, /\[0:a\]\[1:a\]amix/);
 });
 
-test("la música se corta al acabar el vídeo", () => {
-  // `duration=first` deja la mezcla del largo de la primera entrada, el vídeo.
-  // Sin eso el anuncio terminaba y la música seguía sonando sobre negro.
+test("la música se corta al acabar el vídeo, por dos vías", () => {
+  /*
+   * `duration=first` decide cuánto dura la mezcla y `-shortest` cuánto dura el
+   * archivo. Los dos, y no sobra ninguno: esto se dio por arreglado dos veces
+   * —la primera poniéndole duración al fotograma del servicio de montaje, que
+   * la ignoraba— y el corte no debería depender de una sola cosa.
+   */
   const args = mixMusicArgs("/v.mp4", "/m.mp3", "/o.mp4");
 
   assert.ok(args.some((arg) => arg.includes("duration=first")));
+  assert.ok(args.includes("-shortest"));
 });
