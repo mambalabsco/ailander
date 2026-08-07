@@ -52,6 +52,40 @@ export function nearestRatio(width: number, height: number): string {
 }
 
 /**
+ * El tipo de una imagen, leído de sus primeros bytes.
+ *
+ * Hace falta porque el modelo **comprueba** que el tipo declarado coincida con
+ * el contenido y rechaza la petición si no: «the image was specified using the
+ * image/jpeg media type, but the image appears to be a image/webp image». Con
+ * el tipo puesto a mano, un lote entero de imágenes de tienda —que suelen ser
+ * webp— falla completo, una por una y con el mismo error nueve veces.
+ *
+ * Se lee de los bytes y no del nombre del archivo ni de la cabecera de la
+ * respuesta: la extensión la pone quien subió el archivo y el `content-type` lo
+ * pone el servidor, y cualquiera de los dos puede mentir. Los bytes no.
+ *
+ * Si no se reconoce se devuelve `null`, para que quien llame decida — no un
+ * tipo por defecto, que es justo el fallo que esto viene a arreglar.
+ */
+export function imageMediaType(bytes: Uint8Array): string | null {
+  if (bytes.length < 12) return null;
+
+  const empieza = (...esperados: number[]) => esperados.every((b, i) => bytes[i] === b);
+
+  if (empieza(0x89, 0x50, 0x4e, 0x47)) return "image/png";
+  if (empieza(0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (empieza(0x47, 0x49, 0x46, 0x38)) return "image/gif";
+
+  // WebP se anuncia en dos sitios: «RIFF» al principio y «WEBP» en el byte 8.
+  // Mirar solo el primero lo confundiría con un wav o un avi.
+  if (empieza(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
+/**
  * El tamaño de una imagen, leído de sus primeros bytes.
  *
  * Se lee del archivo y no del atributo `width` del HTML porque ese lo escribe

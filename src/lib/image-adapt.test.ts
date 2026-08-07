@@ -4,6 +4,7 @@ import {
   buildEditPrompt,
   buildReadingPrompt,
   nearestRatio,
+  imageMediaType,
   readImageSize,
   reviewReading,
   type ImageReading,
@@ -176,4 +177,37 @@ test("el prompt de lectura pide el texto literal y las marcas", () => {
   assert.match(prompt, /literal y entero/);
   assert.match(prompt, /brandNames/);
   assert.match(prompt, /Ante la duda, no vale/);
+});
+
+test("el tipo de imagen se lee de los bytes, no de la extensión", () => {
+  /*
+   * Un lote de 9 imágenes de tienda falló entero porque se declaraba
+   * «image/jpeg» a fijo y eran webp. El modelo compara lo declarado con el
+   * contenido y rechaza la petición, así que el fallo es total, no parcial.
+   */
+  const webp = new Uint8Array(16);
+  webp.set([0x52, 0x49, 0x46, 0x46], 0); // RIFF
+  webp.set([0x57, 0x45, 0x42, 0x50], 8); // WEBP
+  assert.equal(imageMediaType(webp), "image/webp");
+
+  const png = new Uint8Array(16);
+  png.set([0x89, 0x50, 0x4e, 0x47], 0);
+  assert.equal(imageMediaType(png), "image/png");
+
+  const jpg = new Uint8Array(16);
+  jpg.set([0xff, 0xd8, 0xff], 0);
+  assert.equal(imageMediaType(jpg), "image/jpeg");
+
+  const gif = new Uint8Array(16);
+  gif.set([0x47, 0x49, 0x46, 0x38], 0);
+  assert.equal(imageMediaType(gif), "image/gif");
+
+  // Un wav empieza igual que un webp: «RIFF». Solo los distingue el byte 8, y
+  // confundirlos mandaría audio declarado como imagen.
+  const wav = new Uint8Array(16);
+  wav.set([0x52, 0x49, 0x46, 0x46], 0);
+  wav.set([0x57, 0x41, 0x56, 0x45], 8); // WAVE
+  assert.equal(imageMediaType(wav), null);
+
+  assert.equal(imageMediaType(new Uint8Array(4)), null, "sin bytes no se inventa");
 });

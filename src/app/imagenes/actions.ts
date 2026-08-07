@@ -15,6 +15,7 @@ import { generateWithCli } from "@/lib/higgsfield-cli";
 import {
   buildEditPrompt,
   buildReadingPrompt,
+  imageMediaType,
   nearestRatio,
   readImageSize,
   reviewReading,
@@ -279,7 +280,15 @@ export async function adaptImagesAction(input: unknown): Promise<LaunchResult> {
             schema: IMAGE_READING_SCHEMA,
             role: "copy",
             maxTokens: 4_000,
-            images: [{ mediaType: "image/jpeg", base64: Buffer.from(bytes).toString("base64") }],
+            images: [
+              {
+                // Declarar un tipo a fijo hacía fallar el lote entero: el modelo
+                // comprueba que coincida con los bytes, y las imágenes de tienda
+                // suelen ser webp.
+                mediaType: imageMediaType(bytes) ?? "image/jpeg",
+                base64: Buffer.from(bytes).toString("base64"),
+              },
+            ],
           });
 
           inputTokens += reading.inputTokens;
