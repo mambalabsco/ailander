@@ -495,9 +495,27 @@ export function sectionize(html: string): Sectioned {
     links += 1;
     const id = `enlace_${links}`;
 
-    settings.push({ type: "url", id, label: `Enlace ${links}`, default: url });
+    /*
+     * Sin `default`, y el original va dentro del Liquid.
+     *
+     * Shopify rechaza el esquema entero si un ajuste de tipo `url` trae valor
+     * por defecto: «default must be a string or datasource access path». Y no
+     * falla solo ese ajuste — **no se guarda el archivo**, así que la página se
+     * queda sin su plantilla y el error habla de permisos.
+     *
+     * Mismo patrón que las imágenes: vacío deja el enlace del original.
+     */
+    settings.push({
+      type: "url",
+      id,
+      label: `Enlace ${links}`,
+      info: "Vacío deja el del original.",
+    });
 
-    return tag.replace(/\shref="[^"]*"/i, ` href="{{ section.settings.${id} }}"`);
+    return tag.replace(
+      /\shref="[^"]*"/i,
+      ` href="{% if section.settings.${id} != blank %}{{ section.settings.${id} }}{% else %}${url}{% endif %}"`,
+    );
   });
 
   /*

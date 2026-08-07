@@ -340,7 +340,13 @@ test("el enlace de un botón se puede cambiar desde el editor", () => {
 
   assert.ok(out.settings.some((setting) => setting.id === "enlace_1"));
   assert.ok(out.liquid.includes("{{ section.settings.enlace_1 }}"));
-  assert.equal(out.settings.find((setting) => setting.id === "enlace_1")?.default, "https://mitienda.com/products/x");
+  /*
+   * Sin `default`: Shopify rechaza el **esquema entero** si un ajuste de tipo
+   * `url` trae uno —«default must be a string or datasource access path»— y
+   * entonces no se guarda el archivo. El original va dentro del Liquid.
+   */
+  assert.equal(out.settings.find((setting) => setting.id === "enlace_1")?.default, undefined);
+  assert.ok(out.liquid.includes("https://mitienda.com/products/x"));
 });
 
 test("las anclas internas no se convierten en ajuste", () => {
@@ -474,7 +480,8 @@ test("un botón con `>` dentro de un atributo sí recibe su campo editable", () 
 
   assert.ok(out.settings.some((setting) => setting.id === "enlace_1"), "no creó el ajuste");
   assert.ok(out.liquid.includes("{{ section.settings.enlace_1 }}"));
-  assert.equal(out.settings.find((setting) => setting.id === "enlace_1")?.default, "https://mitienda.com/p");
+  assert.equal(out.settings.find((setting) => setting.id === "enlace_1")?.default, undefined);
+  assert.ok(out.liquid.includes("https://mitienda.com/p"));
 });
 
 test("el atributo con `>` no se destroza al reescribir", () => {
@@ -520,4 +527,17 @@ test("un titular dentro de un atributo tampoco", () => {
   const out = sectionize('<div data-tip="<h2>Oferta</h2>"><h2>Oferta de verdad</h2></div>');
 
   assert.equal(out.settings.filter((setting) => setting.type === "text").length, 1);
+});
+
+test("ningún ajuste de tipo url lleva default", () => {
+  /*
+   * Shopify no rechaza solo ese ajuste: **no guarda el archivo**. La página se
+   * queda sin plantilla y el error que llega habla de permisos, que manda a
+   * mirar donde no es.
+   */
+  const out = sectionize('<a href="https://x/p">Ir</a><img src="https://x/a.jpg">');
+
+  for (const setting of out.settings) {
+    if (setting.type === "url") assert.equal(setting.default, undefined, setting.id);
+  }
 });
