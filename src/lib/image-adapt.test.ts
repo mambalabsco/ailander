@@ -5,6 +5,7 @@ import {
   buildReadingPrompt,
   nearestRatio,
   imageMediaType,
+  pickImageModel,
   readImageSize,
   reviewReading,
   type ImageReading,
@@ -210,4 +211,34 @@ test("el tipo de imagen se lee de los bytes, no de la extensión", () => {
   assert.equal(imageMediaType(wav), null);
 
   assert.equal(imageMediaType(new Uint8Array(4)), null, "sin bytes no se inventa");
+});
+
+test("el modelo se elige de los que el CLI tiene, no del que esperábamos", () => {
+  /*
+   * Estaba escrito a fijo y el CLI empezó a contestar `No model with job_type
+   * "nano-banana-pro"`. Un nombre retirado no debe tumbar la pantalla entera.
+   */
+  assert.equal(
+    pickImageModel(["seedream-4", "nano-banana-pro", "flux"]),
+    "nano-banana-pro",
+    "el preferido cuando está",
+  );
+
+  assert.equal(
+    pickImageModel(["seedream-4", "nano-banana-2"]),
+    "nano-banana-2",
+    "el siguiente de la lista cuando el primero no está",
+  );
+
+  // Las versiones nuevas llegan con el sufijo detrás y son el mismo modelo.
+  assert.equal(pickImageModel(["nano-banana-pro-v2", "flux"]), "nano-banana-pro-v2");
+
+  assert.equal(
+    pickImageModel(["flux", "seedream-4"]),
+    "flux",
+    "cualquiera antes que ninguno: una imagen adaptada sirve y ninguna no",
+  );
+
+  assert.equal(pickImageModel([]), null, "sin modelos no se inventa uno");
+  assert.equal(pickImageModel(["", ""]), null);
 });

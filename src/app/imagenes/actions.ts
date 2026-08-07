@@ -11,11 +11,12 @@ import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { runInBackground } from "@/lib/background";
 import { requireContext } from "@/lib/supabase/session";
-import { generateWithCli } from "@/lib/higgsfield-cli";
+import { generateWithCli, listCliModels } from "@/lib/higgsfield-cli";
 import {
   buildEditPrompt,
   buildReadingPrompt,
   imageMediaType,
+  pickImageModel,
   nearestRatio,
   readImageSize,
   reviewReading,
@@ -52,7 +53,25 @@ import type { LaunchResult } from "@/types/jobs";
  * que no se parece a lo que vio.
  */
 
-const MODEL = "nano-banana-pro";
+/**
+ * El modelo no se escribe a fijo: se elige de los que el CLI dice tener.
+ *
+ * Estaba puesto a mano y el CLI empezó a contestar `No model with job_type
+ * "nano-banana-pro"`. Un nombre retirado o renombrado en Higgsfield no debe
+ * tumbar la pantalla entera, así que se pregunta y se usa el mejor que haya.
+ */
+async function modeloDeImagen(): Promise<string> {
+  const disponibles = await listCliModels("image");
+  const elegido = pickImageModel(disponibles.map((model) => model.slug));
+
+  if (!elegido) {
+    throw new Error(
+      "El CLI de Higgsfield no devolvió ningún modelo de imagen. Puede que se haya cerrado la sesión: entra en Estudio y vuelve a iniciarla.",
+    );
+  }
+
+  return elegido;
+}
 
 /** Cuántas imágenes se adaptan de una tanda. */
 const MAX_BATCH = 24;
@@ -297,7 +316,7 @@ export async function adaptImagesAction(input: unknown): Promise<LaunchResult> {
           const prompt = buildEditPrompt({ reading: reading.data, productName: product.name });
 
           const generated = await generateWithCli({
-            model: MODEL,
+            model: await modeloDeImagen(),
             prompt,
             aspectRatio,
             // La de origen primero y la del producto después: el orden es el que
@@ -395,7 +414,7 @@ export async function regenerateImageAction(input: unknown): Promise<LaunchResul
       });
 
       const generated = await generateWithCli({
-        model: MODEL,
+        model: await modeloDeImagen(),
         prompt,
         aspectRatio: previous.aspectRatio,
         references: [{ filename: "partida.jpg", bytes }, ...references],

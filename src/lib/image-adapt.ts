@@ -293,3 +293,46 @@ export function reviewReading(reading: ImageReading): string[] {
 
   return warnings;
 }
+
+/**
+ * Los modelos de imagen que sirven para adaptar, por orden de preferencia.
+ *
+ * Nano Banana es el que entiende «esta escena, con este producto» a partir de
+ * dos referencias, que es justo lo que hace la adaptación.
+ */
+const PREFERIDOS = ["nano-banana-pro", "nano-banana-2", "nano-banana"];
+
+/**
+ * Cuál usar de los que el CLI dice tener.
+ *
+ * El modelo estaba escrito a fijo y el CLI contestaba `No model with job_type
+ * "nano-banana-pro"`: los nombres cambian cuando Higgsfield renombra o retira
+ * uno, y entonces no falla una imagen, deja de funcionar la pantalla entera.
+ *
+ * Ante un nombre que no está se prefiere seguir con otro modelo a no generar
+ * nada: una imagen adaptada con el segundo de la lista sirve, y ninguna no.
+ */
+export function pickImageModel(available: string[]): string | null {
+  const limpios = available.filter(Boolean);
+
+  if (limpios.length === 0) return null;
+
+  const exacto = PREFERIDOS.find((preferido) => limpios.includes(preferido));
+
+  if (exacto) return exacto;
+
+  /*
+   * Un nombre que empieza igual antes que uno cualquiera.
+   *
+   * Las versiones nuevas llegan como `nano-banana-pro-v2` o con la fecha
+   * detrás: es el mismo modelo y sigue sirviendo, mientras que el primero de
+   * la lista podría ser cualquier cosa.
+   */
+  for (const preferido of PREFERIDOS) {
+    const parecido = limpios.find((slug) => slug.startsWith(preferido));
+
+    if (parecido) return parecido;
+  }
+
+  return limpios[0];
+}
