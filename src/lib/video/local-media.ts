@@ -328,6 +328,59 @@ export function speedArgs(
   ];
 }
 
+/**
+ * Los argumentos para meterle música a un vídeo que ya está montado.
+ *
+ * ## Por qué aquí y no volviendo al servicio de montaje
+ *
+ * Porque ese **sustituye** el audio por las pistas que se le dan, no lo mezcla:
+ * mandarle el vídeo subtitulado y una música devolvía un vídeo con música y
+ * **sin voz**. Comprobado en un montaje real.
+ *
+ * Lo que hace falta no es montar otra vez, es mezclar: la voz ya está dentro
+ * del vídeo y solo hay que sumarle la cama debajo.
+ *
+ * ## La imagen no se toca
+ *
+ * `-c:v copy` copia el vídeo tal cual, sin recodificar. Es lo que hace que esto
+ * dure segundos en un servidor de dos núcleos en vez de minutos — y de paso, la
+ * imagen no pierde nada de calidad, que al recodificar por segunda vez sí se
+ * nota.
+ *
+ * ## Y la música se corta sola
+ *
+ * `duration=first` deja la mezcla del largo de la **primera** entrada, que es
+ * el vídeo. Una canción más larga se corta ahí, que es justo lo que no pasaba
+ * antes: el anuncio terminaba y seguía sonando sobre negro.
+ */
+export function mixMusicArgs(video: string, music: string, out: string): string[] {
+  return [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    video,
+    "-i",
+    music,
+    "-filter_complex",
+    "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0[a]",
+    "-map",
+    "0:v",
+    "-map",
+    "[a]",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "160k",
+    "-threads",
+    "1",
+    "-y",
+    out,
+  ];
+}
+
 /** Los argumentos para preguntar cuánto dura y de qué tamaño es. */
 export function probeArgs(input: string): string[] {
   return [

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  MAX_SECONDS,
+  mixMusicArgs,
+MAX_SECONDS,
   audioArgs,
   downloadArgs,
   frameArgs,
@@ -323,4 +324,38 @@ test("un solo núcleo y preajuste rápido", () => {
 
   assert.equal(args[args.indexOf("-threads") + 1], "1");
   assert.equal(args[args.indexOf("-preset") + 1], "veryfast");
+});
+
+/* --------------------- Mezclar la música sobre el vídeo -------------------- */
+
+test("la imagen se copia, no se recodifica", () => {
+  /*
+   * Es lo que hace que esto dure segundos en un servidor de dos núcleos en vez
+   * de minutos, y de paso la imagen no pierde nada: recodificar por segunda vez
+   * sí se nota.
+   */
+  const args = mixMusicArgs("/v.mp4", "/m.mp3", "/out.mp4");
+
+  assert.equal(args[args.indexOf("-c:v") + 1], "copy");
+});
+
+test("se mezclan las dos pistas, no se sustituye una", () => {
+  /*
+   * El servicio de montaje sustituye el audio por lo que se le da: el vídeo
+   * salía con música y **sin voz**. La voz ya está dentro del vídeo, así que
+   * aquí hay que sumar, no reemplazar.
+   */
+  const filtro = mixMusicArgs("/v.mp4", "/m.mp3", "/o.mp4")[
+    mixMusicArgs("/v.mp4", "/m.mp3", "/o.mp4").indexOf("-filter_complex") + 1
+  ];
+
+  assert.match(filtro, /\[0:a\]\[1:a\]amix/);
+});
+
+test("la música se corta al acabar el vídeo", () => {
+  // `duration=first` deja la mezcla del largo de la primera entrada, el vídeo.
+  // Sin eso el anuncio terminaba y la música seguía sonando sobre negro.
+  const args = mixMusicArgs("/v.mp4", "/m.mp3", "/o.mp4");
+
+  assert.ok(args.some((arg) => arg.includes("duration=first")));
 });

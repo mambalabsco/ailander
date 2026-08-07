@@ -15,6 +15,7 @@ import {
   readProbe,
   readVideoUrl,
   loudnormArgs,
+  mixMusicArgs,
   speedArgs,
 } from "@/lib/video/local-media";
 
@@ -397,6 +398,66 @@ export async function speedUpVideo(
     return {
       bytes: new Uint8Array(),
       problem: error instanceof Error ? error.message : "no se pudo acelerar.",
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Le mete la música a un vídeo ya montado, sin tocar la imagen.
+ *
+ * La voz ya está dentro del vídeo: aquí solo se suma la cama debajo. Volver al
+ * servicio de montaje no vale porque **sustituye** el audio en vez de mezclarlo
+ * — devolvía el vídeo con música y sin voz.
+ */
+export async function mixMusic(
+  videoUrl: string,
+  musicUrl: string,
+): Promise<{ bytes: Uint8Array; problem: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "mezcla-"));
+
+  try {
+    const [video, music] = await Promise.all([
+      fetch(videoUrl, { cache: "no-store" }),
+      fetch(musicUrl, { cache: "no-store" }),
+    ]);
+
+    if (!video.ok) return { bytes: new Uint8Array(), problem: `no se pudo descargar el vídeo (${video.status}).` };
+    if (!music.ok) return { bytes: new Uint8Array(), problem: `no se pudo descargar la música (${music.status}).` };
+
+    const entra = join(dir, "video.mp4");
+    const cama = join(dir, "musica");
+    const sale = join(dir, "sale.mp4");
+
+    await writeFile(entra, Buffer.from(await video.arrayBuffer()));
+    await writeFile(cama, Buffer.from(await music.arrayBuffer()));
+
+    let ran;
+
+    try {
+      ran = await run("ffmpeg", mixMusicArgs(entra, cama, sale), 300_000);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+
+      return {
+        bytes: new Uint8Array(),
+        problem: /ENOENT/i.test(why)
+          ? "el proceso de la plataforma no encuentra ffmpeg en su PATH."
+          : `no se pudo ejecutar ffmpeg: ${why.slice(0, 160)}`,
+      };
+    }
+
+    if (ran.code !== 0) {
+      const last = ran.stderr.trim().split("\n").pop() ?? "";
+      return { bytes: new Uint8Array(), problem: `ffmpeg falló: ${last.slice(0, 160)}` };
+    }
+
+    return { bytes: new Uint8Array(await readFile(sale)), problem: "" };
+  } catch (error) {
+    return {
+      bytes: new Uint8Array(),
+      problem: error instanceof Error ? error.message : "no se pudo mezclar.",
     };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});

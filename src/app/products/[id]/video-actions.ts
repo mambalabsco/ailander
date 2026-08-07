@@ -1368,25 +1368,32 @@ export async function assembleVideoAction(
            */
           if (video.musicUrl) {
             try {
-              const conMusica = await compose([
-                {
-                  id: "video",
-                  type: "video",
-                  keyframes: [
-                    { timestamp: 0, duration: Math.round(timeline.seconds * 1000), url: finalUrl },
-                  ],
-                },
-                {
-                  id: "musica",
-                  type: "audio",
-                  keyframes: [
-                    { timestamp: 0, duration: Math.round(timeline.seconds * 1000), url: video.musicUrl },
-                  ],
-                },
-              ]);
+              /*
+               * La música se **mezcla**, no se vuelve a montar.
+               *
+               * El servicio de montaje sustituye el audio por las pistas que se
+               * le dan en vez de mezclarlo: comprobado en un montaje real, el
+               * vídeo salía con subtítulos, con música y **sin voz**. La voz ya
+               * está dentro del vídeo subtitulado, así que lo que hace falta es
+               * sumarle la cama debajo — y eso lo hace ffmpeg copiando la
+               * imagen tal cual, en segundos y sin recodificarla.
+               *
+               * La música se corta sola al final del vídeo: la mezcla dura lo
+               * que dure la primera entrada.
+               */
+              const { mixMusic } = await import("@/lib/video/fetch-video");
+              const mezcla = await mixMusic(finalUrl, video.musicUrl);
 
-              finalUrl = conMusica.videoUrl;
-              subtitulos += " y música encima";
+              if (mezcla.problem) throw new Error(mezcla.problem);
+
+              finalUrl = await uploadVideoAsset({
+                videoId,
+                name: "montado-con-musica.mp4",
+                data: Buffer.from(mezcla.bytes),
+                contentType: "video/mp4",
+              });
+
+              subtitulos += " y música mezclada debajo";
             } catch (error) {
               subtitulos += `. Sin música: ${error instanceof Error ? error.message : "falló"}`;
             }
