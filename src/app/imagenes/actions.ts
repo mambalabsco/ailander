@@ -66,7 +66,7 @@ async function modeloDeImagen(): Promise<string> {
 
   if (!elegido) {
     throw new Error(
-      "El CLI de Higgsfield no devolvió ningún modelo de imagen. Puede que se haya cerrado la sesión: entra en Estudio y vuelve a iniciarla.",
+      "El CLI de Higgsfield no ofrece ningún modelo que genere imágenes a partir de un texto (los que hay son herramientas: reescalar, restaurar). Puede que se haya cerrado la sesión: entra en Estudio y vuelve a iniciarla.",
     );
   }
 

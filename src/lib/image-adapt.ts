@@ -302,6 +302,17 @@ export function reviewReading(reading: ImageReading): string[] {
  */
 const PREFERIDOS = ["nano-banana-pro", "nano-banana-2", "nano-banana"];
 
+/*
+ * Los que **no** sirven aunque estén en la lista.
+ *
+ * El CLI mezcla generadores con herramientas: reescaladores, quitafondos,
+ * restauradores. No aceptan `prompt` ni `aspect_ratio`, así que elegir uno de
+ * ellos falla con «Unknown params: prompt, aspect_ratio» — y falla la tanda
+ * entera, una imagen tras otra, sin que el mensaje diga que el problema es el
+ * modelo elegido.
+ */
+const NO_GENERAN = /upscale|enhance|restore|remove.?bg|background.?remov|colorize|interpolat|denoise/i;
+
 /**
  * Cuál usar de los que el CLI dice tener.
  *
@@ -313,7 +324,7 @@ const PREFERIDOS = ["nano-banana-pro", "nano-banana-2", "nano-banana"];
  * nada: una imagen adaptada con el segundo de la lista sirve, y ninguna no.
  */
 export function pickImageModel(available: string[]): string | null {
-  const limpios = available.filter(Boolean);
+  const limpios = available.filter(Boolean).filter((slug) => !NO_GENERAN.test(slug));
 
   if (limpios.length === 0) return null;
 
@@ -334,5 +345,14 @@ export function pickImageModel(available: string[]): string | null {
     if (parecido) return parecido;
   }
 
-  return limpios[0];
+  /*
+   * Y si ninguno de los buenos está, **ninguno**.
+   *
+   * Antes se cogía el primero de la lista con el argumento de que una imagen
+   * adaptada con el segundo modelo sirve y ninguna no. Era falso: el primero
+   * resultó ser un reescalador, que no acepta ni prompt ni proporción, y las
+   * cinco imágenes fallaron con un error que no señalaba al modelo. Vale más
+   * decir que no hay generador que elegir uno a ciegas.
+   */
+  return null;
 }

@@ -536,3 +536,22 @@ export const TEMPLATE_COPY_SCHEMA = object({
     }),
   },
 });
+
+/* ---------------------- Franjas de gancho sobre la imagen ---------------------- */
+
+/**
+ * Una franja por creatividad, con qué palabras van resaltadas.
+ *
+ * `highlights` son trozos **literales** de la frase y no posiciones: un índice
+ * se descoloca en cuanto alguien edita el texto a mano, y editarlo a mano es lo
+ * normal en esta pantalla.
+ */
+export const IMAGE_HOOKS_SCHEMA = object({
+  hooks: {
+    type: "array",
+    items: object({
+      text: str,
+      highlights: { type: "array", items: str },
+    }),
+  },
+});

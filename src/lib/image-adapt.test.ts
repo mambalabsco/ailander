@@ -233,10 +233,26 @@ test("el modelo se elige de los que el CLI tiene, no del que esperábamos", () =
   // Las versiones nuevas llegan con el sufijo detrás y son el mismo modelo.
   assert.equal(pickImageModel(["nano-banana-pro-v2", "flux"]), "nano-banana-pro-v2");
 
+  /*
+   * Ninguno antes que uno a ciegas.
+   *
+   * Antes se cogía el primero de la lista. El primero resultó ser
+   * `bytedance_image_upscale` —un reescalador, que no acepta ni prompt ni
+   * proporción— y las cinco imágenes fallaron con «Unknown params: prompt,
+   * aspect_ratio», un error que no señala al modelo por ningún lado.
+   */
+  assert.equal(pickImageModel(["flux", "seedream-4"]), null, "ninguno de los buenos está");
+
   assert.equal(
-    pickImageModel(["flux", "seedream-4"]),
-    "flux",
-    "cualquiera antes que ninguno: una imagen adaptada sirve y ninguna no",
+    pickImageModel(["bytedance_image_upscale", "nano-banana-pro"]),
+    "nano-banana-pro",
+    "las herramientas no cuentan aunque estén en la lista",
+  );
+
+  assert.equal(
+    pickImageModel(["bytedance_image_upscale", "codeformer-restore"]),
+    null,
+    "una lista solo de herramientas no tiene generador",
   );
 
   assert.equal(pickImageModel([]), null, "sin modelos no se inventa uno");
