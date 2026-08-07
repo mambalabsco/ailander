@@ -377,3 +377,44 @@ export function productTemplateFrom(input: {
 
   return JSON.stringify({ sections, order }, null, 2);
 }
+
+/**
+ * Reparte los textos en tandas que quepan en una respuesta.
+ *
+ * Una plantilla real trae entre cuarenta y cien textos, y pedirlos todos de
+ * golpe agota la respuesta a media lista: se corta, no se puede leer, y la
+ * página entera se queda sin reescribir. El síntoma es «la respuesta se cortó
+ * por longitud» después de haber pagado la generación.
+ *
+ * Se mide por **caracteres** y no por número de campos, porque lo que no cabe
+ * es la respuesta y la respuesta mide lo que midan los textos: cuarenta
+ * titulares caben de sobra, cuarenta párrafos de descripción no.
+ *
+ * Y se cuenta lo que sale, no lo que entra: el texto vuelve reescrito con una
+ * longitud parecida a la que tenía, así que su tamaño es la mejor estimación
+ * del sitio que va a ocupar de vuelta.
+ */
+export function batchFields(fields: CopyField[], maxChars = 6_000): CopyField[][] {
+  const batches: CopyField[][] = [];
+
+  let current: CopyField[] = [];
+  let size = 0;
+
+  for (const field of fields) {
+    // La ruta viaja de ida y de vuelta, así que también ocupa.
+    const cost = field.value.length + field.path.length + 20;
+
+    if (current.length > 0 && size + cost > maxChars) {
+      batches.push(current);
+      current = [];
+      size = 0;
+    }
+
+    current.push(field);
+    size += cost;
+  }
+
+  if (current.length > 0) batches.push(current);
+
+  return batches;
+}

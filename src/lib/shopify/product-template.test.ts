@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   applyCopy,
+  batchFields,
   buildTemplateCopyPrompt,
   collectCopy,
   isCopyKey,
@@ -11,6 +12,7 @@ import {
   readTemplateJson,
   productTemplateFrom,
   readTemplateCopy,
+  type CopyField,
   type ProductTemplate,
 } from "./product-template.ts";
 
@@ -317,4 +319,47 @@ test("lo que no es una plantilla devuelve nulo, no revienta", () => {
   assert.equal(readTemplateJson("{% section 'main' %}"), null, "eso sí es Liquid");
   assert.equal(readTemplateJson(""), null);
   assert.equal(readTemplateJson("[1,2,3]")?.sections, undefined);
+});
+
+test("los textos se reparten por tamaño, no por número", () => {
+  /*
+   * Lo que no cabe es la respuesta, y mide lo que midan los textos: cuarenta
+   * titulares caben de sobra y cuarenta descripciones no. Contando campos, una
+   * plantilla de párrafos largos se corta igual que antes.
+   */
+  const corto = (n: number): CopyField => ({
+    path: `s.b.k${n}`,
+    block: "x",
+    key: `k${n}`,
+    value: "hola",
+  });
+
+  const largo = (n: number): CopyField => ({
+    path: `s.b.L${n}`,
+    block: "x",
+    key: `L${n}`,
+    value: "x".repeat(3_000),
+  });
+
+  const cortos = batchFields(Array.from({ length: 20 }, (_, i) => corto(i)), 6_000);
+  assert.equal(cortos.length, 1, "veinte frases cortas van en una tanda");
+
+  const largos = batchFields(Array.from({ length: 6 }, (_, i) => largo(i)), 6_000);
+  assert.ok(largos.length >= 3, "seis párrafos largos, no");
+
+  // Ninguna tanda puede quedarse vacía ni perder campos por el camino.
+  const total = largos.reduce((sum, batch) => sum + batch.length, 0);
+  assert.equal(total, 6);
+  assert.ok(largos.every((batch) => batch.length > 0));
+});
+
+test("un solo texto enorme va en su tanda y no se pierde", () => {
+  // Pasa con una descripción larga. Trocearla no se puede; dejarla fuera sí
+  // sería un texto sin reescribir del que nadie se entera.
+  const enorme: CopyField = { path: "s.b.k", block: "x", key: "k", value: "y".repeat(20_000) };
+
+  const batches = batchFields([enorme], 6_000);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0][0].value.length, 20_000);
 });

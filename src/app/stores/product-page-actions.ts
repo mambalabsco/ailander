@@ -13,6 +13,7 @@ import {
   applyCopy,
   buildTemplateCopyPrompt,
   collectCopy,
+  batchFields,
   readTemplateCopy,
   readTemplateJson,
 } from "@/lib/shopify/product-template";
@@ -232,6 +233,7 @@ export async function generateProductPageAction(input: unknown): Promise<
 
       await report(`Reescribiendo ${fields.length} textos para ${product.name}`);
 
+
       /*
        * El maestro de la investigación, si lo hay.
        *
@@ -259,21 +261,71 @@ export async function generateProductPageAction(input: unknown): Promise<
         .join("\n")
         .slice(0, 6_000);
 
-      const written = await generateStructured<{ fields: { path: string; text: string }[] }>({
-        prompt: buildTemplateCopyPrompt({
-          fields,
-          productName: product.name,
-          audience: product.targetAudience || "el público objetivo",
-          country: product.country || "México",
-          context: context || undefined,
-          references: references.length > 0 ? references : undefined,
-        }),
-        schema: TEMPLATE_COPY_SCHEMA,
-        role: "copy",
-        maxTokens: 16_000,
-      });
+      /*
+       * En tandas, y cada una por su cuenta.
+       *
+       * Pidiendo los cuarenta o cien textos de golpe, la respuesta se agotaba a
+       * media lista: se cortaba, no se podía leer, y la página entera se
+       * quedaba sin reescribir después de haberla pagado.
+       *
+       * Independientes a propósito: si una tanda falla, las demás siguen y esos
+       * textos se quedan con los del modelo — que se ve al leer la página. Que
+       * fallen todas por una no se ve hasta abrirla.
+       */
+      const batches = batchFields(fields);
 
-      const changes = readTemplateCopy(fields, written.data.fields ?? []);
+      const changes: Record<string, string> = {};
+      const gastado = { input: 0, output: 0 };
+      let fallidas = 0;
+
+      /**
+       * Reescribe una tanda, y si no cupo la parte en dos y lo reintenta.
+       *
+       * Cuando la respuesta se corta, el fallo no es del texto: es del tamaño.
+       * La mitad de una tanda que no cupo casi siempre cabe, y así se salva lo
+       * que antes se perdía entero.
+       */
+      const rewrite = async (batch: typeof fields, depth = 0): Promise<void> => {
+        try {
+          const written = await generateStructured<{ fields: { path: string; text: string }[] }>({
+            prompt: buildTemplateCopyPrompt({
+              fields: batch,
+              productName: product.name,
+              audience: product.targetAudience || "el público objetivo",
+              country: product.country || "México",
+              context: context || undefined,
+              references: references.length > 0 ? references : undefined,
+            }),
+            schema: TEMPLATE_COPY_SCHEMA,
+            role: "copy",
+            maxTokens: 16_000,
+          });
+
+          gastado.input += written.inputTokens;
+          gastado.output += written.outputTokens;
+
+          Object.assign(changes, readTemplateCopy(batch, written.data.fields ?? []));
+        } catch (error) {
+          const cortada = /cort|length|token/i.test(
+            error instanceof Error ? error.message : "",
+          );
+
+          if (cortada && depth < 2 && batch.length > 1) {
+            const mitad = Math.ceil(batch.length / 2);
+
+            await rewrite(batch.slice(0, mitad), depth + 1);
+            await rewrite(batch.slice(mitad), depth + 1);
+            return;
+          }
+
+          fallidas += 1;
+        }
+      };
+
+      for (const [index, batch] of batches.entries()) {
+        await report(`Reescribiendo textos (${index + 1} de ${batches.length})`);
+        await rewrite(batch);
+      }
 
       if (Object.keys(changes).length === 0) {
         throw new Error("El modelo no devolvió ningún texto reconocible. Vuelve a intentarlo.");
@@ -304,14 +356,15 @@ export async function generateProductPageAction(input: unknown): Promise<
           `${Object.keys(changes).length} de ${fields.length} textos reescritos${
             faltan > 0 ? ` — quedan ${faltan} con el texto del modelo` : ""
           }.`,
+          fallidas > 0 ? `${fallidas} tanda(s) no se pudieron reescribir.` : "",
           references.length > 0 ? `Con ${references.length} referencia(s) de enfoque.` : "",
           noLeidas.length > 0 ? `No se pudieron leer: ${noLeidas.join(", ")}.` : "",
           `Asígnala al producto en Shopify: ficha del producto → Plantilla de tema → ${suffix}.`,
         ]
           .filter(Boolean)
           .join(" "),
-        inputTokens: written.inputTokens,
-        outputTokens: written.outputTokens,
+        inputTokens: gastado.input,
+        outputTokens: gastado.output,
       };
     },
   });
