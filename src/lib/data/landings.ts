@@ -200,9 +200,26 @@ export async function updateLandingComments(
 ): Promise<void> {
   const { supabase } = await requireContext();
 
+  /*
+   * Y la sección que los pinta, si no está.
+   *
+   * Guardarlos sin ella los deja en la base de datos y **fuera de la página**:
+   * el resumen decía «12 comentarios escritos» y en la vista previa no había
+   * ninguno. Una copia trae solo secciones `crudo` —el marcado del original—,
+   * así que no hay ningún sitio donde salgan a menos que se añada.
+   *
+   * Va al final, que es donde vive la prueba social en un publirreportaje.
+   */
+  const page = await readLanding(id);
+
+  const sections =
+    page && !page.sections.some((section) => section.kind === "comentarios")
+      ? [...page.sections, { kind: "comentarios" as const }]
+      : page?.sections;
+
   const { error } = await supabase
     .from("landing_pages")
-    .update({ comments })
+    .update(sections ? { comments, sections } : { comments })
     .eq("id", id);
 
   if (error) throw new Error(`No se pudieron guardar los comentarios: ${error.message}`);
