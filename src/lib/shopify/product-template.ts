@@ -25,6 +25,74 @@
  * nunca ha estado en juego.
  */
 
+/**
+ * El JSON de una plantilla de tema, que **no** es JSON del todo.
+ *
+ * Shopify escribe una cabecera de comentario en cada plantilla que pasa por su
+ * editor: «IMPORTANT: The contents of this file are auto-generated». Es un
+ * bloque de comentario delante del objeto, y `JSON.parse` lo rechaza — el fallo
+ * salía como «no es un JSON válido», que hacía pensar que la plantilla estaba
+ * en Liquid cuando estaba perfectamente bien.
+ *
+ * Se quitan respetando las cadenas: dos barras dentro de un texto son parte del
+ * texto, y en estas plantillas hay URLs a puñados.
+ */
+export function readTemplateJson(text: string): ProductTemplate | null {
+  let out = "";
+  let index = 0;
+  let inString = false;
+
+  while (index < text.length) {
+    const char = text[index];
+
+    if (inString) {
+      out += char;
+
+      // Una comilla escapada no cierra la cadena.
+      if (char === "\\") {
+        out += text[index + 1] ?? "";
+        index += 2;
+        continue;
+      }
+
+      if (char === '"') inString = false;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      out += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && text[index + 1] === "*") {
+      const end = text.indexOf("*/", index + 2);
+      index = end === -1 ? text.length : end + 2;
+      continue;
+    }
+
+    if (char === "/" && text[index + 1] === "/") {
+      const end = text.indexOf("\n", index);
+      index = end === -1 ? text.length : end;
+      continue;
+    }
+
+    out += char;
+    index += 1;
+  }
+
+  try {
+    const parsed = JSON.parse(out.trim()) as ProductTemplate;
+
+    // Un JSON válido que no sea un objeto no es una plantilla.
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Un texto de la plantilla, con dónde vive para poder devolverlo a su sitio. */
 export interface CopyField {
   /** `secciones.X.bloques.Y.ajuste`, ya legible. Es la clave del intercambio. */
@@ -265,13 +333,9 @@ export function readTemplateCopy(
  * nombre inventado no da error: Shopify pinta la plantilla sin esa sección.
  */
 export function mainProductSection(defaultTemplate: string): string | null {
-  let parsed: ProductTemplate;
+  const parsed = readTemplateJson(defaultTemplate);
 
-  try {
-    parsed = JSON.parse(defaultTemplate) as ProductTemplate;
-  } catch {
-    return null;
-  }
+  if (!parsed) return null;
 
   const entries = Object.entries(parsed.sections ?? {});
 

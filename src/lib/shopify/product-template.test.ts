@@ -8,6 +8,7 @@ import {
   isCopyKey,
   isWorthRewriting,
   mainProductSection,
+  readTemplateJson,
   productTemplateFrom,
   readTemplateCopy,
   type ProductTemplate,
@@ -278,4 +279,42 @@ test("las referencias entran como enfoque, con la prohibición delante", () => {
 
   assert.ok(!sin.includes("Referencias"));
   assert.ok(!sin.includes("Sus cifras son suyas"));
+});
+
+test("la cabecera que escribe Shopify no invalida la plantilla", () => {
+  /*
+   * Shopify pone este comentario en cada plantilla que pasa por su editor.
+   * `JSON.parse` lo rechaza, y el fallo salía como «no es un JSON válido» —
+   * que hacía pensar que la plantilla estaba en Liquid estando perfecta.
+   */
+  const real = `/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ * ------------------------------------------------------------
+ */
+{
+  "sections": { "main": { "type": "main-product" } },
+  "order": ["main"]
+}`;
+
+  const parsed = readTemplateJson(real);
+
+  assert.equal(parsed?.sections?.main?.type, "main-product");
+  assert.deepEqual(parsed?.order, ["main"]);
+});
+
+test("una barra dentro de un texto no se toma por un comentario", () => {
+  // Estas plantillas están llenas de URLs, y `//` dentro de una cadena es
+  // parte de la cadena: quitarlo se comería medio archivo.
+  const conUrl = '{"sections":{"a":{"type":"x","settings":{"text":"ve a https://x.com/y"}}}}';
+
+  const parsed = readTemplateJson(conUrl);
+
+  assert.equal(parsed?.sections?.a?.settings?.text, "ve a https://x.com/y");
+});
+
+test("lo que no es una plantilla devuelve nulo, no revienta", () => {
+  assert.equal(readTemplateJson("{% section 'main' %}"), null, "eso sí es Liquid");
+  assert.equal(readTemplateJson(""), null);
+  assert.equal(readTemplateJson("[1,2,3]")?.sections, undefined);
 });

@@ -14,7 +14,7 @@ import {
   buildTemplateCopyPrompt,
   collectCopy,
   readTemplateCopy,
-  type ProductTemplate,
+  readTemplateJson,
 } from "@/lib/shopify/product-template";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
@@ -184,13 +184,11 @@ export async function generateProductPageAction(input: unknown): Promise<
       const [file] = await listThemeFiles(store, themeId, [model]);
       if (!file?.body) throw new Error(`No se pudo leer ${model} de ese tema.`);
 
-      let template: ProductTemplate;
+      const template = readTemplateJson(file.body);
 
-      try {
-        template = JSON.parse(file.body) as ProductTemplate;
-      } catch {
+      if (!template) {
         throw new Error(
-          `${model} no es un JSON válido. Las plantillas hechas con Liquid (.liquid) no sirven de modelo: solo las de bloques (.json).`,
+          `No se pudo leer ${model}. Si es una plantilla de bloques debería poder leerse aunque lleve la cabecera de comentario que escribe Shopify; si está hecha en Liquid, esa no sirve de modelo.`,
         );
       }
 
