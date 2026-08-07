@@ -239,6 +239,8 @@ export async function fetchVideo(
 export async function levelAudio(
   source: string,
   lufs: number,
+  /** Hasta dónde recortarla. Cero la deja entera. */
+  seconds = 0,
 ): Promise<{ bytes: Uint8Array; problem: string }> {
   /*
    * Sin comprobación previa: se ejecuta y se cuenta lo que pase.
@@ -272,7 +274,7 @@ export async function levelAudio(
     let ran;
 
     try {
-      ran = await run("ffmpeg", loudnormArgs(entra, sale, lufs), FFMPEG_MS);
+      ran = await run("ffmpeg", loudnormArgs(entra, sale, lufs, seconds), FFMPEG_MS);
     } catch (error) {
       /*
        * Aquí es donde se sabe de verdad si falta.

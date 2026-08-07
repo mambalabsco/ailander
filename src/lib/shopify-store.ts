@@ -473,8 +473,17 @@ export async function writeThemeFiles(
       const message = error instanceof Error ? error.message : "";
 
       if (/access|denied|scope|not approved|exemption/i.test(message)) {
+        /*
+         * El mensaje de Shopify va **detrás**, no se sustituye.
+         *
+         * Antes esto afirmaba que faltaba el permiso, y con el permiso ya
+         * marcado mandaba a mirar donde no era. Sigue siendo la causa más
+         * común, y la segunda es que el token se emitiera antes de marcarlo
+         * —los permisos viajan dentro del token y no se actualizan solos— pero
+         * afirmar una tapa las demás.
+         */
         throw new Error(
-          "Shopify no deja escribir en el tema. Falta `write_theme_code`, que va en su propia fila del panel de la app —«Theme Code»— y viene desmarcado. Márcalo allí y vuelve a conectar la tienda: con eso basta, no hace falta ninguna exención.",
+          `Shopify no deja escribir en el tema: ${message.slice(0, 200)}. Lo habitual es que falte «write_theme_code» —va en su propia fila del panel de la app, «Theme Code», y viene desmarcada—, o que esté marcada pero la tienda se conectara antes: los permisos viajan dentro del token, así que hay que volver a conectarla para que los recoja.`,
         );
       }
 

@@ -194,7 +194,21 @@ export function audioArgs(input: string, out: string): string[] {
  * `TP` es el tope de pico: sin él, un golpe suelto satura aunque la media esté
  * bien, y eso se oye como un chasquido encima de la voz.
  */
-export function loudnormArgs(input: string, out: string, lufs: number): string[] {
+export function loudnormArgs(
+  input: string,
+  out: string,
+  lufs: number,
+  /**
+   * Hasta dónde se usa la pista. Cero es «entera».
+   *
+   * Una canción de cuatro minutos bajo un anuncio de dos **alarga el vídeo**:
+   * el montador estira la salida hasta que se acaba la pista más larga, así que
+   * el anuncio termina y siguen dos minutos de música sobre negro. Cortarla
+   * aquí es lo único que lo evita — el montaje no tiene dónde decir «hasta
+   * aquí».
+   */
+  seconds = 0,
+): string[] {
   // Dentro de lo que admite el filtro. Un valor fuera de rango no se ignora:
   // ffmpeg aborta y la pista se queda sin ajustar.
   const target = Math.max(-70, Math.min(-5, Math.round(lufs)));
@@ -209,6 +223,13 @@ export function loudnormArgs(input: string, out: string, lufs: number): string[]
     "-vn",
     "-af",
     `loudnorm=I=${target}:TP=-1.5:LRA=11`,
+    /*
+     * El corte va **después** del filtro y no con `-ss` delante: así se mide la
+     * sonoridad de lo que de verdad va a sonar. Midiendo la canción entera, un
+     * final tranquilo bajaría la media y los dos primeros minutos —los que se
+     * oyen— quedarían más altos de lo pedido.
+     */
+    ...(seconds > 0 ? ["-t", seconds.toFixed(2)] : []),
     /*
      * Sale MP3, no WAV. Es la razón de existir de esta función: una cama de
      * fondo a 192 kbps es indistinguible del original y ocupa lo que ocupaba.
