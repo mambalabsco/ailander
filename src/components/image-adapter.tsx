@@ -4,8 +4,10 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
+import { BANDS, HOOK_MAX, hookColors, hookParts, type BandId } from "@/lib/ad-hook";
 import {
   adaptImagesAction,
+  generateImageHooksAction,
   deleteAdaptedImageAction,
   regenerateImageAction,
   uploadSourcesAction,
@@ -61,6 +63,19 @@ export function ImageAdapter({
   const [extra, setExtra] = useState("");
   const [isPending, startTransition] = useTransition();
   const [note, setNote] = useState("");
+  /*
+   * La franja de gancho.
+   *
+   * Un solo texto se repite en toda la tanda —el caso de escribirlo a mano—; si
+   * se generan, sale uno por imagen. Los colores no se eligen aquí: se calculan
+   * a partir de la franja, porque un acento que no contrasta no se ve hasta
+   * tener las imágenes hechas y pagadas.
+   */
+  const [withHook, setWithHook] = useState(false);
+  const [band, setBand] = useState<BandId>("azul");
+  const [hooks, setHooks] = useState<{ text: string; highlights: string[] }[]>([]);
+  const [hookText, setHookText] = useState("");
+  const [writing, startWriting] = useTransition();
   const uploadRef = useRef<HTMLInputElement>(null);
 
   const product = products.find((item) => item.id === productId);
@@ -176,7 +191,20 @@ export function ImageAdapter({
         <div className="mt-4">
           <GenerateButton
             variant="primary"
-            action={() => adaptImagesAction({ productId, urls: [...picked] })}
+            action={() =>
+              adaptImagesAction({
+                productId,
+                urls: [...picked],
+                hooks: withHook
+                  ? hooks.length > 0
+                    ? hooks
+                    : hookText.trim()
+                      ? [{ text: hookText.trim(), highlights: [] }]
+                      : []
+                  : [],
+                hookBand: band,
+              })
+            }
             label={`Adaptar ${picked.size || ""} imagen(es)`}
             disabled={picked.size === 0 || !product?.hasPrimary || !hasHiggsfield}
             disabledReason={picked.size === 0 ? "Marca alguna imagen primero" : undefined}
@@ -336,7 +364,103 @@ export function ImageAdapter({
                     </label>
 
                     <div className="flex flex-wrap gap-2">
-                      <GenerateButton
+                      <div className="w-full">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={withHook}
+                  onChange={(event) => setWithHook(event.target.checked)}
+                  className="size-4"
+                />
+                Poner una franja de titular arriba
+              </label>
+
+              {withHook ? (
+                <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {BANDS.map((one) => {
+                      const colors = hookColors(one.id);
+
+                      return (
+                        <button
+                          key={one.id}
+                          type="button"
+                          onClick={() => setBand(one.id)}
+                          title={one.note}
+                          style={{ background: colors.band, color: colors.ink }}
+                          className={`rounded-lg px-3 py-1 text-xs font-bold ${
+                            band === one.id ? "ring-2 ring-slate-900 dark:ring-white" : ""
+                          }`}
+                        >
+                          Aa <span style={{ color: colors.accent }}>Aa</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <textarea
+                    value={hookText}
+                    onChange={(event) => {
+                      setHookText(event.target.value);
+                      setHooks([]);
+                    }}
+                    rows={2}
+                    maxLength={HOOK_MAX}
+                    placeholder="Escríbelo tú y se repite en todas, o genéralos distintos abajo"
+                    className="rounded-xl border border-slate-200 p-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      disabled={picked.size === 0 || !productId || writing}
+                      onClick={() =>
+                        startWriting(async () => {
+                          const result = await generateImageHooksAction({
+                            productId,
+                            scenes: [...picked].map((url, index) => `Imagen ${index + 1}: ${url}`),
+                          });
+
+                          setHooks(result.hooks ?? []);
+                          setNote(result.message);
+                          if (result.hooks?.[0]) setHookText("");
+                        })
+                      }
+                    >
+                      {writing ? "Escribiendo…" : "Generar uno por imagen"}
+                    </Button>
+
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {hooks.length > 0
+                        ? `${hooks.length} gancho(s) listos`
+                        : `Máximo ${HOOK_MAX} caracteres`}
+                    </span>
+                  </div>
+
+                  {hooks.length > 0 ? (
+                    <ul className="grid gap-1">
+                      {hooks.map((one, index) => (
+                        <li key={index} className="rounded-lg px-2 py-1 text-xs" style={{ background: hookColors(band).band }}>
+                          {hookParts(one).map((part, at) => (
+                            <span
+                              key={at}
+                              style={{
+                                color: part.strong ? hookColors(band).accent : hookColors(band).ink,
+                                fontWeight: part.strong ? 800 : 600,
+                              }}
+                            >
+                              {part.text}
+                            </span>
+                          ))}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <GenerateButton
                         variant="primary"
                         action={() =>
                           regenerateImageAction({ id: image.id, extra, mode: "mejorar" })

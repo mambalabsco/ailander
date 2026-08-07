@@ -118,6 +118,16 @@ export const AD_VISUAL_CONCEPTS = [
   "ugc",
   "detalle-producto",
   "oferta",
+  /*
+   * El formato de titular: franja arriba, foto grande debajo.
+   *
+   * Es el que más rinde en frío en salud y estética porque se lee como una
+   * portada y no como un anuncio. Lo que lo hace legítimo o no es el contenido:
+   * aquí la franja dice lo que el producto hace, sin marca de medio, sin cita
+   * atribuida a nadie y sin promesa de curar. Esas tres son justo las que
+   * tumban la cuenta publicitaria.
+   */
+  "editorial",
 ] as const;
 
 export type AdVisualConcept = (typeof AD_VISUAL_CONCEPTS)[number];
@@ -125,6 +135,7 @@ export type AdVisualConcept = (typeof AD_VISUAL_CONCEPTS)[number];
 export const AD_VISUAL_CONCEPT_LABELS: Record<AdVisualConcept, string> = {
   "gancho-visual": "Gancho visual",
   "producto-en-contexto": "Producto en contexto",
+  editorial: "Titular tipo portada",
   resena: "Reseña",
   comparativa: "Comparativa",
   "antes-despues": "Antes y después",

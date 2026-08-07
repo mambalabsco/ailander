@@ -82,6 +82,12 @@ export function recommendModel(concept: AdVisualConcept): ModelRecommendation {
         model: nanoBananaPro,
         reason: "Un macro fiel al envase real necesita adherencia estricta a la referencia.",
       };
+    case "editorial":
+      return {
+        model: nanoBananaPro,
+        reason:
+          "La franja de titular lleva texto que tiene que leerse entero y quedar dentro de su barra, sin comerse la cara ni el producto. Es composición con texto, que es donde este modelo gana.",
+      };
     case "gancho-visual":
     default:
       return {
@@ -157,6 +163,17 @@ const CONCEPT_BRIEFS: Record<AdVisualConcept, (context: PromptContext) => string
     `Macro de ${ctx.productName} centrado en el detalle que sostiene la promesa: textura, acabado o mecanismo. Fondo desenfocado y neutro, luz lateral suave que marque el relieve. Sin texto.`,
   oferta: (ctx) =>
     `${ctx.productName} sobre fondo limpio con el precio y la garantía en tipografía grande y legible. Composición ordenada, mucho aire, jerarquía clara entre el precio y el resto. El precio es el elemento dominante.`,
+  /*
+   * El formato de portada, sin lo que lo hace ilegal.
+   *
+   * Lo que rinde de este formato es la **composición**: la franja de titular
+   * arriba, la foto grande ocupando el resto, el recuadro circular de detalle.
+   * Lo que hunde cuentas es otra cosa —logo de un medio real, un médico
+   * inventado con tilde de verificado, «elimina la diabetes»— y va prohibido
+   * aquí abajo porque el modelo lo añade solo si no se le dice: ha visto miles.
+   */
+  editorial: (ctx) =>
+    `Composición de portada: una franja horizontal sólida en el borde superior reservada para un titular, y debajo una fotografía grande que ocupa el resto del encuadre, mostrando ${ctx.emotionalMoment} de forma reconocible para ${ctx.audience}. Opcionalmente, un recuadro circular pequeño en una esquina inferior con un detalle ampliado relacionado con ${ctx.benefit}. La foto debe ser real y sin pose, no ilustración. Prohibido: logotipos o nombres de medios de comunicación o cadenas de televisión, marcas de verificación, personas presentadas como médicos o especialistas, batas blancas, y cualquier texto que prometa curar, revertir o eliminar una enfermedad.`,
 };
 
 interface PromptContext {

@@ -6,12 +6,19 @@ import { readProductResearch } from "@/lib/research-store";
 import { readPrimaryImage } from "@/lib/image-store";
 import { buildProductContext } from "@/lib/copy-prompts";
 import { generateStructured } from "@/lib/generators";
-import { IMAGE_READING_SCHEMA } from "@/lib/generation-schemas";
+import { IMAGE_HOOKS_SCHEMA, IMAGE_READING_SCHEMA } from "@/lib/generation-schemas";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { runInBackground } from "@/lib/background";
 import { requireContext } from "@/lib/supabase/session";
 import { generateWithCli, listCliModels } from "@/lib/higgsfield-cli";
+import {
+  HOOK_MAX,
+  buildHookPrompt,
+  hookColors,
+  hookImageInstruction,
+  type BandId,
+} from "@/lib/ad-hook";
 import {
   buildEditPrompt,
   buildReadingPrompt,
@@ -236,6 +243,29 @@ export async function adaptImagesAction(input: unknown): Promise<LaunchResult> {
 
   if (urls.length === 0) throw new Error("Elige al menos una imagen.");
 
+  /*
+   * La franja de gancho, si se pidió.
+   *
+   * Se acepta escrita a mano o generada, y en los dos casos llega aquí ya
+   * resuelta: texto, qué palabras se resaltan y de qué color va cada cosa. El
+   * color no lo elige el modelo de imagen porque devolvía uno distinto en cada
+   * pieza y la mitad ilegibles — se calcula con la fórmula de contraste.
+   */
+  const hookTexts = Array.isArray(raw.hooks)
+    ? raw.hooks.map((item) => {
+        const one = (item ?? {}) as Record<string, unknown>;
+
+        return {
+          text: readText(one.text),
+          highlights: Array.isArray(one.highlights)
+            ? one.highlights.map(readText).filter(Boolean)
+            : [],
+        };
+      })
+    : [];
+
+  const bandId = readText(raw.hookBand) || "azul";
+
   await guard();
 
   const product = await findProductAnywhere(productId);
@@ -313,7 +343,22 @@ export async function adaptImagesAction(input: unknown): Promise<LaunchResult> {
           inputTokens += reading.inputTokens;
           outputTokens += reading.outputTokens;
 
-          const prompt = buildEditPrompt({ reading: reading.data, productName: product.name });
+          const base = buildEditPrompt({ reading: reading.data, productName: product.name });
+
+          /*
+           * El mismo gancho para todas, o uno por imagen.
+           *
+           * Con un solo texto en la lista se repite en toda la tanda —es el caso
+           * de escribirlo a mano una vez—; con varios, a cada imagen le toca el
+           * suyo. Que sobren o falten no rompe nada: lo que no tenga gancho sale
+           * sin franja, que es exactamente lo de antes.
+           */
+          const hook = hookTexts.length === 1 ? hookTexts[0] : hookTexts[index];
+
+          const prompt =
+            hook?.text
+              ? `${base}\n\n${hookImageInstruction({ ...hook, ...hookColors(bandId as BandId) })}`
+              : base;
 
           const generated = await generateWithCli({
             model: await modeloDeImagen(),
@@ -447,4 +492,68 @@ export async function deleteAdaptedImageAction(id: unknown): Promise<void> {
 
   await deleteAdaptedImage(imageId);
   revalidatePath("/imagenes");
+}
+
+/**
+ * Escribe una franja de gancho por imagen.
+ *
+ * Va aparte de generar las imágenes y no dentro a propósito: los ganchos se
+ * revisan y se corrigen antes de gastar en generar. Escritos dentro, un gancho
+ * malo se descubre con la imagen ya hecha y pagada.
+ */
+export async function generateImageHooksAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+  hooks?: { text: string; highlights: string[] }[];
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const productId = readText(raw.productId);
+  const scenes = Array.isArray(raw.scenes) ? raw.scenes.map(readText).filter(Boolean) : [];
+
+  if (!productId) return { ok: false, message: "Elige el producto." };
+  if (scenes.length === 0) return { ok: false, message: "Elige al menos una imagen." };
+
+  try {
+    await guard();
+
+    const product = await findProductAnywhere(productId);
+    if (!product) return { ok: false, message: "No se encontró el producto." };
+
+    const written = await generateStructured<{ hooks: { text: string; highlights: string[] }[] }>({
+      prompt: buildHookPrompt({
+        scenes,
+        productName: product.name,
+        audience: product.targetAudience || "el público objetivo",
+        country: product.country || "México",
+        promise: product.benefits[0],
+      }),
+      schema: IMAGE_HOOKS_SCHEMA,
+      role: "copy",
+      maxTokens: 4_000,
+    });
+
+    /*
+     * Se recorta lo que no cabe en vez de devolverlo largo.
+     *
+     * Una franja es de ancho fijo: un titular de ciento veinte caracteres se
+     * encoge hasta no leerse, y eso solo se ve con la imagen ya generada.
+     */
+    const hooks = (written.data.hooks ?? [])
+      .slice(0, scenes.length)
+      .map((one) => ({
+        text: (one.text ?? "").trim().slice(0, HOOK_MAX),
+        highlights: (one.highlights ?? []).map((two) => String(two).trim()).filter(Boolean),
+      }))
+      .filter((one) => one.text);
+
+    if (hooks.length === 0) return { ok: false, message: "No devolvió ningún gancho usable." };
+
+    return { ok: true, message: `${hooks.length} gancho(s).`, hooks };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudieron escribir los ganchos.",
+    };
+  }
 }
