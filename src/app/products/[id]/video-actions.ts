@@ -1353,6 +1353,44 @@ export async function assembleVideoAction(
           });
 
           subtitulos = `, subtítulos «${video.subtitlePreset}»`;
+
+          /*
+           * Y ahora sí, la música: un segundo montaje sobre lo subtitulado.
+           *
+           * Va después a propósito —ver arriba— y **puede** salir mal de una
+           * forma que no da error: si el servicio de montaje sustituye el audio
+           * del vídeo en vez de mezclarlo, el resultado saldría con música y sin
+           * voz. Sale un vídeo entero, con su duración correcta y mudo de
+           * locución, y solo se descubre reproduciéndolo.
+           *
+           * Por eso, si este paso falla, se **conserva el vídeo subtitulado sin
+           * música**: mejor sin cama de fondo que sin voz.
+           */
+          if (video.musicUrl) {
+            try {
+              const conMusica = await compose([
+                {
+                  id: "video",
+                  type: "video",
+                  keyframes: [
+                    { timestamp: 0, duration: Math.round(timeline.seconds * 1000), url: finalUrl },
+                  ],
+                },
+                {
+                  id: "musica",
+                  type: "audio",
+                  keyframes: [
+                    { timestamp: 0, duration: Math.round(timeline.seconds * 1000), url: video.musicUrl },
+                  ],
+                },
+              ]);
+
+              finalUrl = conMusica.videoUrl;
+              subtitulos += " y música encima";
+            } catch (error) {
+              subtitulos += `. Sin música: ${error instanceof Error ? error.message : "falló"}`;
+            }
+          }
         } catch (error) {
           /*
            * Un fallo aquí no tira el vídeo: ya está montado y se ve entero.
