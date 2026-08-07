@@ -418,7 +418,7 @@ export function ImageAdapter({
                         startWriting(async () => {
                           const result = await generateImageHooksAction({
                             productId,
-                            scenes: [...picked].map((url, index) => `Imagen ${index + 1}: ${url}`),
+                            urls: [...picked],
                           });
 
                           setHooks(result.hooks ?? []);

@@ -16,6 +16,7 @@ import {
 } from "@/types/visuals";
 import type { ProductImageBrief, ProductImagePattern } from "@/types/visuals";
 import { buildProductImagePrompt } from "@/lib/visual-prompts";
+import { hookColors, hookImageInstruction, type BandId } from "@/lib/ad-hook";
 import { readProductResearch } from "@/lib/research-store";
 
 /**
@@ -321,9 +322,32 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
   const visuals = (Array.isArray(raw.visuals) ? raw.visuals : [])
     .map((item) => {
       const visual = (item ?? {}) as Record<string, unknown>;
+      /*
+       * La franja de titular de **esta** creatividad, si la lleva.
+       *
+       * Va por pieza y no por tanda porque el gancho habla de lo que se ve en
+       * su imagen: uno solo repartido entre ocho acaba prometiendo la cintura
+       * sobre la foto del bote. Los colores llegan ya calculados; aquí solo se
+       * pegan al prompt.
+       */
+      const hookText = readText((visual.hook as Record<string, unknown>)?.text);
+      const hookHighlights = Array.isArray((visual.hook as Record<string, unknown>)?.highlights)
+        ? ((visual.hook as Record<string, unknown>).highlights as unknown[])
+            .map((one) => readText(one))
+            .filter(Boolean)
+        : [];
+
+      const base = readText(visual.prompt);
+
       return {
         title: readText(visual.title, "creatividad"),
-        prompt: readText(visual.prompt),
+        prompt: hookText
+          ? `${base}\n\n${hookImageInstruction({
+              text: hookText,
+              highlights: hookHighlights,
+              ...hookColors((readText(raw.hookBand) || "azul") as BandId),
+            })}`
+          : base,
         aspectRatio: readText(visual.aspectRatio, "1:1"),
         concept: readText(visual.concept),
         // Por creatividad, no por tanda: al generar toda la campaña de golpe

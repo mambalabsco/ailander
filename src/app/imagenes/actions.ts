@@ -509,10 +509,10 @@ export async function generateImageHooksAction(input: unknown): Promise<{
   const raw = (input ?? {}) as Record<string, unknown>;
 
   const productId = readText(raw.productId);
-  const scenes = Array.isArray(raw.scenes) ? raw.scenes.map(readText).filter(Boolean) : [];
+  const urls = Array.isArray(raw.urls) ? raw.urls.map(readText).filter(Boolean) : [];
 
   if (!productId) return { ok: false, message: "Elige el producto." };
-  if (scenes.length === 0) return { ok: false, message: "Elige al menos una imagen." };
+  if (urls.length === 0) return { ok: false, message: "Elige al menos una imagen." };
 
   try {
     await guard();
@@ -520,9 +520,41 @@ export async function generateImageHooksAction(input: unknown): Promise<{
     const product = await findProductAnywhere(productId);
     if (!product) return { ok: false, message: "No se encontró el producto." };
 
+    /*
+     * El modelo **ve** las imágenes; no se le describen.
+     *
+     * Antes se le pasaba la URL de cada una, que no le dice nada: escribía
+     * ganchos genéricos del producto y los repartía al azar, y el resultado era
+     * una franja hablando de la cintura sobre una foto del bote.
+     *
+     * Se limitan a seis. Cada imagen cuesta contexto, y con más de seis el
+     * gancho de la última llega escrito después de mil palabras de las otras y
+     * sale peor que el de la primera.
+     */
+    const mirar = urls.slice(0, 6);
+    const images: { mediaType: string; base64: string }[] = [];
+
+    for (const url of mirar) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) continue;
+
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const mediaType = imageMediaType(bytes);
+
+        // Sin tipo reconocible no se manda: declararlo a la ligera es lo que
+        // hacía fallar el lote entero al adaptar.
+        if (!mediaType) continue;
+
+        images.push({ mediaType, base64: Buffer.from(bytes).toString("base64") });
+      } catch {
+        continue;
+      }
+    }
+
     const written = await generateStructured<{ hooks: { text: string; highlights: string[] }[] }>({
       prompt: buildHookPrompt({
-        scenes,
+        scenes: images.map((_, index) => `La imagen ${index + 1} de las que se adjuntan.`),
         productName: product.name,
         audience: product.targetAudience || "el público objetivo",
         country: product.country || "México",
@@ -531,6 +563,7 @@ export async function generateImageHooksAction(input: unknown): Promise<{
       schema: IMAGE_HOOKS_SCHEMA,
       role: "copy",
       maxTokens: 4_000,
+      images,
     });
 
     /*
@@ -540,7 +573,7 @@ export async function generateImageHooksAction(input: unknown): Promise<{
      * encoge hasta no leerse, y eso solo se ve con la imagen ya generada.
      */
     const hooks = (written.data.hooks ?? [])
-      .slice(0, scenes.length)
+      .slice(0, urls.length)
       .map((one) => ({
         text: (one.text ?? "").trim().slice(0, HOOK_MAX),
         highlights: (one.highlights ?? []).map((two) => String(two).trim()).filter(Boolean),
