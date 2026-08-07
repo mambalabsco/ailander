@@ -66,6 +66,21 @@ export async function uploadVideoAsset(options: {
 
   if (error) {
     /*
+     * El tipo rechazado se dice con su nombre.
+     *
+     * El bucket se llama `video-assets` y durante meses solo admitió audio: en
+     * cuanto el servidor empezó a devolver vídeo procesado —la mezcla de
+     * música, el acelerador— el trabajo terminaba bien y se perdía al guardar.
+     * Ver «mime type X is not supported» sin saber que hay una lista blanca
+     * manda a buscar el fallo en ffmpeg, que hizo su parte.
+     */
+    if (/mime type/i.test(error.message)) {
+      throw new Error(
+        `El almacenamiento no admite «${options.contentType}» en el bucket «${BUCKET}». Falta añadirlo a sus tipos permitidos: ver la migración «20260806000100_video_assets_mp4».`,
+      );
+    }
+
+    /*
      * El almacenamiento rechazando por tamaño después de que la comprobación de
      * arriba lo dejara pasar solo significa una cosa: el tope del bucket es
      * menor que `MAX_MB`, o sea que falta aplicar la migración que lo sube.
