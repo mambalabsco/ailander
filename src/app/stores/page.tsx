@@ -5,6 +5,7 @@ import { SectionCard } from "@/components/section-card";
 import { StoreBlueprints } from "@/components/store-blueprints";
 import { ShopProducts } from "@/components/shop-products";
 import { ThemePlanPanel } from "@/components/theme-plan";
+import { ProductPageMaker } from "@/components/product-page-maker";
 import { listBlueprints } from "@/lib/data/blueprints";
 import { listJobsByKind } from "@/lib/data/jobs";
 import { JobsPanel } from "@/components/jobs-panel";
@@ -103,6 +104,25 @@ export default async function StoresPage() {
           blueprints={blueprints.map((blueprint) => ({
             id: blueprint.id,
             storeName: blueprint.storeName,
+          }))}
+          products={products.map((product) => ({ id: product.id, name: product.name }))}
+        />
+      </SectionCard>
+
+      {/*
+        Va al final porque es lo más específico: parte de una plantilla que ya
+        existe en el tema. Sin ese modelo hecho no hay nada que hacer aquí, y
+        arriba se leería como el primer paso.
+      */}
+      <SectionCard
+        title="Página de producto desde una plantilla"
+        description="Coge una página de producto que ya te funciona, copia su diseño entero tal cual y reescribe solo los textos para otro producto. La plantilla modelo no se toca: se crea una nueva."
+      >
+        <ProductPageMaker
+          stores={stores.map((store) => ({
+            id: store.id,
+            name: store.name,
+            connected: Boolean(store.shopifyAdminToken && store.shopifyShopDomain),
           }))}
           products={products.map((product) => ({ id: product.id, name: product.name }))}
         />

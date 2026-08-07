@@ -516,3 +516,23 @@ export const LANDING_COMMENTS_SCHEMA = object({
 export const SECTION_NAMES_SCHEMA = object({
   names: { type: "array", items: str },
 });
+
+/* ------------------- Textos de una plantilla de producto ------------------- */
+
+/**
+ * Los mismos campos que se mandaron, reescritos.
+ *
+ * `path` va de vuelta porque es lo único que sabe **dónde** vive cada texto en
+ * un JSON de plantilla con cientos de ajustes. Sin él habría que emparejar por
+ * orden, y una respuesta que se salte un campo desplazaría todos los demás:
+ * el aviso de letra pequeña acabaría de titular.
+ */
+export const TEMPLATE_COPY_SCHEMA = object({
+  fields: {
+    type: "array",
+    items: object({
+      path: str,
+      text: str,
+    }),
+  },
+});
