@@ -186,8 +186,16 @@ test("las anclas internas se quedan", () => {
   assert.equal(changed, 0);
 });
 
-test("un enlace sin href no se toca", () => {
-  assert.equal(neutralizeLinks("<a>Texto</a>").changed, 0);
+test("un enlace sin href recibe el del producto", () => {
+  /*
+   * Antes se dejaba tal cual. Comprobado contra la página real: sus seis `<a>`
+   * salen **sin href** —el destino se lo pone su JavaScript al cargar, y la
+   * copia no se lo lleva—, así que dejarlos era dejar seis botones muertos.
+   */
+  const out = neutralizeLinks("<a>Comprar</a>", "https://mitienda.com/p");
+
+  assert.equal(out.changed, 1);
+  assert.ok(out.html.includes('href="https://mitienda.com/p"'));
 });
 
 /* ---------------------------- Lo que no se copia ---------------------------- */
@@ -1229,4 +1237,28 @@ test("una ancla con destino se sigue respetando", () => {
 
   assert.equal(out.changed, 0);
   assert.ok(out.html.includes('href="#precios"'));
+});
+
+test("un `<a>` sin href recibe uno", () => {
+  /*
+   * Los constructores de páginas montan los botones con JavaScript: el `<a>`
+   * sale con `data-id` y el destino se lo pone su script al cargar. La copia no
+   * se lleva ese script, así que el botón se queda sin destino — y como no hay
+   * `href` que cambiar, «apuntar los enlaces» decía «0 enlaces» y sonaba a que
+   * ya estaba bien. Comprobado en la página real: seis `<a>` y ninguno con href.
+   */
+  const out = neutralizeLinks('<a data-id="x" class="boton">Comprar</a>', "https://mitienda.com/p");
+
+  assert.equal(out.changed, 1);
+  assert.ok(out.html.includes('href="https://mitienda.com/p"'));
+  assert.ok(out.html.includes('data-id="x"'));
+});
+
+test("uno que ya tiene href no recibe otro", () => {
+  // Dos `href` en la misma etiqueta: el navegador se queda con el primero, así
+  // que el que manda sería el que no se quiso poner.
+  const out = neutralizeLinks('<a href="https://otro.com/x">Ir</a>', "https://mitienda.com/p");
+
+  assert.equal((out.html.match(/href=/g) ?? []).length, 1);
+  assert.ok(out.html.includes("mitienda.com/p"));
 });
