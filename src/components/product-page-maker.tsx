@@ -33,6 +33,14 @@ export function ProductPageMaker({
   const [templates, setTemplates] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
+  /*
+   * Referencias, una por línea.
+   *
+   * Un campo de texto y no una lista de tres huecos: lo normal es pegar dos o
+   * tres enlaces de golpe desde otra pestaña, y tres cajas obligan a repartir a
+   * mano lo que ya se tenía junto.
+   */
+  const [references, setReferences] = useState("");
   const [note, setNote] = useState("");
   const [loading, startLoading] = useTransition();
 
@@ -159,11 +167,39 @@ export function ProductPageMaker({
 
       {note ? <p className="text-sm text-amber-700 dark:text-amber-400">{note}</p> : null}
 
+      {templates.length > 0 ? (
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-300">
+            Referencias (opcional, una por línea)
+          </span>
+          <textarea
+            value={references}
+            onChange={(event) => setReferences(event.target.value)}
+            rows={3}
+            placeholder="https://otra-marca.com/products/…"
+            className="rounded-xl border border-slate-200 p-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+          />
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Páginas que venden bien en tu categoría. Se usan para el <strong>enfoque</strong> —qué
+            ángulos y qué objeciones—, nunca para copiar frases ni sus cifras. Máximo 3.
+          </span>
+        </label>
+      ) : null}
+
       {model && productId ? (
         <div>
           <GenerateButton
             action={() =>
-              generateProductPageAction({ storeId, themeId, templateFile: model, productId })
+              generateProductPageAction({
+                storeId,
+                themeId,
+                templateFile: model,
+                productId,
+                references: references
+                  .split("\n")
+                  .map((line) => line.trim())
+                  .filter(Boolean),
+              })
             }
             label="Crear la página"
             hint="Copia el diseño entero tal cual y reescribe solo los textos para este producto. Crea una plantilla nueva: la modelo no se toca."

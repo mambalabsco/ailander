@@ -31,16 +31,53 @@ export async function listProductTemplatesAction(
     const store = await findStore(readText(storeId));
     if (!store) return { ok: false, message: "No se encontró la tienda." };
 
-    const files = (await listThemeFiles(store, theme))
+    /*
+     * Se pide el filtro **y** se guarda la vuelta sin filtro.
+     *
+     * `files(first: 250)` no trae el tema entero: uno real pasa de trescientos
+     * archivos y `templates/` cae fuera del corte con frecuencia. El síntoma es
+     * «ese tema no tiene ninguna plantilla» en un tema que sí las tiene.
+     *
+     * El filtro por patrón lo resuelve cuando Shopify lo admite; cuando no,
+     * devuelve vacío — y entonces vale más el listado corto que nada.
+     */
+    const porPatron = await listThemeFiles(store, theme, ["templates/product*.json"]).catch(
+      () => [],
+    );
+
+    const todos = porPatron.length > 0 ? porPatron : await listThemeFiles(store, theme);
+
+    const files = todos
       .map((file) => file.filename)
-      .filter((name) => /^templates\/product\..*\.json$/.test(name))
+      /*
+       * `templates/product.json` entra también.
+       *
+       * Es la plantilla por defecto del tema y es la que la mayoría tiene
+       * montada a mano: exigir un sufijo dejaba fuera justo el modelo más
+       * probable y decía que no había ninguno.
+       */
+      .filter((name) => /^templates\/product(\..+)?\.json$/.test(name))
       .sort();
 
     if (files.length === 0) {
+      /*
+       * Se dice qué **sí** se vio.
+       *
+       * «No hay ninguna plantilla» en un tema que las tiene manda a buscar en
+       * Shopify algo que ya está. Nombrando las de Liquid se ve al momento que
+       * el problema es el formato, no la falta; y con el total de archivos se
+       * ve si lo que pasó es que el listado no llegó hasta ahí.
+       */
+      const liquid = todos
+        .map((file) => file.filename)
+        .filter((name) => /^templates\/product.*\.liquid$/.test(name));
+
       return {
         ok: false,
         message:
-          "Ese tema no tiene ninguna plantilla de producto guardada aparte. Crea una en Shopify («Crear plantilla» desde la página de producto) y vuelve.",
+          liquid.length > 0
+            ? `Ese tema tiene ${liquid.length} plantilla(s) de producto en Liquid (${liquid.join(", ")}), y esas no sirven de modelo: solo las de bloques (.json), que son las que se editan por secciones.`
+            : `No se encontró ninguna plantilla de producto entre los ${todos.length} archivos leídos del tema. Si sabes que la tiene, dímelo: puede que el listado no llegue hasta ella.`,
       };
     }
 
@@ -84,6 +121,19 @@ export async function generateProductPageAction(input: unknown): Promise<
   const themeId = readText(raw.themeId);
   const model = readText(raw.templateFile);
   const productId = readText(raw.productId);
+
+  /*
+   * Las referencias son opcionales y son **referencias**.
+   *
+   * De ellas sale el enfoque —qué ángulos funcionan, qué objeciones hay que
+   * responder, en qué orden—, nunca el texto. Eso está escrito en el prompt,
+   * pero se dice también aquí porque es lo que decide si esto es legítimo o es
+   * copiar la página de otro.
+   */
+  const referenceUrls = (Array.isArray(raw.references) ? raw.references : [])
+    .map((item) => readText(item))
+    .filter((url) => /^https?:\/\//i.test(url))
+    .slice(0, 3);
 
   if (!themeId || !model) return { started: false, message: "Falta la plantilla modelo." };
   if (!productId) return { started: false, message: "Falta el producto." };
@@ -152,6 +202,36 @@ export async function generateProductPageAction(input: unknown): Promise<
         );
       }
 
+      /*
+       * Las referencias se leen antes de escribir, y su fallo no para nada.
+       *
+       * Una página caída o lenta no puede tumbar el trabajo: son un extra que
+       * mejora el enfoque, no un ingrediente sin el que no se pueda redactar.
+       * Lo que no se pudo leer se dice al final, no se calla — si no, sale una
+       * página escrita sin la referencia que se pidió y nada lo indica.
+       */
+      const references: string[] = [];
+      const noLeidas: string[] = [];
+
+      if (referenceUrls.length > 0) {
+        await report(`Leyendo ${referenceUrls.length} referencia(s)`);
+
+        const { readPageForCopy } = await import("@/lib/reference-page");
+        const { readableText } = await import("@/lib/landing-copy-html");
+
+        for (const url of referenceUrls) {
+          try {
+            const page = await readPageForCopy(url);
+            const text = readableText(page.body, 8_000).trim();
+
+            if (text.length > 200) references.push(text);
+            else noLeidas.push(url);
+          } catch {
+            noLeidas.push(url);
+          }
+        }
+      }
+
       await report(`Reescribiendo ${fields.length} textos para ${product.name}`);
 
       /*
@@ -188,6 +268,7 @@ export async function generateProductPageAction(input: unknown): Promise<
           audience: product.targetAudience || "el público objetivo",
           country: product.country || "México",
           context: context || undefined,
+          references: references.length > 0 ? references : undefined,
         }),
         schema: TEMPLATE_COPY_SCHEMA,
         role: "copy",
@@ -225,8 +306,12 @@ export async function generateProductPageAction(input: unknown): Promise<
           `${Object.keys(changes).length} de ${fields.length} textos reescritos${
             faltan > 0 ? ` — quedan ${faltan} con el texto del modelo` : ""
           }.`,
+          references.length > 0 ? `Con ${references.length} referencia(s) de enfoque.` : "",
+          noLeidas.length > 0 ? `No se pudieron leer: ${noLeidas.join(", ")}.` : "",
           `Asígnala al producto en Shopify: ficha del producto → Plantilla de tema → ${suffix}.`,
-        ].join(" "),
+        ]
+          .filter(Boolean)
+          .join(" "),
         inputTokens: written.inputTokens,
         outputTokens: written.outputTokens,
       };

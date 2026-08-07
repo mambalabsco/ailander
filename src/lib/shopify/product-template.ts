@@ -174,6 +174,15 @@ export function buildTemplateCopyPrompt(input: {
   country: string;
   /** Beneficios, ingredientes, oferta: lo que se sepa del producto. */
   context?: string;
+  /**
+   * Páginas ajenas que sirven de **referencia**, ya en texto plano.
+   *
+   * Referencia quiere decir de dónde sacar ángulos, objeciones y qué orden de
+   * argumentos funciona en esta categoría. No de dónde sacar frases: copiar una
+   * literal es el problema legal de otro convertido en el tuyo, y además suena
+   * a lo mismo que ya está en el mercado.
+   */
+  references?: string[];
 }): string {
   const lista = input.fields
     .map((field) => `${field.path} · bloque «${field.block}»\n${field.value}`)
@@ -186,6 +195,16 @@ export function buildTemplateCopyPrompt(input: {
     `Reescríbelos para ${input.productName}, dirigido a ${input.audience} en ${input.country}.`,
     ``,
     ...(input.context ? [`## Sobre el producto`, ``, input.context, ``] : []),
+    ...(input.references && input.references.length > 0
+      ? [
+          `## Referencias`,
+          ``,
+          `Estas páginas venden bien en esta categoría. Son **referencia, no material**: mira qué ángulos usan, qué objeciones responden y en qué orden colocan los argumentos. No copies ni una frase, ni sus cifras, ni sus nombres.`,
+          ``,
+          ...input.references.map((text, index) => `### Referencia ${index + 1}\n\n${text}`),
+          ``,
+        ]
+      : []),
     `## Los textos`,
     ``,
     lista,
@@ -198,6 +217,12 @@ export function buildTemplateCopyPrompt(input: {
     `- Mantén la función de cada texto: si el original era una promesa con número, la nueva también lo es; si era un aviso de letra pequeña, sigue siéndolo.`,
     `- Las cifras de prueba social (reseñas, clientes, estudios) **no se inventan**: si no tienes el dato del producto nuevo, deja la frase sin número en vez de copiar el del original.`,
     `- Sin promesas médicas ni curativas.`,
+    ...(input.references && input.references.length > 0
+      ? [
+          `- De las referencias sale **el enfoque**, nunca el texto. Si una frase tuya se parece a una suya, reescríbela.`,
+          `- Sus cifras son suyas: no las traigas. Ni reseñas, ni «93 mil clientes», ni estudios que no sean de este producto.`,
+        ]
+      : []),
     `- Escribe en el español de ${input.country}.`,
   ].join("\n");
 }

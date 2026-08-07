@@ -248,3 +248,34 @@ test("sin sección de compra la plantilla se arma igual", () => {
   assert.deepEqual(parsed.order, ["copia-01"]);
   assert.ok(!parsed.sections.main);
 });
+
+test("las referencias entran como enfoque, con la prohibición delante", () => {
+  /*
+   * Son referencias, no material. Copiar una frase literal es el problema legal
+   * de otro convertido en el tuyo, y sus cifras de prueba social son suyas: un
+   * «93 mil clientes» heredado es una mentira sobre tu producto.
+   */
+  const prompt = buildTemplateCopyPrompt({
+    fields: collectCopy(PLANTILLA),
+    productName: "Lymphatic Complex",
+    audience: "mujeres de 30 a 55",
+    country: "Chile",
+    references: ["Adelgaza sin dietas. Más de 40 mil clientas."],
+  });
+
+  assert.ok(prompt.includes("Adelgaza sin dietas"), "el texto de la referencia llega");
+  assert.ok(prompt.includes("referencia, no material"));
+  assert.ok(prompt.includes("Sus cifras son suyas"));
+
+  // Sin referencias no aparece ninguna de esas reglas: una prohibición sobre
+  // algo que no se ha dado solo gasta contexto y confunde.
+  const sin = buildTemplateCopyPrompt({
+    fields: collectCopy(PLANTILLA),
+    productName: "Lymphatic Complex",
+    audience: "mujeres de 30 a 55",
+    country: "Chile",
+  });
+
+  assert.ok(!sin.includes("Referencias"));
+  assert.ok(!sin.includes("Sus cifras son suyas"));
+});
