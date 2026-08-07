@@ -367,6 +367,20 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
    */
   const comoProducto = raw.asProduct === true;
 
+  /*
+   * Publicar como borrador.
+   *
+   * Una landing recién copiada casi nunca sale bien a la primera —enlaces,
+   * imágenes sin adaptar, una sección de menos— y publicada está en internet
+   * mientras se arregla. Como borrador se ve con la vista previa del panel y
+   * solo la ve quien tenga el enlace.
+   *
+   * Al actualizar una que ya estaba publicada, esto **no** la esconde: se
+   * respeta lo que ya tenía. Despublicar algo que estaba vendiendo por marcar
+   * una casilla sin querer es un daño que nadie espera de «actualizar».
+   */
+  const comoBorrador = raw.asDraft === true;
+
   if (!isSupabaseConfigured()) {
     throw new Error("Esto se guarda en Supabase y todavía no está configurado.");
   }
@@ -830,7 +844,7 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
            * la sección que falta.
            */
           templateSuffix: suffix,
-          published: true,
+          published: !comoBorrador,
         });
 
       /*
@@ -855,7 +869,9 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
             // Vacío quita la plantilla; `undefined` la dejaría puesta. Ver
             // arriba: es lo que mantenía el error de la sección que falta.
             templateSuffix: suffix,
-            published: true,
+            // Al actualizar no se toca: una página que ya estaba publicada no
+            // se esconde por una casilla, y una que estaba en borrador sigue.
+            published: undefined,
           });
         } catch (error) {
           if (!(error instanceof PageGoneError)) throw error;

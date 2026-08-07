@@ -43,7 +43,7 @@ export function LandingViewer({
   images: ProductImage[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"vista" | "html" | "imagenes" | "prueba">("vista");
+  const [tab, setTab] = useState<"vista" | "html" | "imagenes" | "retratos" | "prueba">("vista");
   const [isUnlinking, startUnlink] = useTransition();
   /** Arreglar los enlaces va en su propia transición: no bloquea lo demás. */
   const [fixing, startFixing] = useTransition();
@@ -57,6 +57,13 @@ export function LandingViewer({
    * enlace y no tiene carrito.
    */
   const [asProduct, setAsProduct] = useState(false);
+  /*
+   * Borrador solo tiene sentido la primera vez.
+   *
+   * Al actualizar no se toca la visibilidad —ver la acción—, así que enseñar la
+   * casilla en una página ya publicada prometería algo que no va a pasar.
+   */
+  const [asDraft, setAsDraft] = useState(false);
   /*
    * Qué HTML te llevas.
    *
@@ -100,7 +107,7 @@ export function LandingViewer({
       <div className="mb-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
         <div className="flex flex-wrap items-center gap-3">
           <GenerateButton
-            action={() => publishLandingAction({ id: page.id, productId, asProduct })}
+            action={() => publishLandingAction({ id: page.id, productId, asProduct, asDraft })}
             label={page.shopifyUrl ? "Actualizar en Shopify" : "Publicar en Shopify"}
             hint={
               page.shopifyUrl
@@ -108,6 +115,18 @@ export function LandingViewer({
                 : "Sube las imágenes y crea la página. Necesita el token en Configuración."
             }
           />
+          {page.shopifyUrl ? null : (
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={asDraft}
+                onChange={(event) => setAsDraft(event.target.checked)}
+                className="size-4"
+              />
+              Como borrador
+            </label>
+          )}
+
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <input
               type="checkbox"
@@ -164,6 +183,13 @@ export function LandingViewer({
             ["vista", "Vista previa"],
             ["html", "HTML para Shopify"],
             ["imagenes", `Imágenes (${pending.length} sin generar)`],
+            /*
+              Los retratos, en su pestaña.
+              Estaban dentro de Imágenes, que es la de los huecos de **esta**
+              página: ahí parecían uno más y se generaban por página cuando en
+              realidad son del producto y valen para todas.
+            */
+            ["retratos", "Retratos"],
             ["prueba", "Ajustes y resultados"],
           ] as const
         ).map(([id, label]) => (
@@ -263,6 +289,22 @@ export function LandingViewer({
           ) : null}
 
 
+
+      {tab === "retratos" ? (
+        <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <p className="text-sm font-medium">Retratos de los comentarios</p>
+          <p className="mt-1 mb-3 text-sm text-slate-600 dark:text-slate-300">
+            Ocho caras generadas con Soul, personas sintéticas del país del producto. Son del
+            producto y no de esta página: se generan una sola vez y sirven en todas.
+          </p>
+          <GenerateButton
+            variant="secondary"
+            action={() => generateCommentAvatarsAction({ productId, landingId: page.id })}
+            label="Generar los retratos"
+            hint="Ocho imágenes. Solo genera las que falten."
+          />
+        </div>
+      ) : null}
 
       {tab === "prueba" ? <LandingAb productId={productId} page={page} /> : null}
 
@@ -426,22 +468,6 @@ export function LandingViewer({
               }))}
             />
           ) : null}
-
-          {/* Los retratos van aparte: son del producto y sirven en todas las
-              páginas, así que no se cuentan entre los huecos de esta. */}
-          <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
-            <p className="text-sm font-medium">Retratos de los comentarios</p>
-            <p className="mt-1 mb-3 text-sm text-slate-600 dark:text-slate-300">
-              Ocho caras generadas con Soul, personas sintéticas del país del producto. Se generan
-              una sola vez y sirven en todas tus páginas.
-            </p>
-            <GenerateButton
-              variant="secondary"
-              action={() => generateCommentAvatarsAction({ productId, landingId: page.id })}
-              label="Generar los retratos"
-              hint="Ocho imágenes. Solo genera las que falten."
-            />
-          </div>
 
           <ImageDownloads images={images} title="Imágenes de esta página" />
         </div>

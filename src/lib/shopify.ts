@@ -275,7 +275,7 @@ export async function createPage(
         handle: input.handle,
         body: input.body,
         templateSuffix: input.templateSuffix,
-        isPublished: input.published,
+        ...(input.published === undefined ? {} : { isPublished: input.published }),
       },
     },
   );
@@ -297,7 +297,14 @@ export async function createPage(
 export async function updatePage(
   store: Store,
   id: string,
-  input: { title: string; body: string; published: boolean; templateSuffix?: string },
+  /*
+   * `published` opcional: sin él, no se toca.
+   *
+   * Actualizar una página no debería cambiar si está visible. Mandarlo siempre
+   * significaba que republicar una landing en borrador la sacaba a internet, y
+   * que una casilla marcada sin querer podía esconder una que estaba vendiendo.
+   */
+  input: { title: string; body: string; published?: boolean; templateSuffix?: string },
 ): Promise<PublishedPage> {
   const { domain } = credentials(store);
 
@@ -319,7 +326,7 @@ export async function updatePage(
       page: {
         title: input.title,
         body: input.body,
-        isPublished: input.published,
+        ...(input.published === undefined ? {} : { isPublished: input.published }),
         templateSuffix: input.templateSuffix,
       },
     },
