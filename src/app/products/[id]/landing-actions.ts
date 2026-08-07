@@ -1503,3 +1503,70 @@ export async function copyCommentsAction(input: unknown): Promise<LaunchResult> 
     },
   });
 }
+
+/**
+ * Reapunta los enlaces de una página ya copiada a la ficha del producto.
+ *
+ * ## Por qué hace falta un botón y no basta con publicar
+ *
+ * Porque publicar reapunta lo que **se envía a Shopify**, no lo que hay
+ * guardado. La vista previa lee lo guardado, así que seguía enseñando los
+ * enlaces en `#` — y peor: al trocear en secciones, un `href="#"` no genera
+ * ajuste, así que en el editor de temas no aparecía el campo para cambiarlo.
+ * Los dos síntomas venían de lo mismo.
+ *
+ * Y va aparte de «volver a copiar» porque copiar rehace la página entera: quien
+ * ya ha ajustado su diseño no puede permitirse perderlo para arreglar un
+ * enlace.
+ */
+export async function fixLinksAction(input: unknown): Promise<{ ok: boolean; message: string }> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const landingId = readText(raw.landingId);
+  const productId = readText(raw.productId);
+
+  if (!landingId || !productId) return { ok: false, message: "Falta la página." };
+
+  try {
+    const product = await findProductAnywhere(productId);
+    if (!product) return { ok: false, message: "No se encontró el producto." };
+
+    if (!/^https?:\/\//i.test(product.landingUrl ?? "")) {
+      return {
+        ok: false,
+        message:
+          "El producto no tiene una dirección válida en «Datos del producto → landing page». Tiene que empezar por https://",
+      };
+    }
+
+    const { readLanding, updateLandingSections } = await import("@/lib/data/landings");
+    const { neutralizeLinks } = await import("@/lib/landing-copy-html");
+
+    const page = await readLanding(landingId);
+    if (!page) return { ok: false, message: "Esa página ya no existe." };
+
+    let changed = 0;
+
+    const sections = page.sections.map((section) => {
+      if (!section.html) return section;
+
+      const out = neutralizeLinks(section.html, product.landingUrl);
+      changed += out.changed;
+
+      return { ...section, html: out.html };
+    });
+
+    await updateLandingSections(landingId, sections);
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: true,
+      message: `${changed} enlace(s) apuntando a ${product.landingUrl}. Vuelve a publicar para llevarlo a Shopify: ahí cada uno tendrá su campo para cambiarlo desde el editor de temas.`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudieron arreglar los enlaces.",
+    };
+  }
+}

@@ -13,6 +13,7 @@ import {
   publishLandingAction,
   unlinkLandingAction,
   copyCommentsAction,
+  fixLinksAction,
 } from "@/app/products/[id]/landing-actions";
 import { GenerateButton } from "@/components/generate-button";
 import { LandingAb } from "@/components/landing-ab";
@@ -44,6 +45,9 @@ export function LandingViewer({
   const router = useRouter();
   const [tab, setTab] = useState<"vista" | "html" | "imagenes" | "prueba">("vista");
   const [isUnlinking, startUnlink] = useTransition();
+  /** Arreglar los enlaces va en su propia transición: no bloquea lo demás. */
+  const [fixing, startFixing] = useTransition();
+  const [fixNote, setFixNote] = useState("");
   /*
    * Qué HTML te llevas.
    *
@@ -173,6 +177,37 @@ export function LandingViewer({
           */}
       {page.shapeId === "copia" ? (
           <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+            {/*
+              Arreglar los enlaces sin rehacer la página.
+
+              Publicar reapunta lo que se **envía** a Shopify, no lo guardado:
+              la vista previa seguía enseñando `#`, y al trocear en secciones un
+              `href="#"` no genera ajuste — así que en el editor de temas
+              tampoco aparecía el campo. Los dos síntomas eran lo mismo.
+
+              Y va aparte de volver a copiar, que rehace la página entera: quien
+              ya ajustó su diseño no puede perderlo por un enlace.
+            */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                disabled={fixing}
+                onClick={() =>
+                  startFixing(async () => {
+                    const result = await fixLinksAction({ landingId: page.id, productId });
+                    setFixNote(result.message);
+                    if (result.ok) router.refresh();
+                  })
+                }
+              >
+                {fixing ? "Arreglando…" : "Apuntar los enlaces al producto"}
+              </Button>
+
+              {fixNote ? (
+                <span className="text-xs text-slate-600 dark:text-slate-300">{fixNote}</span>
+              ) : null}
+            </div>
+
             <p className="text-sm font-medium">Comentarios del bloque social</p>
             <p className="mt-1 mb-3 text-sm text-slate-600 dark:text-slate-300">
           {page.comments.length > 0

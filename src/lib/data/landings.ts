@@ -224,3 +224,15 @@ export async function updateLandingComments(
 
   if (error) throw new Error(`No se pudieron guardar los comentarios: ${error.message}`);
 }
+
+/** Cambia solo las secciones. Mismo motivo que los comentarios: `saveLanding` crea otra fila. */
+export async function updateLandingSections(
+  id: string,
+  sections: LandingSection[],
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase.from("landing_pages").update({ sections }).eq("id", id);
+
+  if (error) throw new Error(`No se pudieron guardar las secciones: ${error.message}`);
+}
