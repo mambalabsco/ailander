@@ -357,6 +357,16 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
   const productId = readText(raw.productId);
   if (!landingId || !productId) throw new Error("Falta la página.");
 
+  /*
+   * Publicar como página de **producto** en vez de como página suelta.
+   *
+   * Es la misma copia con los mismos textos ya adaptados; lo que cambia es
+   * dónde vive. Una plantilla de producto se asigna a un producto y hereda su
+   * precio, sus variantes y su botón de comprar — una página suelta vende con
+   * un enlace y no tiene carrito.
+   */
+  const comoProducto = raw.asProduct === true;
+
   if (!isSupabaseConfigured()) {
     throw new Error("Esto se guarda en Supabase y todavía no está configurado.");
   }
@@ -551,6 +561,10 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
             "@/lib/shopify-store"
           );
           const { templateSuffix } = await import("@/lib/landing-copy-html");
+          const { mainProductSection, productTemplateFrom } = await import(
+            "@/lib/shopify/product-template"
+          );
+
           const { bandClasses, sectionFile, sectionize, sectionNote, splitTopLevel, templateFor } =
             await import("@/lib/landing-sections");
 
@@ -641,6 +655,22 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
              */
             const cssAsset = `${wanted}.css`;
 
+            /*
+             * La sección de compra, si esto va a ser una página de producto.
+             *
+             * Se lee de `templates/product.json` del propio tema porque cada uno
+             * la llama a su manera —`main-product`, `product-information`…— y un
+             * nombre inventado no da error: Shopify pinta la plantilla sin esa
+             * sección y la página sale sin precio ni botón de comprar.
+             */
+            let seccionDeCompra: string | null = null;
+
+            if (comoProducto) {
+              const [base] = await listThemeFiles(store, live.id, ["templates/product.json"]);
+
+              seccionDeCompra = base?.body ? mainProductSection(base.body) : null;
+            }
+
             const done = await writeThemeFilesLenient(store, live.id, [
               { filename: `assets/${cssAsset}`, content: partes.css },
               ...hechas.map((hecha) => ({
@@ -658,8 +688,15 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
                   temas las secciones se puedan ocultar, mover y añadir. Con
                   `{% section %}` fijos, el editor las enseña y no deja tocarlas.
                 */
-                filename: `templates/page.${wanted}.json`,
-                content: templateFor(hechas.map((hecha) => hecha.name)),
+                filename: comoProducto
+                  ? `templates/product.${wanted}.json`
+                  : `templates/page.${wanted}.json`,
+                content: comoProducto
+                  ? productTemplateFrom({
+                      sectionNames: hechas.map((hecha) => hecha.name),
+                      mainSection: seccionDeCompra,
+                    })
+                  : templateFor(hechas.map((hecha) => hecha.name)),
               },
             ]);
 
@@ -709,7 +746,25 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
             }
 
             if (done.written === hechas.length + 2 && faltan.length === 0) {
-              suffix = wanted;
+              /*
+               * Como producto, la página de Shopify **no** lleva la plantilla.
+               *
+               * El sufijo empareja `templates/page.X` con una página; una
+               * plantilla de producto se empareja con un producto y se elige en
+               * su ficha. Poniéndolo aquí, la página buscaría `page.X`, que no
+               * existe, y saldría rota.
+               */
+              suffix = comoProducto ? "" : wanted;
+
+              if (comoProducto) {
+                avisos.push(
+                  `Plantilla de producto creada: templates/product.${wanted}.json${
+                    seccionDeCompra
+                      ? ""
+                      : ". Ojo: no se encontró la sección de compra del tema, así que la página no lleva precio ni botón de comprar"
+                  }. Asígnala en Shopify: ficha del producto → Plantilla de tema → ${wanted}.`,
+                );
+              }
 
               const total = hechas.reduce(
                 (sum, hecha) => ({

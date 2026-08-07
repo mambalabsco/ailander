@@ -7,6 +7,8 @@ import {
   collectCopy,
   isCopyKey,
   isWorthRewriting,
+  mainProductSection,
+  productTemplateFrom,
   readTemplateCopy,
   type ProductTemplate,
 } from "./product-template.ts";
@@ -199,4 +201,50 @@ test("el prompt lleva cada texto con su ruta y su bloque", () => {
   assert.ok(prompt.includes("Chile"));
   assert.ok(prompt.includes("Cápsulas para la retención de líquidos."));
   assert.ok(prompt.includes("no se inventan"), "las cifras de prueba social");
+});
+
+test("la sección de compra se saca del tema, no se da por sabida", () => {
+  /*
+   * Cada tema la llama a su manera. Un nombre inventado no da error: Shopify
+   * pinta la plantilla sin esa sección, y la página sale sin precio ni botón.
+   */
+  assert.equal(
+    mainProductSection('{"sections":{"main":{"type":"main-product"}},"order":["main"]}'),
+    "main-product",
+  );
+
+  assert.equal(
+    mainProductSection('{"sections":{"cabecera":{"type":"banner"},"x":{"type":"product-information"}}}'),
+    "product-information",
+    "si no se llama «main», la que lleve «product»",
+  );
+
+  assert.equal(mainProductSection("{no es json}"), null);
+  assert.equal(mainProductSection('{"sections":{"a":{"type":"banner"}}}'), null, "no se inventa");
+});
+
+test("la sección de compra va primera en la plantilla armada", () => {
+  // En una página larga copiada de una landing, todo lo demás son argumentos.
+  // Dejarla al final obliga a recorrerla entera para poder comprar.
+  const json = productTemplateFrom({
+    sectionNames: ["copia-01", "copia-02"],
+    mainSection: "main-product",
+  });
+
+  const parsed = JSON.parse(json);
+
+  assert.deepEqual(parsed.order, ["main", "copia-01", "copia-02"]);
+  assert.equal(parsed.sections.main.type, "main-product");
+  assert.equal(parsed.sections["copia-02"].type, "copia-02");
+});
+
+test("sin sección de compra la plantilla se arma igual", () => {
+  // Un tema raro del que no se pudo sacar: mejor la página sin botón que
+  // ninguna página, y el aviso lo da quien llama.
+  const parsed = JSON.parse(
+    productTemplateFrom({ sectionNames: ["copia-01"], mainSection: null }),
+  );
+
+  assert.deepEqual(parsed.order, ["copia-01"]);
+  assert.ok(!parsed.sections.main);
 });

@@ -227,3 +227,64 @@ export function readTemplateCopy(
 
   return changes;
 }
+
+/**
+ * La sección de compra del tema, sacada de su plantilla de producto por defecto.
+ *
+ * Es la que trae el precio, las variantes y el botón de añadir al carrito. Una
+ * página de producto calcada de una landing ajena no la lleva —esa landing
+ * vendía con un enlace— y sin ella la página es preciosa y no se puede comprar.
+ *
+ * Se lee de `templates/product.json` en vez de darla por sabida porque cada
+ * tema la llama a su manera: `main-product`, `product-information`, `main`… Un
+ * nombre inventado no da error: Shopify pinta la plantilla sin esa sección.
+ */
+export function mainProductSection(defaultTemplate: string): string | null {
+  let parsed: ProductTemplate;
+
+  try {
+    parsed = JSON.parse(defaultTemplate) as ProductTemplate;
+  } catch {
+    return null;
+  }
+
+  const entries = Object.entries(parsed.sections ?? {});
+
+  // Por orden de preferencia: la que el propio tema llama «main», y si no, la
+  // primera que lleve «product» en el tipo.
+  const main = entries.find(([id, section]) => id === "main" || section.type === "main-product");
+
+  if (main?.[1].type) return main[1].type;
+
+  const conProducto = entries.find(([, section]) => /product/i.test(section.type ?? ""));
+
+  return conProducto?.[1].type ?? null;
+}
+
+/**
+ * Una plantilla de producto hecha con secciones copiadas.
+ *
+ * La de compra va **primera**. Es donde está el precio y el botón, y en una
+ * página larga copiada de una landing todo lo demás son argumentos: dejarla al
+ * final obliga a recorrer la página entera para poder comprar.
+ */
+export function productTemplateFrom(input: {
+  sectionNames: string[];
+  /** El tipo de la sección de compra. Sin ella la página no vende. */
+  mainSection: string | null;
+}): string {
+  const sections: Record<string, { type: string }> = {};
+  const order: string[] = [];
+
+  if (input.mainSection) {
+    sections.main = { type: input.mainSection };
+    order.push("main");
+  }
+
+  for (const name of input.sectionNames) {
+    sections[name] = { type: name };
+    order.push(name);
+  }
+
+  return JSON.stringify({ sections, order }, null, 2);
+}

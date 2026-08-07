@@ -49,6 +49,15 @@ export function LandingViewer({
   const [fixing, startFixing] = useTransition();
   const [fixNote, setFixNote] = useState("");
   /*
+   * Publicar como página de producto en vez de como página suelta.
+   *
+   * Es la misma copia con los mismos textos ya adaptados; cambia dónde vive.
+   * Una plantilla de producto hereda el precio, las variantes y el botón de
+   * comprar del producto al que se asigne; una página suelta vende con un
+   * enlace y no tiene carrito.
+   */
+  const [asProduct, setAsProduct] = useState(false);
+  /*
    * Qué HTML te llevas.
    *
    * Por defecto, con huecos: las URL de las imágenes están firmadas y caducan en
@@ -91,7 +100,7 @@ export function LandingViewer({
       <div className="mb-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
         <div className="flex flex-wrap items-center gap-3">
           <GenerateButton
-            action={() => publishLandingAction({ id: page.id, productId })}
+            action={() => publishLandingAction({ id: page.id, productId, asProduct })}
             label={page.shopifyUrl ? "Actualizar en Shopify" : "Publicar en Shopify"}
             hint={
               page.shopifyUrl
@@ -99,6 +108,16 @@ export function LandingViewer({
                 : "Sube las imágenes y crea la página. Necesita el token en Configuración."
             }
           />
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={asProduct}
+              onChange={(event) => setAsProduct(event.target.checked)}
+              className="size-4"
+            />
+            Como página de producto
+          </label>
+
           {page.shopifyUrl ? (
             <a
               href={page.shopifyUrl}
