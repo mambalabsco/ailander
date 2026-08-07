@@ -101,7 +101,7 @@ function sheetUrls(html: string, origin: string): string[] {
 
 export type { ReferenceSection } from "@/lib/page-sections";
 
-import { bodyOf, collectImages, stripChrome } from "@/lib/landing-copy-html";
+import { bodyOf, collectImages, stripChrome, unlazy } from "@/lib/landing-copy-html";
 import type { ReferenceSection } from "@/lib/page-sections";
 
 /**
@@ -233,5 +233,17 @@ export async function readPageForCopy(
   const css = [inline, ...sheets].join("\n").slice(0, 800_000);
   const body = stripChrome(bodyOf(html)).slice(0, 800_000);
 
-  return { css, body, images: collectImages(body, css) };
+  /*
+   * Las imágenes se recogen del cuerpo **ya resuelto**, no del crudo.
+   *
+   * Un tema de Shopify carga en diferido: la dirección real vive en `data-src`
+   * o `data-srcset` y el `src` lleva un hueco transparente de 1×1 hasta que el
+   * navegador la pide. Recolectando del crudo se guardaba ese hueco y la imagen
+   * de verdad no llegaba nunca a la lista — desaparecían justo las que el tema
+   * sirve en varios formatos, que son las que más tarda en cargar.
+   *
+   * El cuerpo devuelto se deja tal cual: quien copia ya le pasa `unlazy` por su
+   * lado, y cambiarlo aquí movería lo que se publica.
+   */
+  return { css, body, images: collectImages(unlazy(body), css) };
 }
