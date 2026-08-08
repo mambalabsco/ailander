@@ -88,3 +88,27 @@ test("la libre no se propone por rotación", () => {
 test("lo pedido a mano manda sobre la rotación", () => {
   assert.equal(nextShape(["publirreportaje"], "libre").id, "libre");
 });
+
+test("la lista numerada no deja que el producto abra la lista", () => {
+  /*
+   * En una lista, el primer punto se lee como el más importante. Entrar
+   * vendiendo la convierte en el folleto que la lista venía a disimular, y es
+   * lo que hace el modelo si no se le dice: el producto es lo que más le suena
+   * del encargo.
+   */
+  const shape = findShape("listicle");
+
+  assert.equal(shape.id, "listicle", "está en el catálogo");
+  assert.ok(shape.avoid.some((one) => /primeros puntos/i.test(one)));
+  assert.ok(
+    shape.beats.some((one) => /del cinco en adelante/i.test(one)),
+    "y se dice dónde sí entra",
+  );
+
+  // Cada punto se sostiene solo: es lo que la separa de todas las demás, donde
+  // el orden es una secuencia y aquí es un índice.
+  assert.ok(shape.avoid.some((one) => /dependan de haber leído/i.test(one)));
+
+  // Y sin ficha de autor, que la volvería un publirreportaje con números.
+  assert.ok(shape.avoid.some((one) => /autor/i.test(one)));
+});

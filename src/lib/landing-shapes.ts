@@ -135,6 +135,39 @@ export const LANDING_SHAPES: LandingShape[] = [
     avoid: ["Respuestas de folleto", "Que el entrevistado no admita ninguna limitación"],
   },
   {
+    /*
+     * La lista numerada.
+     *
+     * Se lee distinto a todas las demás: no se lee entera, se escanea. El
+     * lector salta al número que le suena y decide ahí, así que cada punto
+     * tiene que sostenerse solo — un punto que solo se entiende habiendo leído
+     * el anterior es un punto perdido.
+     *
+     * Por eso el producto no puede ser el punto uno: en una lista, el primero
+     * se lee como el más importante, y entrar vendiendo la convierte en el
+     * folleto que la lista venía a disimular. Va del cinco en adelante, cuando
+     * el lector ya se ha dado la razón cuatro veces.
+     */
+    id: "listicle",
+    label: "Lista numerada",
+    note: "«7 razones por las que…». Se escanea en vez de leerse: cada punto se sostiene solo.",
+    voice: "Alguien que ha ordenado lo que sabe y lo suelta sin rodeos, punto por punto.",
+    beats: [
+      "Titular con el número por delante y a quién le sirve",
+      "Una entrada de dos frases: por qué esta lista y no otra",
+      "Los puntos, numerados, con su propio subtítulo cada uno",
+      "Cada punto: la afirmación, por qué es así, y qué hacer con ella",
+      "Un punto del cinco en adelante donde entra el producto, como una opción más",
+      "Cierre corto que recoge la lista y lleva a la oferta",
+    ],
+    avoid: [
+      "Puntos que dependan de haber leído el anterior",
+      "El producto en los primeros puntos",
+      "Puntos de relleno para llegar al número del titular",
+      "Ficha de autor con credenciales",
+    ],
+  },
+  {
     id: "libre",
     label: "Libre",
     note: "Sin plantilla: decide la forma según el producto y el ángulo. Puede salir mal.",
