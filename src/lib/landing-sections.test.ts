@@ -541,3 +541,26 @@ test("ningún ajuste de tipo url lleva default", () => {
     if (setting.type === "url") assert.equal(setting.default, undefined, setting.id);
   }
 });
+
+test("una página bajo varios envoltorios no acaba en una sola sección", () => {
+  /*
+   * Es lo que pasó copiando parches-tinicalm: una app de React vive bajo
+   * `#root` y encadena envoltorios —el de la app, el del enrutador, el del
+   * ancho máximo— antes del contenido. Con tres bajadas, las vueltas se
+   * agotaban dentro de los envoltorios y la página entera salía como una sola
+   * sección, que en el editor de temas no se puede manejar.
+   */
+  const tramo = (n: number) =>
+    `<section><h2>Tramo ${n}</h2><p>${"contenido de venta ".repeat(200)}</p></section>`;
+
+  const dentro = [1, 2, 3, 4].map(tramo).join("");
+
+  // Seis envoltorios, que es lo normal en una app compilada.
+  const envuelto = `<div><div><div><div><div><div>${dentro}</div></div></div></div></div></div>`;
+
+  const parts = splitTopLevel(envuelto);
+
+  assert.ok(parts.length >= 4, `esperaba varias secciones y salieron ${parts.length}`);
+  assert.ok(parts.some((part) => part.includes("Tramo 1")));
+  assert.ok(parts.some((part) => part.includes("Tramo 4")));
+});

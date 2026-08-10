@@ -195,7 +195,22 @@ export function splitTopLevel(html: string, maxParts = 20, bands?: Set<string>):
    * Se repite hasta tres veces. Más sería seguir bajando hasta los párrafos, y
    * entonces cada frase es una sección.
    */
-  for (let vuelta = 0; vuelta < 3; vuelta += 1) {
+  /*
+   * Ocho bajadas, no tres.
+   *
+   * Tres bastan en una landing hecha a mano, donde los tramos cuelgan casi del
+   * primer nivel. Una página de React vive bajo `#root` y encadena envoltorios
+   * —el contenedor de la app, el del enrutador, el del tema, el del ancho
+   * máximo— antes de llegar a las secciones de verdad: con tres bajadas se
+   * agotan las vueltas dentro de los envoltorios y la página entera sale como
+   * **una sola sección**. Es lo que pasó copiando parches-tinicalm.
+   *
+   * Subirlo es seguro porque no es lo que decide cuándo parar: se para en
+   * cuanto el bloque mayor deja de llevarse la página o baja de los cuatro mil
+   * caracteres. Lo único que cambia es cuántos envoltorios vacíos se pueden
+   * atravesar antes de encontrar el contenido.
+   */
+  for (let vuelta = 0; vuelta < 8; vuelta += 1) {
     const total = clean.reduce((sum, part) => sum + part.length, 0);
     const mayor = clean.reduce((top, part) => (part.length > top.length ? part : top), "");
 
@@ -241,10 +256,28 @@ export function splitTopLevel(html: string, maxParts = 20, bands?: Set<string>):
       }
     }
 
-    // Si dentro solo hay uno, bajar otra vez daría lo mismo: se para.
-    if (dentro.length <= 1) break;
-
+    /*
+     * Un solo hijo es un envoltorio: se le quita y se sigue bajando.
+     *
+     * Aquí se paraba, con el argumento de que bajar otra vez daría lo mismo. No
+     * lo da: da un nivel más adentro. Una app de React encadena envoltorios de
+     * uno en uno —el de la app, el del enrutador, el del ancho máximo— y con
+     * esta parada la página entera salía como **una sola sección**, que en el
+     * editor de temas no se puede manejar. Es lo que pasó con
+     * parches-tinicalm.
+     *
+     * Si quitarle la capa no cambia nada, entonces sí se para: sin eso serían
+     * vueltas sin avanzar.
+     */
     const at = clean.indexOf(mayor);
+
+    if (dentro.length === 1) {
+      if (dentro[0] === mayor) break;
+
+      clean = [...clean.slice(0, at), dentro[0], ...clean.slice(at + 1)];
+      continue;
+    }
+
     clean = [...clean.slice(0, at), ...dentro, ...clean.slice(at + 1)];
   }
 
