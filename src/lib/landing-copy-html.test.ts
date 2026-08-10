@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -1373,4 +1374,25 @@ test("las clases con variante de Tailwind no se tiran al podar", () => {
   assert.match(out, /lg\\:grid-cols-3/);
   assert.match(out, /\.text-2xl/);
   assert.ok(!out.includes("sobra"), "y lo que no se usa se sigue yendo");
+});
+
+test("el barrido de titulares del tema no puede tapar el de una copia", () => {
+  /*
+   * Comprobado en la copia publicada de parches-tinicalm: el `<h1>` estaba en
+   * el HTML con su texto y no se veía. Lo tapaba una regla nuestra, puesta para
+   * esconder el titular que el tema saca del nombre de la página; solo hacía
+   * excepción con el contenedor de las landings generadas, y una copia vive en
+   * otro. Quedaba un hueco blanco entre la barra de aviso y el primer párrafo.
+   *
+   * Se lee del archivo porque `landing-html` no se puede importar aquí —usa
+   * alias de módulo—, y esta garantía vale más comprobada de forma torpe que no
+   * comprobada: el fallo era invisible en el marcado y solo salía en la página
+   * ya publicada.
+   */
+  const fuente = readFileSync(new URL("./landing-html.ts", import.meta.url), "utf8");
+  const regla = /h1:not\([^\n]*display:\s*none/.exec(fuente);
+
+  assert.ok(regla, "la regla sigue existiendo: esconde el titular del tema");
+  assert.match(regla[0], /ROOT_CLASS/, "perdona el de una landing generada");
+  assert.match(regla[0], /COPY_CLASS/, "y también el de una copia");
 });

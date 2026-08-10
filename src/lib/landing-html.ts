@@ -553,6 +553,15 @@ function renderSection(
  */
 const ROOT_CLASS = "lp-root";
 
+/*
+ * El contenedor de una página **copiada**, que no es el mismo.
+ *
+ * Una landing generada cuelga de `lp-root` y una copiada de `copiado`. Las
+ * reglas que esconden lo que pone el tema tienen que hacer excepción con las
+ * dos: con una sola, la copia perdía su propio titular.
+ */
+const COPY_CLASS = "copiado";
+
 const HIDE_CHROME = `<style>
   [id*="shopify-section"][id*="header"],
   [id*="shopify-section"][id*="footer"],
@@ -580,7 +589,16 @@ const HIDE_CHROME = `<style>
   .article-title, .template-page .page-width > h1, .rte + h1 {
     display: none !important;
   }
-  h1:not(.${ROOT_CLASS} h1) { display: none !important; }
+  /*
+   * La excepción son **los dos** contenedores nuestros, no solo uno.
+   *
+   * Una landing generada vive en «lp-root» y una copiada en «copiado».
+   * Con solo el primero, este barrido tapaba el titular de toda página copiada
+   * —el suyo propio, el que trae la maqueta— y quedaba un hueco blanco entre la
+   * barra de aviso y el primer párrafo. El marcado estaba bien y el texto
+   * estaba ahí: solo era invisible, que es la forma más cara de fallar.
+   */
+  h1:not(.${ROOT_CLASS} h1):not(.${COPY_CLASS} h1) { display: none !important; }
 
   /* Los temas suelen dejar hueco para la cabecera fija. */
   main, #MainContent, .main-content { padding-top: 0 !important; margin-top: 0 !important; }
