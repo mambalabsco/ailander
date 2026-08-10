@@ -2,6 +2,7 @@ import { listStores } from "@/lib/store-registry";
 import { listOwnProducts } from "@/lib/store";
 import { StoresManager } from "@/app/stores/stores-manager";
 import { SectionCard } from "@/components/section-card";
+import { ShopifySetupGuide } from "@/components/shopify-setup-guide";
 import { StoreBlueprints } from "@/components/store-blueprints";
 import { ShopProducts } from "@/components/shop-products";
 import { ThemePlanPanel } from "@/components/theme-plan";
@@ -58,6 +59,14 @@ export default async function StoresPage() {
       </header>
 
       {jobs.length > 0 ? <JobsPanel productId="" jobs={jobs} storeLevel /> : null}
+
+      {/*
+        La guía va **antes** del gestor de tiendas.
+        Se lee mientras se conecta la primera, con las dos pestañas abiertas.
+        Debajo, quien conecta por primera vez ya ha pasado de largo el formulario
+        y ha llegado al campo del token sin saber de dónde sale.
+      */}
+      <ShopifySetupGuide />
 
       <StoresManager stores={stores} productsByMarket={productsByMarket} />
 
