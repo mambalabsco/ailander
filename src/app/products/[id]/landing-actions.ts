@@ -1182,6 +1182,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         buildTextPrompt,
         closeOpenTags,
         dropHidingRules,
+  inheritFonts,
         extractTexts,
         reveal,
         scopeCss,
@@ -1384,10 +1385,20 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
              sin podar, 471 con. Se poda contra el marcado ya limpio, que es el
              que de verdad se va a publicar.
           */
-          css: scopeCss(
-            pruneCss(dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)), body),
-            ".copiado",
-          ),
+          /*
+             La herencia de la fuente va delante de todo lo demás.
+
+             El tema pinta `h1`, `h2` y `p` por su cuenta y gana a la fuente que
+             la copia declara en su contenedor. Devolviéndosela a esos
+             elementos, la copia se ve con su letra; y va primero para que las
+             reglas propias del original sigan mandando sobre ella.
+          */
+          css:
+            inheritFonts(".copiado") +
+            scopeCss(
+              pruneCss(dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)), body),
+              ".copiado",
+            ),
         },
       ];
 

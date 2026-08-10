@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   absolutize,
   applyTexts,
+  inheritFonts,
   batchTexts,
   bodyOf,
   buildTextPrompt,
@@ -1310,4 +1311,26 @@ test("la cabecera de un artículo no se tira como si fuera la de una tienda", ()
 
   assert.ok(!tienda.includes("Inicio"), "eso sí es navegación");
   assert.equal(tienda.trim(), "<p>Cuerpo</p>");
+});
+
+test("la copia se ve con su letra y no con la del tema", () => {
+  /*
+   * La página copiada declara su fuente en `html` y `body`, y al acotarla esas
+   * reglas pasan al contenedor. Pero un tema de Shopify pinta `h1`, `h2` y `p`
+   * directamente, y una regla propia gana a lo heredado: la copia salía con los
+   * colores y los anchos del original y el serif del tema.
+   */
+  const reset = inheritFonts(".copiado");
+
+  assert.ok(reset.includes(".copiado h1"));
+  assert.ok(reset.includes(".copiado p"));
+  assert.ok(reset.includes(".copiado button"), "los botones también los pinta el tema");
+  assert.ok(reset.includes("font-family:inherit"));
+
+  /*
+   * `inherit` y no una fuente concreta: no impone nada, devuelve la del
+   * contenedor — que ya es la del original. Escribir aquí un nombre de fuente
+   * sería adivinar cuál usa cada página copiada.
+   */
+  assert.ok(!/font-family:\s*(?!inherit)[a-z]/i.test(reset));
 });
