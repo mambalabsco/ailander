@@ -145,11 +145,28 @@ test("las direcciones normales se quedan", () => {
 /* --------------------------------- El CSS ----------------------------------- */
 
 /* Una regla sobre `body` dentro de una página copiada repintaría la plataforma. */
-test("las reglas sobre html y body se caen", () => {
-  const css = sanitizeCss("body { background: black } .hero { color: red }");
+test("las reglas sobre html y body se conservan: las acota el ámbito, no el saneado", () => {
+  /*
+   * Se tiraban aquí para que no repintaran la plataforma entera. El miedo era
+   * correcto y la solución demasiado bruta: en `html` y en `body` es donde una
+   * página declara su tipografía, su fondo y sus variables de color.
+   *
+   * Medido con la hoja real de parches-tinicalm: su `html,:host{font-family:
+   * Inter…}` moría aquí, y `scopeCss` —que tiene código escrito para convertir
+   * esos selectores en el contenedor— llegaba cuando ya no quedaba nada. La
+   * copia salía con los colores y los anchos del original y la letra del tema.
+   */
+  const css = sanitizeCss("html,:host{font-family:Inter}body{background:black}.hero{color:red}");
 
-  assert.ok(!css.includes("background: black"));
+  assert.match(css, /font-family:Inter/);
+  assert.match(css, /background:black/);
   assert.match(css, /\.hero/);
+
+  // Y acotadas dejan de poder salirse, que es lo que se buscaba al tirarlas.
+  const acotado = scopeCss(css, ".copiado");
+
+  assert.match(acotado, /\.copiado[^{]*\{font-family:Inter\}/);
+  assert.ok(!/(^|[},])\s*(html|body)\s*\{/.test(acotado), "ya no queda ninguna suelta");
 });
 
 test("los @import se caen: traerían una hoja de otro sitio", () => {
