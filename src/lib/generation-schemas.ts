@@ -555,3 +555,19 @@ export const IMAGE_HOOKS_SCHEMA = object({
     }),
   },
 });
+
+/* ------------------- Textos adaptados con su ruta de vuelta ---------------- */
+
+/**
+ * Los mismos campos que se mandaron, reescritos.
+ *
+ * `path` vuelve porque es lo único que sabe **dónde** vive cada texto. Sin él
+ * habría que emparejar por orden, y una respuesta que se salte un campo
+ * desplazaría todos los demás: el aviso de letra pequeña acabaría de titular.
+ */
+export const ADAPTED_FIELDS_SCHEMA = object({
+  fields: {
+    type: "array",
+    items: object({ path: str, text: str }),
+  },
+});

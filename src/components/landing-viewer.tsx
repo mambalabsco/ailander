@@ -10,6 +10,8 @@ import { ImageDownloads } from "@/components/image-downloads";
 import {
   deleteLandingAction,
   generateCommentAvatarsAction,
+  cloneLandingAction,
+  cloneTargetsAction,
   publishLandingAction,
   unlinkLandingAction,
   copyCommentsAction,
@@ -64,6 +66,17 @@ export function LandingViewer({
    * casilla en una página ya publicada prometería algo que no va a pasar.
    */
   const [asDraft, setAsDraft] = useState(false);
+  /*
+   * A qué producto se rehace esta portada.
+   *
+   * El destino por defecto es **vacío** y no el primero de la lista: clonar
+   * escribe una portada nueva en el producto elegido, y elegirlo sin querer
+   * deja una página con textos de otro producto en un sitio donde nadie la
+   * busca.
+   */
+  const [cloneTo, setCloneTo] = useState("");
+  const [targets, setTargets] = useState<{ id: string; name: string }[]>([]);
+  const [loadingTargets, startTargets] = useTransition();
   /*
    * Qué HTML te llevas.
    *
@@ -289,6 +302,60 @@ export function LandingViewer({
           ) : null}
 
 
+
+      {/*
+        Rehacer esta portada para otro producto.
+        Va junto a publicar porque es la otra cosa que se hace con una portada
+        que ya funciona: llevarla a la siguiente. La lista de destinos se pide
+        al pulsar, no viaja con la página.
+      */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+        <span className="text-sm font-medium">Rehacer para otro producto</span>
+
+        {targets.length === 0 ? (
+          <Button
+            variant="secondary"
+            disabled={loadingTargets}
+            onClick={() =>
+              startTargets(async () => {
+                const result = await cloneTargetsAction(productId);
+                setTargets(result.products ?? []);
+              })
+            }
+          >
+            {loadingTargets ? "Leyendo…" : "Elegir producto"}
+          </Button>
+        ) : (
+          <>
+            <select
+              value={cloneTo}
+              onChange={(event) => setCloneTo(event.target.value)}
+              className="rounded-xl border border-slate-200 px-2 py-1 text-sm dark:border-slate-800 dark:bg-slate-950"
+            >
+              <option value="">Elige el producto…</option>
+              {targets.map((one) => (
+                <option key={one.id} value={one.id}>
+                  {one.name}
+                </option>
+              ))}
+            </select>
+
+            {cloneTo ? (
+              <GenerateButton
+                variant="secondary"
+                action={() => cloneLandingAction({ landingId: page.id, productId: cloneTo })}
+                label="Rehacerla"
+                hint="Copia la estructura y reescribe todos los textos y los encargos de imagen para ese producto. Esta portada no se toca."
+              />
+            ) : null}
+          </>
+        )}
+
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Se guarda como portada nueva del producto elegido. Las imágenes quedan como huecos con su
+          encargo, listos para generar.
+        </span>
+      </div>
 
       {tab === "retratos" ? (
         <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">

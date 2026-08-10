@@ -1679,3 +1679,195 @@ export async function fixLinksAction(input: unknown): Promise<{ ok: boolean; mes
     };
   }
 }
+
+/**
+ * Rehace una portada que ya funciona para otro producto.
+ *
+ * ## Qué se copia y qué se rehace
+ *
+ * Se copia **la forma** —qué secciones hay, en qué orden, dónde van los huecos
+ * de imagen y con qué proporción— y se rehace **todo lo que dice**: los textos
+ * y los encargos de las imágenes.
+ *
+ * Lo que costó acertar es la estructura, y esa no cambia de un producto a otro.
+ * Lo que no puede quedarse es una palabra del anterior: una portada medio
+ * adaptada es peor que una en blanco, porque parece terminada.
+ *
+ * ## Las imágenes no se generan aquí
+ *
+ * Se dejan como huecos con su encargo nuevo, listos para la pestaña de
+ * imágenes. Generarlas de una tanda cuesta dinero antes de que nadie haya
+ * leído los textos, y lo normal es querer retocar un par antes de gastar.
+ */
+export async function cloneLandingAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const landingId = readText(raw.landingId);
+  const productId = readText(raw.productId);
+
+  if (!landingId || !productId) throw new Error("Falta la portada o el producto de destino.");
+
+  if (!isSupabaseConfigured()) {
+    throw new Error("Esto se guarda en Supabase y todavía no está configurado.");
+  }
+
+  const { readLanding } = await import("@/lib/data/landings");
+  const origen = await readLanding(landingId);
+  if (!origen) throw new Error("Esa portada ya no existe.");
+
+  const destino = await findProductAnywhere(productId);
+  if (!destino) throw new Error("Ese producto ya no existe.");
+
+  const anterior = await findProductAnywhere(origen.productId);
+
+  return runInBackground({
+    productId,
+    kind: "imagenes",
+    label: `Portada · ${destino.name}`,
+    work: async (report) => {
+      const {
+        applySectionTexts,
+        buildClonePrompt,
+        buildSlotPrompt,
+        collectSectionTexts,
+        readAdapted,
+      } = await import("@/lib/landing-clone");
+      const { ADAPTED_FIELDS_SCHEMA } = await import("@/lib/generation-schemas");
+
+      const fields = collectSectionTexts(origen.sections);
+      const fromProduct = anterior?.name ?? "otro producto";
+
+      const research = await readProductResearch(productId).catch(() => null);
+
+      const context = [
+        destino.description ? `Producto: ${destino.description}` : "",
+        destino.benefits.length > 0 ? `Beneficios: ${destino.benefits.join(", ")}` : "",
+        research?.master ? `Le duele: ${research.master.psychographics.painPoints.join("; ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .slice(0, 4_000);
+
+      const comun = {
+        productName: destino.name,
+        audience: destino.targetAudience || "el público objetivo",
+        country: destino.country || "México",
+        fromProduct,
+      };
+
+      await report(`Reescribiendo ${fields.length} textos para ${destino.name}`);
+
+      const written = await generateStructured<{ fields: { path: string; text: string }[] }>({
+        prompt: buildClonePrompt({ fields, ...comun, context: context || undefined }),
+        schema: ADAPTED_FIELDS_SCHEMA,
+        role: "copy",
+        maxTokens: 16_000,
+      });
+
+      const changes = readAdapted(
+        fields.map((one) => one.path),
+        written.data.fields ?? [],
+      );
+
+      if (Object.keys(changes).length === 0) {
+        throw new Error("El modelo no devolvió ningún texto reconocible. Vuelve a intentarlo.");
+      }
+
+      /*
+       * Los encargos de imagen se piden aparte.
+       *
+       * No son texto de venta: son instrucciones para el generador, y se juzgan
+       * por si describen algo que se puede fotografiar. Mezclados con los
+       * titulares en la misma petición salen evocadores en vez de filmables.
+       */
+      let slots = origen.imageSlots;
+
+      if (slots.length > 0) {
+        await report(`Rehaciendo ${slots.length} encargos de imagen`);
+
+        const visual = await generateStructured<{ fields: { path: string; text: string }[] }>({
+          prompt: buildSlotPrompt({ slots, ...comun }),
+          schema: ADAPTED_FIELDS_SCHEMA,
+          role: "copy",
+          maxTokens: 8_000,
+        }).catch(() => null);
+
+        const nuevos = visual
+          ? readAdapted(
+              slots.map((one) => one.slot),
+              visual.data.fields ?? [],
+            )
+          : {};
+
+        slots = slots.map((one) => ({ ...one, prompt: nuevos[one.slot] ?? one.prompt }));
+      }
+
+      await report("Guardando la portada");
+
+      const saved = await saveLanding({
+        productId,
+        title: `${origen.title} · ${destino.name}`,
+        slug: `${destino.name.toLowerCase().replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}`,
+        shapeId: origen.shapeId,
+        sections: applySectionTexts(origen.sections, changes),
+        imageSlots: slots,
+        /*
+         * Los comentarios no se heredan.
+         *
+         * Son reseñas con nombre y edad hablando de un producto concreto:
+         * traídas tal cual, la portada nueva sale con gente elogiando el
+         * anterior. Se generan desde su pestaña cuando toque.
+         */
+        comments: [],
+      });
+
+      revalidatePath(`/products/${productId}`);
+
+      const faltan = fields.length - Object.keys(changes).length;
+
+      return {
+        summary: [
+          `Portada creada desde «${origen.title}»:`,
+          ` ${Object.keys(changes).length} de ${fields.length} textos reescritos`,
+          faltan > 0 ? ` — quedan ${faltan} con el texto de ${fromProduct}` : "",
+          `, ${slots.length} huecos de imagen listos para generar.`,
+          process.env.NEXT_PUBLIC_BUILD ? ` [${process.env.NEXT_PUBLIC_BUILD}]` : "",
+        ].join(""),
+        inputTokens: written.inputTokens,
+        outputTokens: written.outputTokens,
+        result: saved.id,
+      };
+    },
+  });
+}
+
+/**
+ * Los productos a los que se puede rehacer una portada.
+ *
+ * Se piden al pulsar y no se pasan con la página: son una lista que solo hace
+ * falta cuando alguien va a clonar, y cargarla siempre la haría viajar en cada
+ * portada de cada producto para el caso raro.
+ */
+export async function cloneTargetsAction(exceptId: unknown): Promise<{
+  ok: boolean;
+  message: string;
+  products?: { id: string; name: string }[];
+}> {
+  try {
+    const { getCombinedProducts } = await import("@/lib/products");
+    const fuera = readText(exceptId);
+
+    const products = (await getCombinedProducts())
+      // El propio producto no: rehacer su portada para él mismo es duplicarla,
+      // y para eso está el botón de duplicar.
+      .filter((product) => product.id !== fuera)
+      .map((product) => ({ id: product.id, name: product.name }));
+
+    return { ok: true, message: `${products.length} producto(s).`, products };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo leer la lista.",
+    };
+  }
+}
