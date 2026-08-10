@@ -1351,3 +1351,26 @@ test("la copia se ve con su letra y no con la del tema", () => {
    */
   assert.ok(!/font-family:\s*(?!inherit)[a-z]/i.test(reset));
 });
+
+test("las clases con variante de Tailwind no se tiran al podar", () => {
+  /*
+   * Se escriben `md:text-4xl` en el marcado y `.md\\:text-4xl` en la hoja.
+   * Leyendo solo hasta los dos puntos, el nombre salía como `md`, no aparecía
+   * en el marcado y se tiraba la regla — y con ella todos los tamaños,
+   * márgenes y columnas de tableta y escritorio. La copia quedaba con la
+   * maqueta de móvil estirada.
+   */
+  const css = [
+    "@media (min-width:768px){.md\\:text-4xl{font-size:2.25rem}}",
+    ".text-2xl{font-size:1.5rem}",
+    ".lg\\:grid-cols-3{grid-template-columns:repeat(3,1fr)}",
+    ".sobra{color:red}",
+  ].join("");
+
+  const out = pruneCss(css, '<h1 class="text-2xl md:text-4xl lg:grid-cols-3">Hola</h1>');
+
+  assert.match(out, /md\\:text-4xl/, "la variante de tableta se queda");
+  assert.match(out, /lg\\:grid-cols-3/);
+  assert.match(out, /\.text-2xl/);
+  assert.ok(!out.includes("sobra"), "y lo que no se usa se sigue yendo");
+});
