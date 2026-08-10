@@ -1117,6 +1117,20 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
   const raw = (input ?? {}) as Record<string, unknown>;
   const productId = readText(raw.productId);
   const pageUrl = readText(raw.pageUrl);
+
+  /*
+   * El HTML ya montado, pegado a mano.
+   *
+   * Para las páginas hechas con React o Vue, que se descargan como un cascarón
+   * vacío: `<div id="root"></div>` y nada más. Copiar eso produce una página en
+   * blanco sin un solo error por el camino, que es la peor forma de fallar.
+   *
+   * Se pega lo que el navegador ya tiene montado —en las herramientas de
+   * desarrollo, botón derecho sobre `<html>` y «Copy outerHTML»— y a partir de
+   * ahí se copia igual que cualquier otra. La dirección se sigue pidiendo: hace
+   * falta para resolver los enlaces relativos y para bajar las hojas externas.
+   */
+  const rendered = readText(raw.html);
   /**
    * Empezar de cero: tirar las copias anteriores de esta misma página.
    *
@@ -1178,7 +1192,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         sanitizeHtml,
       } = await import("@/lib/landing-copy-html");
 
-      const page = await readPageForCopy(url);
+      const page = await readPageForCopy(url, 25_000, rendered);
       const origin = new URL(url).origin;
 
       // El prefijo de las copias de **esta** página, para no tocar las de otra.

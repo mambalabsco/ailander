@@ -202,13 +202,27 @@ export interface PageForCopy {
 export async function readPageForCopy(
   pageUrl: string,
   timeoutMs = 25_000,
+  /*
+   * El HTML ya montado, cuando la página no se puede descargar montada.
+   *
+   * Una página hecha con React o Vue llega como `<div id="root"></div>` y nada
+   * más: el contenido lo pinta el navegador, así que descargarla devuelve un
+   * cascarón de cinco kilobytes. Copiarlo produce una página vacía sin un solo
+   * error por el camino, que es la peor forma de fallar.
+   *
+   * Pegando lo que el navegador ya tiene montado se copia igual que una de
+   * Shopify. La dirección se sigue pidiendo: hace falta para resolver los
+   * enlaces relativos y para bajar las hojas de estilo externas, que en el
+   * pegado vienen como `<link>` y no como texto.
+   */
+  rendered?: string,
 ): Promise<PageForCopy> {
   let html: string;
   let origin: string;
 
   try {
     origin = new URL(pageUrl).origin;
-    html = await get(pageUrl, timeoutMs);
+    html = rendered?.trim() ? rendered : await get(pageUrl, timeoutMs);
   } catch {
     return { css: "", body: "", images: [] };
   }

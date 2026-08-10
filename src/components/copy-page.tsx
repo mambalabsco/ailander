@@ -28,6 +28,15 @@ import { copyLandingAction } from "@/app/products/[id]/landing-actions";
 export function CopyPage({ productId }: { productId: string }) {
   const [pageUrl, setPageUrl] = useState("");
   const [fresh, setFresh] = useState(false);
+  /*
+   * El HTML ya montado, para las páginas que se pintan con JavaScript.
+   *
+   * Van escondidas tras un enlace porque no hacen falta casi nunca: una tienda
+   * de Shopify llega ya montada del servidor. Puestas siempre a la vista, este
+   * campo parecería un paso obligatorio del copiado.
+   */
+  const [html, setHtml] = useState("");
+  const [showHtml, setShowHtml] = useState(false);
 
   return (
     <div className="space-y-2">
@@ -51,13 +60,44 @@ export function CopyPage({ productId }: { productId: string }) {
 
         <GenerateButton
           variant="primary"
-          action={() => copyLandingAction({ productId, pageUrl, fresh })}
+          action={() => copyLandingAction({ productId, pageUrl, fresh, html })}
           label="Copiarla"
           disabled={!pageUrl.trim()}
           disabledReason={!pageUrl.trim() ? "Pega la dirección primero." : undefined}
           hint="Una petición por sección. Va en segundo plano y se puede cerrar la pestaña."
         />
       </div>
+
+      {showHtml ? (
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            HTML ya montado (solo si la página se pinta con JavaScript)
+          </span>
+
+          <textarea
+            value={html}
+            onChange={(event) => setHtml(event.target.value)}
+            rows={4}
+            placeholder="Pega aquí el resultado de «Copy outerHTML»"
+            className="rounded-xl border border-slate-200 p-2 font-mono text-xs dark:border-slate-800 dark:bg-slate-950"
+          />
+
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Ábrela en el navegador, pulsa F12, botón derecho sobre la etiqueta{" "}
+            <code>&lt;html&gt;</code> → «Copy outerHTML». La dirección de arriba se sigue
+            necesitando: de ella salen los enlaces y las hojas de estilo.
+            {html ? ` · ${Math.round(html.length / 1024)} KB pegados` : ""}
+          </span>
+        </label>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowHtml(true)}
+          className="text-xs text-slate-500 underline underline-offset-4 dark:text-slate-400"
+        >
+          ¿La página sale vacía? Pega el HTML ya montado
+        </button>
+      )}
 
       {/*
         Empezar de cero.
