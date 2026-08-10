@@ -1262,3 +1262,52 @@ test("uno que ya tiene href no recibe otro", () => {
   assert.equal((out.html.match(/href=/g) ?? []).length, 1);
   assert.ok(out.html.includes("mitienda.com/p"));
 });
+
+test("la numeración que devuelve el modelo no acaba en la página", () => {
+  /*
+   * Los textos se mandan numerados para devolverlos a su sitio, y a veces
+   * vuelven con el número dentro. En la copia publicada se leía «5.
+   * ACTUALIZACIÓN: la demanda ha subido» y un botón que decía «6. VER
+   * DISPONIBILIDAD».
+   */
+  const html = "<p>Uno</p><p>Dos</p>";
+  const out = applyTexts(html, ["1. Primero", "2) Segundo"]);
+
+  assert.ok(out.includes(">Primero<"), "sin el «1.»");
+  assert.ok(out.includes(">Segundo<"), "sin el «2)»");
+  assert.ok(!out.includes("1."));
+});
+
+test("una lista de verdad conserva su número", () => {
+  // «7 razones» o «3 gotas al día» es texto legítimo y frecuente en estas
+  // páginas: quitar cualquier cifra inicial lo destrozaría.
+  const out = applyTexts(
+    "<p>Texto de origen uno</p><p>Texto de origen dos</p>",
+    ["7 razones para probarlo", "3. gotas al día"],
+  );
+
+  assert.ok(out.includes("7 razones para probarlo"), "no le tocaba el 7");
+  assert.ok(out.includes("3. gotas al día"), "al segundo le tocaba el 2, no el 3");
+});
+
+test("la cabecera de un artículo no se tira como si fuera la de una tienda", () => {
+  /*
+   * En un tema de Shopify, `<header>` es la barra de la tienda. En una landing
+   * hecha a mano es la cabecera del artículo: titular, foto grande y ficha del
+   * autor. Quitándola sin mirar, la copia empezaba a media página.
+   */
+  const articulo = stripChrome(
+    '<header><h1>Olvida todo sobre el tinnitus</h1><img src="/hero.jpg"></header><p>Cuerpo</p>',
+  );
+
+  assert.ok(articulo.includes("Olvida todo sobre el tinnitus"), "el titular se queda");
+  assert.ok(articulo.includes("/hero.jpg"));
+
+  // Y la barra de una tienda sigue cayendo.
+  const tienda = stripChrome(
+    '<header><a href="/">Inicio</a><img src="/logo.svg"></header><p>Cuerpo</p>',
+  );
+
+  assert.ok(!tienda.includes("Inicio"), "eso sí es navegación");
+  assert.equal(tienda.trim(), "<p>Cuerpo</p>");
+});
