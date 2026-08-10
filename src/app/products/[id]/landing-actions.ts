@@ -1485,6 +1485,16 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           `Copiada ${new URL(url).hostname}: ${texts.length - failed} de ${texts.length} textos adaptados`,
           failed > 0 ? ` (${failed} se quedaron en el idioma original)` : "",
           `, ${images.length} imágenes y vídeos recogidos.`,
+          ` ${out.length} sección(es).`,
+          /*
+           * La versión que hizo esta copia.
+           *
+           * Sin ella, «lo arreglé» y «sigue fallando» son indistinguibles: no
+           * hay forma de saber si el servidor ya corría el arreglo cuando se
+           * hizo, y se acaba persiguiendo un fallo que ya no existe. La escribe
+           * `actualizar.sh` al construir.
+           */
+          process.env.NEXT_PUBLIC_BUILD ? ` [${process.env.NEXT_PUBLIC_BUILD}]` : "",
           removed > 0 ? ` Se quitaron ${removed} copias anteriores de esta página.` : "",
           warnings.length > 0 ? ` ${warnings.length} aviso(s).` : "",
           " Los archivos siguen siendo los suyos: adáptalos antes de publicar.",

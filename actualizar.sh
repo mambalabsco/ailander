@@ -60,6 +60,12 @@ if [ "$ANTES" = "$DESPUES" ]; then
   if build_viejo; then
     rojo "No hay cambios nuevos, pero lo compilado es más antiguo que el código."
     rojo "Seguramente se hizo un «git pull» sin compilar. Se arregla ahora."
+    # La versión se hornea en el build y viaja con cada resultado.
+    #
+    # Sin esto, «lo arreglé» y «sigue fallando» son indistinguibles: no hay
+    # forma de saber si el servidor corría ya el arreglo cuando se hizo esa
+    # copia, y se acaba persiguiendo un fallo que ya no existe.
+    export NEXT_PUBLIC_BUILD="$(git rev-parse --short HEAD)"
     como npm run build
     systemctl restart plataforma
     sleep 4
