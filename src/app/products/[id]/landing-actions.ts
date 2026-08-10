@@ -1183,6 +1183,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
         closeOpenTags,
         dropHidingRules,
   inheritFonts,
+  remToPx,
         extractTexts,
         reveal,
         scopeCss,
@@ -1396,7 +1397,9 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
           css:
             inheritFonts(".copiado") +
             scopeCss(
-              pruneCss(dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)), body),
+              remToPx(
+                pruneCss(dropHidingRules(absolutizeCss(sanitizeCss(page.css), origin)), body),
+              ),
               ".copiado",
             ),
         },

@@ -26,6 +26,7 @@ import {
   unlazy,
   autoplayVideos,
   pruneCss,
+  remToPx,
   externalizeCss,
   mediaKindOf,
   templateSuffix,
@@ -1395,4 +1396,29 @@ test("el barrido de titulares del tema no puede tapar el de una copia", () => {
   assert.ok(regla, "la regla sigue existiendo: esconde el titular del tema");
   assert.match(regla[0], /ROOT_CLASS/, "perdona el de una landing generada");
   assert.match(regla[0], /COPY_CLASS/, "y también el de una copia");
+});
+
+test("los rem se fijan en píxeles para que el tema no encoja la copia", () => {
+  /*
+   * Un tema de Shopify pone `html{font-size:calc(var(--font-body-scale)*62.5%)}`
+   * —medido en sculptchile—, así que 1rem vale 10px en vez de 16 y una página
+   * de Tailwind, que lo usa para todo, se pinta al 62,5 % de su tamaño. No se
+   * ve como un fallo: se ve como una página con la letra pequeña.
+   *
+   * `!important` no lo arregla: no es una pelea de reglas, es que el valor
+   * depende de una raíz que no se puede acotar a un contenedor.
+   */
+  assert.equal(remToPx(".a{font-size:1.5rem}"), ".a{font-size:24px}");
+  assert.equal(remToPx(".a{margin:-1.5rem}"), ".a{margin:-24px}", "los márgenes negativos también");
+  assert.equal(remToPx(".a{padding:.5rem 1rem}"), ".a{padding:8px 16px}");
+
+  // Dentro de las consultas de medios igual: ahí `rem` ya se medía contra 16.
+  assert.equal(
+    remToPx("@media (min-width:48rem){.a{gap:2rem}}"),
+    "@media (min-width:768px){.a{gap:32px}}",
+  );
+
+  // Lo que solo se parece no se toca.
+  assert.equal(remToPx(".a{--mi-rem:3px}"), ".a{--mi-rem:3px}");
+  assert.equal(remToPx(".a{width:100%}"), ".a{width:100%}");
 });
