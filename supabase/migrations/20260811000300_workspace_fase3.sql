@@ -3,6 +3,11 @@
 -- **Esta migración cambia quién ve qué.** Hasta aquí cada persona veía solo lo
 -- suyo; a partir de aquí ve lo de su espacio.
 --
+-- El nombre de una política es un **identificador**, así que va con `%I` y no
+-- con `%L`: `%L` lo escribe entre comillas simples, que es como se escribe un
+-- texto, y Postgres corta con «syntax error at or near». Se parecen tanto que
+-- el error no señala al formato sino al nombre.
+--
 -- Va en un bloque generado y no escrita a mano, por el mismo motivo que las
 -- originales: cuatro políticas por tabla escritas cuarenta y nueve veces son
 -- casi doscientas ocasiones de colar una errata, y una errata aquí es una fuga
@@ -92,13 +97,13 @@ begin
     -- Las claves siguen sin poder leerse desde el navegador.
     if target <> 'provider_configs' then
       execute format(
-        'create policy %L on public.%I for select to authenticated using (%s)',
+        'create policy %I on public.%I for select to authenticated using (%s)',
         target || ': el equipo ve lo suyo', target, filtro
       );
     end if;
 
     execute format(
-      'create policy %L on public.%I for insert to authenticated with check (%s)',
+      'create policy %I on public.%I for insert to authenticated with check (%s)',
       target || ': el equipo crea en lo suyo', target, filtro
     );
 
@@ -108,12 +113,12 @@ begin
      * primera podría mover la fila al espacio de otro.
      */
     execute format(
-      'create policy %L on public.%I for update to authenticated using (%s) with check (%s)',
+      'create policy %I on public.%I for update to authenticated using (%s) with check (%s)',
       target || ': el equipo edita lo suyo', target, filtro, filtro
     );
 
     execute format(
-      'create policy %L on public.%I for delete to authenticated using (%s)',
+      'create policy %I on public.%I for delete to authenticated using (%s)',
       target || ': el equipo borra lo suyo', target, filtro
     );
   end loop;
