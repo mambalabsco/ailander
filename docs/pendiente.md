@@ -59,8 +59,6 @@ Nada de esto se ha visto funcionar en el servidor:
 ## 6. Suelto
 
 - Los botones que no parecen botones en copias publicadas. Necesita la URL.
-- El copiador corta el cuerpo a 800 KB antes de recoger imágenes: en una landing
-  muy larga, las de abajo se quedan fuera.
 - Conversión de moneda del gasto publicitario al panel. Necesita una decisión:
   tipo de cambio en vivo o fijado por periodo, y si el histórico se reconvierte o
   se congela. Es de negocio, no técnica.

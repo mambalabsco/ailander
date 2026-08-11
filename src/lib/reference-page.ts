@@ -245,7 +245,19 @@ export async function readPageForCopy(
   );
 
   const css = [inline, ...sheets].join("\n").slice(0, 800_000);
-  const body = stripChrome(bodyOf(html)).slice(0, 800_000);
+  /*
+   * Las imágenes se recogen del cuerpo **entero**, antes de recortarlo.
+   *
+   * El recorte a 800 KB existe para que una página enorme no se lleve la
+   * memoria por delante, y para el marcado está bien: lo que sobra son los
+   * últimos tramos. Pero recogiendo las imágenes después, las de la mitad de
+   * abajo no llegan a la lista de adaptables — y no falla nada: salen menos
+   * imágenes y nadie sabe que faltaban.
+   *
+   * Recogerlas antes no cuesta nada: es leer una cadena que ya está en memoria.
+   */
+  const completo = stripChrome(bodyOf(html));
+  const body = completo.slice(0, 800_000);
 
   /*
    * Las imágenes se recogen del cuerpo **ya resuelto**, no del crudo.
@@ -259,5 +271,5 @@ export async function readPageForCopy(
    * El cuerpo devuelto se deja tal cual: quien copia ya le pasa `unlazy` por su
    * lado, y cambiarlo aquí movería lo que se publica.
    */
-  return { css, body, images: collectImages(unlazy(body), css) };
+  return { css, body, images: collectImages(unlazy(completo), css) };
 }
