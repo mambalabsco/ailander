@@ -8,6 +8,7 @@ import { CopyableBlock } from "@/components/copyable";
 import { CompetitorSearch } from "@/components/competitor-search";
 import { RetryExtraction } from "@/components/retry-extraction";
 import { GenerationWatcher } from "@/components/generation-watcher";
+import { CostHint } from "@/components/cost-hint";
 import { generateResearchAction, type GenerationSummary } from "@/app/products/[id]/research-actions";
 import { RESEARCH_DOCUMENT_IDS, RESEARCH_DOCUMENT_META } from "@/types/research";
 import type {
@@ -79,6 +80,12 @@ function GenerateOne({
       <span className="text-xs text-slate-500 dark:text-slate-400">
         Solo este documento. Los que ya estén generados no se tocan.
       </span>
+
+      {/*
+        Y lo que suele costar, que es la otra mitad de la duda.
+        Sin histórico no aparece: un precio inventado es peor que ninguno.
+      */}
+      <CostHint kind="investigacion" />
 
       {note ? <span className="text-xs text-slate-600 dark:text-slate-300">{note}</span> : null}
     </div>

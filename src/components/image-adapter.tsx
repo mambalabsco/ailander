@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { GenerateButton } from "@/components/generate-button";
+import { CostHint } from "@/components/cost-hint";
 import { BANDS, HOOK_MAX, hookColors, hookParts, type BandId } from "@/lib/ad-hook";
 import {
   adaptImagesAction,
@@ -459,6 +460,9 @@ export function ImageAdapter({
                 </div>
               ) : null}
             </div>
+
+            {/* Lo que suele costar una tanda, antes de lanzarla. */}
+            <CostHint kind="imagen" />
 
             <GenerateButton
                         variant="primary"
