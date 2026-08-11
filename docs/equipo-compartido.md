@@ -68,11 +68,24 @@ mantenimiento manual eterno.
    el selector de espacio activo, y por cada persona la lista de productos de la
    que se la saca.
 
+## Cómo se entra a un espacio
+
+Las dos vías, y son distintas a propósito:
+
+- **Invitación por correo**, para quien todavía no tiene cuenta. Se guarda la
+  invitación pendiente contra el correo y se convierte en membresía cuando esa
+  persona se registra. Sin esto, invitar exige que la otra persona se registre
+  primero y avise, que es una coreografía que nadie completa.
+- **Asignación directa por un admin**, para quien ya está en la plataforma. Es lo
+  normal en un equipo que ya existe: no hay nada que aceptar, se le mete y ya.
+
+Nada de enlaces que valen para cualquiera. Un enlace de invitación se reenvía sin
+querer y acaba metiendo en el espacio a quien lo reciba; y con datos de clientes
+dentro, eso no se arregla sacándole después: ya lo vio.
+
 ## Lo que queda por decidir
 
-- **Cómo se entra a un espacio ajeno**: ¿el dueño invita por correo, o se genera
-  un enlace? Lo primero exige tener el correo de la persona; lo segundo, que el
-  enlace caduque.
+
 - **Qué pasa cuando alguien sale de un equipo**: sus datos ya son del espacio, así
   que se quedan. Conviene decirlo en la pantalla antes de sacar a nadie.
 
