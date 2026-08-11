@@ -33,10 +33,26 @@ botones caros. Faltan las palancas:
 
 ## 3. El logo de sculptchile
 
-Tapado con un parche en `theme.liquid`, **sin causa encontrada**. El único
-sospechoso que queda es nuestro: `applySettings` reescribe `config/settings_data.json`
-entero al aplicar un plan de tema. Sin auditar. **No aplicar planes de tema en esa
-tienda** hasta entonces.
+Tapado con un parche en `theme.liquid`, **sin causa encontrada**.
+
+`applySettings` **queda descartado**, auditado el 11 de agosto. Cuando `current`
+es un objeto —que es el caso de esa tienda: su `settings_data.json` traía el
+`logo` y el `favicon` con valor— lee ese mismo objeto, cambia solo las claves del
+plan y lo devuelve entero. No puede perder el logo por ahí.
+
+Sí hace una cosa que conviene saber, aunque no sea esto: si `current` fuera el
+**nombre de un preestablecido**, lo convierte en un objeto. Es lo que hace el
+propio editor de Shopify al tocar el primer ajuste y el preestablecido original
+sigue en `presets`, pero desengancha el tema de él para siempre. También pierde
+la cabecera de comentario que escribe Shopify, que es cosmético.
+
+Así que el logo hay que buscarlo **fuera de la plataforma**. Lo que se sabe: el
+`<h1>` del tema cae por la rama `{% else %}`, o sea que `settings.logo` llega
+vacío al renderizar; el favicon —misma imagen, mismo archivo— sí sale; y quitar
+el favicon del ajuste sí lo hace desaparecer, o sea que el tema publicado lee
+esos ajustes y los cambios surten efecto. Siguiente paso razonable: comparar el
+historial de versiones de `config/settings_data.json` en el editor de código de
+Shopify, que guarda las versiones anteriores.
 
 ## 4. Cabos de las portadas
 
