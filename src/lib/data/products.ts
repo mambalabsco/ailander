@@ -18,12 +18,19 @@ import { toOffers } from "@/lib/data/mappers";
  */
 
 export async function listProducts(owner?: Product["owner"]): Promise<Product[]> {
-  const { supabase, userId } = await requireContext();
+  const { supabase } = await requireContext();
 
   let query = supabase
     .from("products")
+    /*
+     * Sin filtrar por usuario: lo decide la política de la base.
+     *
+     * Este filtro venía de cuando cada quien veía solo lo suyo. Con el espacio
+     * de equipo, la política ya devuelve lo del espacio y con exclusiones
+     * aplicadas — dejarlo aquí lo estrecha otra vez a una persona, y el efecto
+     * es que a quien invitas ve su lista vacía sin que nada falle.
+     */
     .select("*")
-    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (owner) query = query.eq("owner", owner);

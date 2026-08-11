@@ -14,12 +14,19 @@ import type { TablesUpdate } from "@/types/database";
  */
 
 export async function listStores(): Promise<Store[]> {
-  const { supabase, userId } = await requireContext();
+  const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("stores")
+    /*
+     * Sin filtrar por usuario: lo decide la política de la base.
+     *
+     * Este filtro venía de cuando cada quien veía solo lo suyo. Con el espacio
+     * de equipo, la política ya devuelve lo del espacio y con exclusiones
+     * aplicadas — dejarlo aquí lo estrecha otra vez a una persona, y el efecto
+     * es que a quien invitas ve su lista vacía sin que nada falle.
+     */
     .select("*, store_markets(*)")
-    .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(`No se pudieron leer las tiendas: ${error.message}`);

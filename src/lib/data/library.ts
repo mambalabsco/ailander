@@ -33,12 +33,19 @@ function toAd(row: Tables<"ad_creatives">, signedUrl: string): AdCampaign {
 }
 
 export async function listAds(): Promise<AdCampaign[]> {
-  const { supabase, userId } = await requireContext();
+  const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("ad_creatives")
+    /*
+     * Sin filtrar por usuario: lo decide la política de la base.
+     *
+     * Este filtro venía de cuando cada quien veía solo lo suyo. Con el espacio
+     * de equipo, la política ya devuelve lo del espacio y con exclusiones
+     * aplicadas — dejarlo aquí lo estrecha otra vez a una persona, y el efecto
+     * es que a quien invitas ve su lista vacía sin que nada falle.
+     */
     .select("*")
-    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`No se pudo leer la biblioteca: ${error.message}`);
@@ -148,12 +155,11 @@ function toAnalysis(row: Tables<"analyses">): AnalysisResult {
 }
 
 export async function listAnalyses(): Promise<AnalysisResult[]> {
-  const { supabase, userId } = await requireContext();
+  const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("analyses")
     .select("*")
-    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`No se pudo leer el historial: ${error.message}`);
