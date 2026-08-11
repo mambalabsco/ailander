@@ -1,6 +1,11 @@
 # Espacio de trabajo compartido
 
-Estado: **decidido, sin empezar.** Escrito el 11 de agosto de 2026.
+Estado: **fase 1 hecha**, fases 2 a 4 pendientes. Escrito el 11 de agosto de 2026.
+
+La fase 1 —`20260811000100_workspace_fase1.sql`— crea `workspaces`,
+`workspace_members` y la columna `workspace_id` en las 49 tablas de datos, y la
+rellena desde `user_id`. **No cambia lo que ve nadie**: las políticas siguen
+filtrando por `auth.uid()`. Se puede aplicar hoy sin riesgo.
 
 ## Qué se quiere
 
@@ -42,10 +47,12 @@ mantenimiento manual eterno.
 
 ## El orden, y por qué
 
-1. **Tablas y columna, sin cambiar políticas.** Todo sigue funcionando igual.
-2. **Rellenar `workspace_id` de lo existente**, comprobando que no queda ninguna
-   fila sin espacio. Una fila huérfana con las políticas nuevas es una fila que
-   no ve nadie: se pierde sin borrarse, que es la peor forma de perder algo.
+1. ~~**Tablas y columna, sin cambiar políticas.**~~ Hecho. Todo sigue igual.
+2. ~~**Rellenar `workspace_id` de lo existente.**~~ Hecho en la misma migración.
+   **Falta comprobarlo en el servidor**: `select count(*) from products where
+   workspace_id is null` en cada tabla, o al menos en las que tengan datos. Una
+   fila sin espacio no la ve nadie cuando cambien las políticas — se pierde sin
+   borrarse, que es la peor forma de perder algo.
 3. **Cambiar las políticas**, tabla por tabla, con una prueba por cada una que
    confirme dos cosas: que un miembro ve lo del espacio y que alguien de fuera
    no ve nada. Las dos, siempre — una política que deja pasar todo también
