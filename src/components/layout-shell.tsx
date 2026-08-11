@@ -35,6 +35,14 @@ const navigation: { href: string; label: string; icon: string; needs?: Capabilit
   { href: "/cuenta", label: "Tu cuenta", icon: "◑" },
   { href: "/admin", label: "Administración", icon: "◭", needs: "personas" },
   { href: "/settings", label: "Configuración", icon: "⚙", needs: "ajustes" },
+  /*
+   * La ayuda va la última y sin permiso.
+   *
+   * La última porque no se entra a ella: se entra cuando algo no sale, y
+   * entonces se busca en la lista. Y sin permiso porque quien tiene menos
+   * acceso es justamente quien más necesita saber cómo se hacen las cosas.
+   */
+  { href: "/ayuda", label: "Ayuda", icon: "?" },
 ];
 
 function isActiveRoute(pathname: string, href: string) {
