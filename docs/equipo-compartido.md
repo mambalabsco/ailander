@@ -35,15 +35,21 @@ mantenimiento manual eterno.
 5. Pantalla de administración: invitar, cambiar papel, y **excepciones por
    persona** sobre las capacidades de su papel — que es el «selector» pedido.
 
-## Lo que hay que decidir al empezar
+## Decidido (11 de agosto)
 
-- **Qué pasa al invitar a alguien que ya tiene datos suyos.** ¿Se mueven a su
-  espacio nuevo o se quedan? Mover datos entre espacios es irreversible sin
-  copia de seguridad.
-- **Si un producto puede estar en dos espacios.** Decir que no simplifica todo;
-  decir que sí obliga a una tabla intermedia y a decidir quién manda.
-- **Qué ve el dueño de un espacio del gasto de los demás.** Hoy el panel de
-  gasto es por usuario; en equipo, lo natural es que sea del espacio.
+- **Al invitar a alguien que ya tiene datos, todo pasa a ser de todos.** Sus
+  datos entran en el espacio y el equipo entero los ve. Es lo que se pidió y
+  simplifica el modelo entero. **Es irreversible sin copia de seguridad**: antes
+  de mover datos de nadie, copia.
+- **Una persona puede estar en varios espacios.** La tabla de miembros ya lo
+  admite; lo que falta es que la aplicación sepa en cuál está trabajando —un
+  selector arriba— y que todo lo que lee filtre por ese, no por «el suyo».
+- **El panel de gasto es del espacio**, no de la persona. Quien entra ve lo que
+  ha costado el equipo.
+- **Acceso a productos: todo el equipo ve todo, con excepciones por persona.**
+  La tabla `product_exclusions` guarda a quién se le saca de qué. Al revés
+  —lista de a qué sí tiene acceso— cada producto nuevo nacería invisible hasta
+  que alguien lo repartiera, y acabaría repartiéndose a todos por costumbre.
 
 ## El orden, y por qué
 
@@ -58,7 +64,17 @@ mantenimiento manual eterno.
    no ve nada. Las dos, siempre — una política que deja pasar todo también
    supera la primera mitad de la prueba.
 4. **La pantalla de invitar y repartir.** Va la última: sin lo anterior, invitar
-   a alguien lo mete en un espacio que todavía no filtra nada.
+   a alguien lo mete en un espacio que todavía no filtra nada. Lleva dos cosas:
+   el selector de espacio activo, y por cada persona la lista de productos de la
+   que se la saca.
+
+## Lo que queda por decidir
+
+- **Cómo se entra a un espacio ajeno**: ¿el dueño invita por correo, o se genera
+  un enlace? Lo primero exige tener el correo de la persona; lo segundo, que el
+  enlace caduque.
+- **Qué pasa cuando alguien sale de un equipo**: sus datos ya son del espacio, así
+  que se quedan. Conviene decirlo en la pantalla antes de sacar a nadie.
 
 ## Riesgos, dichos antes
 
