@@ -185,3 +185,29 @@ export async function setExclusion(input: {
     reason: input.reason ?? "",
   });
 }
+
+/* ---------------------------- El espacio activo ----------------------------- */
+
+/**
+ * Cuál de tus espacios estás administrando.
+ *
+ * Se guarda en una cookie y no en la base de datos porque es una preferencia de
+ * quien mira, no un dato del equipo: dos pestañas abiertas en espacios distintos
+ * es un caso legítimo, y guardarlo en el servidor lo haría imposible.
+ *
+ * Se comprueba siempre contra los espacios a los que perteneces. Una cookie la
+ * escribe cualquiera: sin esa comprobación, cambiarla a mano sería una forma de
+ * administrar un equipo ajeno.
+ */
+export const ACTIVE_COOKIE = "espacio";
+
+export async function activeWorkspace(): Promise<Space | null> {
+  const { cookies } = await import("next/headers");
+
+  const spaces = await myWorkspaces();
+  if (spaces.length === 0) return null;
+
+  const elegido = (await cookies()).get(ACTIVE_COOKIE)?.value ?? "";
+
+  return spaces.find((one) => one.id === elegido) ?? spaces[0];
+}

@@ -81,3 +81,26 @@ export async function setExclusionAction(input: unknown): Promise<{ ok: boolean;
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
   }
 }
+
+/**
+ * Cambia el espacio que se está administrando.
+ *
+ * La cookie se valida al leerla, no al escribirla: escribir una cualquiera no
+ * concede nada porque `activeWorkspace` solo devuelve espacios a los que
+ * perteneces. Comprobarlo aquí además sería repetir la única comprobación que
+ * de verdad protege, y dos sitios donde comprobar lo mismo es un sitio donde
+ * se puede olvidar.
+ */
+export async function setActiveWorkspaceAction(id: unknown): Promise<void> {
+  const { cookies } = await import("next/headers");
+  const { ACTIVE_COOKIE } = await import("@/lib/data/workspace");
+
+  (await cookies()).set(ACTIVE_COOKIE, readText(id), {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+
+  revalidatePath("/equipo");
+}

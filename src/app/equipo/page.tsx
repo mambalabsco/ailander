@@ -1,6 +1,6 @@
 import { SectionCard } from "@/components/section-card";
 import { TeamBoard } from "@/components/team-board";
-import { exclusionsOf, membersOf, myWorkspaces } from "@/lib/data/workspace";
+import { activeWorkspace, exclusionsOf, membersOf, myWorkspaces } from "@/lib/data/workspace";
 import { getCombinedProducts } from "@/lib/products";
 
 export const metadata = { title: "Equipo" };
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EquipoPage() {
   const spaces = await myWorkspaces().catch(() => []);
-  const space = spaces[0];
+  const space = await activeWorkspace().catch(() => null);
 
   if (!space) {
     return (
@@ -43,6 +43,7 @@ export default async function EquipoPage() {
         description={`${members.length} persona(s) · ${products.length} producto(s)`}
       >
         <TeamBoard
+          spaces={spaces}
           workspaceId={space.id}
           members={members}
           products={products}

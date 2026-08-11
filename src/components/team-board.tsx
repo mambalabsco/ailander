@@ -6,6 +6,7 @@ import { Button, SelectField, TextField } from "@/components/ui";
 import {
   addMemberAction,
   removeMemberAction,
+  setActiveWorkspaceAction,
   setExclusionAction,
   setRoleAction,
 } from "@/app/equipo/actions";
@@ -29,11 +30,13 @@ interface Member {
  * es lo que permite leerla de un vistazo y notar lo raro.
  */
 export function TeamBoard({
+  spaces,
   workspaceId,
   members,
   products,
   exclusions,
 }: {
+  spaces: { id: string; name: string }[];
   workspaceId: string;
   members: Member[];
   products: { id: string; name: string }[];
@@ -59,6 +62,33 @@ export function TeamBoard({
 
   return (
     <div className="grid gap-4">
+      {/*
+        El selector solo aparece con más de uno.
+        Con un solo espacio no es una elección: es un desplegable de una opción
+        que hace pensar que falta algo.
+      */}
+      {spaces.length > 1 ? (
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-300">Espacio que administras</span>
+          <SelectField
+            value={workspaceId}
+            disabled={pending}
+            onChange={(event) =>
+              start(async () => {
+                await setActiveWorkspaceAction(event.target.value);
+                router.refresh();
+              })
+            }
+          >
+            {spaces.map((one) => (
+              <option key={one.id} value={one.id}>
+                {one.name}
+              </option>
+            ))}
+          </SelectField>
+        </label>
+      ) : null}
+
       <div className="flex flex-wrap items-end gap-2">
         <label className="grid gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-300">Correo de quien ya tiene cuenta</span>
