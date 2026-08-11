@@ -1,6 +1,6 @@
 # Espacio de trabajo compartido
 
-Estado: **fase 1 hecha**, fases 2 a 4 pendientes. Escrito el 11 de agosto de 2026.
+Estado: **fases 1 a 3 escritas**, sin probar con dos usuarios. Falta la 4. Escrito el 11 de agosto de 2026.
 
 La fase 1 —`20260811000100_workspace_fase1.sql`— crea `workspaces`,
 `workspace_members` y la columna `workspace_id` en las 49 tablas de datos, y la
@@ -59,10 +59,15 @@ mantenimiento manual eterno.
    workspace_id is null` en cada tabla, o al menos en las que tengan datos. Una
    fila sin espacio no la ve nadie cuando cambien las políticas — se pierde sin
    borrarse, que es la peor forma de perder algo.
-3. **Cambiar las políticas**, tabla por tabla, con una prueba por cada una que
-   confirme dos cosas: que un miembro ve lo del espacio y que alguien de fuera
-   no ve nada. Las dos, siempre — una política que deja pasar todo también
-   supera la primera mitad de la prueba.
+3. ~~**Cambiar las políticas.**~~ Escrita: `20260811000300_workspace_fase3.sql`.
+   Va en un bloque generado sobre las 49 tablas, así que o están bien todas o
+   están mal todas. Las hijas —planos de un vídeo, líneas de un pedido,
+   variantes, gasto— se resuelven por su padre.
+
+   **Sin probar contra dos usuarios de verdad.** Es lo único que falta y no es
+   opcional: hay que confirmar en cada tabla que un miembro ve lo del espacio
+   **y** que alguien de fuera no ve nada. Las dos, siempre — una política que
+   deja pasar todo también supera la primera.
 4. **La pantalla de invitar y repartir.** Va la última: sin lo anterior, invitar
    a alguien lo mete en un espacio que todavía no filtra nada. Lleva dos cosas:
    el selector de espacio activo, y por cada persona la lista de productos de la
