@@ -24,6 +24,10 @@ export interface GenerationOutcome<T> {
   data: T;
   inputTokens: number;
   outputTokens: number;
+  /** Lo que costó meter el contexto en la caché. Cero si no se usó. */
+  cacheWriteTokens: number;
+  /** Lo que vino de la caché. Es lo único que dice si sirvió. */
+  cacheReadTokens: number;
 }
 
 const MAX_CONTINUATIONS = 4;
@@ -53,11 +57,43 @@ export async function generateStructured<T>(options: {
    * lo que se ve.
    */
   images?: { mediaType: string; base64: string }[];
+  /**
+   * Lo que se repite entre llamadas: producto, investigación, la página que se
+   * está adaptando.
+   *
+   * Va **delante de todo** y lleva el punto de corte de la caché. La caché es de
+   * prefijo: guarda lo que va antes del corte y lo reutiliza en la siguiente
+   * llamada que empiece **byte a byte igual**. De ahí las dos condiciones que
+   * hay que respetar al llamar:
+   *
+   * - Aquí solo va lo **estable**. Una fecha, un «documento 4 de 6» o una lista
+   *   que cambie de orden rompen el prefijo, y entonces no hay caché — y no
+   *   falla: se paga entero y no se entera nadie salvo por el contador.
+   * - Tiene que ser **largo** para que compense. Con un párrafo no llega al
+   *   mínimo que se puede cachear y el corte se ignora.
+   */
+  context?: string;
 }): Promise<GenerationOutcome<T>> {
   const client = await createClaudeClient();
   const model = options.role === "copy" ? await copyModel() : await researchModel();
 
   const content: Anthropic.ContentBlockParam[] = [
+    /*
+     * El contexto va primero y con el corte de caché.
+     *
+     * Delante de las imágenes también: la caché guarda un **prefijo**, así que
+     * lo que se repite tiene que estar al principio. Las imágenes cambian en
+     * cada llamada; puestas antes, romperían el prefijo y no se cachearía nada.
+     */
+    ...(options.context
+      ? [
+          {
+            type: "text" as const,
+            text: options.context,
+            cache_control: { type: "ephemeral" as const },
+          },
+        ]
+      : []),
     ...(options.images ?? []).map(
       (image): Anthropic.ContentBlockParam => ({
         type: "image",
@@ -75,6 +111,8 @@ export async function generateStructured<T>(options: {
 
   let inputTokens = 0;
   let outputTokens = 0;
+  let cacheWriteTokens = 0;
+  let cacheReadTokens = 0;
 
   for (let attempt = 0; attempt <= MAX_CONTINUATIONS; attempt += 1) {
     const stream = client.messages.stream({
@@ -95,6 +133,16 @@ export async function generateStructured<T>(options: {
 
     inputTokens += message.usage.input_tokens;
     outputTokens += message.usage.output_tokens;
+
+    /*
+     * Lo de la caché se cuenta aparte, no dentro de la entrada.
+     *
+     * Sumándolo a `inputTokens` el ahorro desaparecería del panel: se vería la
+     * misma cifra de entrada de siempre y nadie sabría si la caché entró. Es el
+     * único indicio que hay, porque no usarla no da ningún error.
+     */
+    cacheWriteTokens += message.usage.cache_creation_input_tokens ?? 0;
+    cacheReadTokens += message.usage.cache_read_input_tokens ?? 0;
 
     if (message.stop_reason === "refusal") {
       throw new Error("El modelo declinó la petición.");
@@ -119,6 +167,8 @@ export async function generateStructured<T>(options: {
       data: JSON.parse(textFrom(message.content)) as T,
       inputTokens,
       outputTokens,
+      cacheWriteTokens,
+      cacheReadTokens,
     };
   }
 
@@ -174,6 +224,8 @@ export async function generateLongCopy(options: {
 
   let inputTokens = first.inputTokens;
   let outputTokens = first.outputTokens;
+  let cacheWriteTokens = first.cacheWriteTokens;
+  let cacheReadTokens = first.cacheReadTokens;
   let result = first.data;
 
   const check = checkLength(result.primaryText, options.range);
@@ -204,6 +256,8 @@ export async function generateLongCopy(options: {
 
     inputTokens += expanded.inputTokens;
     outputTokens += expanded.outputTokens;
+    cacheWriteTokens += expanded.cacheWriteTokens;
+    cacheReadTokens += expanded.cacheReadTokens;
 
     const second = checkLength(expanded.data.primaryText, options.range);
 
@@ -232,6 +286,8 @@ export async function generateLongCopy(options: {
       },
       inputTokens,
       outputTokens,
+      cacheWriteTokens,
+      cacheReadTokens,
     };
   }
 
@@ -239,6 +295,8 @@ export async function generateLongCopy(options: {
     data: { ...result, wordCount: check.words, note: check.message },
     inputTokens,
     outputTokens,
+    cacheWriteTokens,
+    cacheReadTokens,
   };
 }
 
