@@ -1802,6 +1802,69 @@ export async function cloneLandingAction(input: unknown): Promise<LaunchResult> 
         slots = slots.map((one) => ({ ...one, prompt: nuevos[one.slot] ?? one.prompt }));
       }
 
+      /*
+       * Las secciones `crudo` van por el otro camino, el de las copias.
+       *
+       * Su contenido es marcado entero —el de una página copiada—, así que no
+       * se puede tratar como un campo de texto: hay que sacar las frases,
+       * adaptarlas y devolverlas entre sus etiquetas. Es exactamente lo que ya
+       * hace el copiador, y sin esto clonar una copia no adaptaba **ni una
+       * palabra**: salía la página del producto anterior con otro nombre en la
+       * lista.
+       */
+      const secciones = applySectionTexts(origen.sections, changes);
+      const crudas = secciones.filter((one) => one.kind === "crudo" && one.html);
+
+      if (crudas.length > 0) {
+        const { applyTexts, batchTexts, buildTextPrompt, extractTexts } = await import(
+          "@/lib/landing-copy-html"
+        );
+
+        for (const [orden, seccion] of crudas.entries()) {
+          await report(`Adaptando el marcado copiado (${orden + 1} de ${crudas.length})`);
+
+          const textos = extractTexts(seccion.html!);
+          if (textos.length === 0) continue;
+
+          const adaptados: string[] = [];
+
+          /*
+           * En tandas, y lo que falle se queda en su idioma.
+           *
+           * Es la misma decisión que en el copiador: una tanda que no cabe no
+           * puede tumbar la sección entera. Lo que no vuelva se ve al leer la
+           * página; un hueco vacío no se ve.
+           */
+          for (const tanda of batchTexts(textos)) {
+            const vuelta = await generateStructured<{ textos: string[] }>({
+              prompt: buildTextPrompt({
+                texts: tanda,
+                context: `${context}\nEsta página era de ${fromProduct}. No puede quedar ni una palabra suya.`,
+                language: `español de ${destino.country || "México"}`,
+              }),
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["textos"],
+                properties: {
+                  textos: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Los mismos textos, en el mismo orden y con el mismo número.",
+                  },
+                },
+              },
+              role: "copy",
+              maxTokens: 16_000,
+            }).catch(() => null);
+
+            adaptados.push(...(vuelta?.data.textos ?? tanda));
+          }
+
+          seccion.html = applyTexts(seccion.html!, adaptados);
+        }
+      }
+
       await report("Guardando la portada");
 
       const saved = await saveLanding({
@@ -1809,7 +1872,7 @@ export async function cloneLandingAction(input: unknown): Promise<LaunchResult> 
         title: `${origen.title} · ${destino.name}`,
         slug: `${destino.name.toLowerCase().replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}`,
         shapeId: origen.shapeId,
-        sections: applySectionTexts(origen.sections, changes),
+        sections: secciones,
         imageSlots: slots,
         /*
          * Los comentarios no se heredan.
