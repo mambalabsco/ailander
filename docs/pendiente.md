@@ -72,7 +72,31 @@ Nada de esto se ha visto funcionar en el servidor:
 - El generador de páginas de producto en sus dos modos.
 - El texto de anuncio de los vídeos y las franjas de gancho.
 
-## 6. Suelto
+## 6. Administración de usuarios
+
+Pedido: editar los datos de una persona, cambiarle la contraseña, el correo o la
+recuperación, y **dar accesos a partes de la plataforma con independencia de su
+papel**.
+
+La mitad está hecha en la base: `workspace_members.capabilities` existe para eso
+—nulo significa «las de su papel»— y las políticas ya reparten por espacio. Falta
+que `roles.ts` la respete al resolver permisos, y la pantalla que la escriba. Eso
+es trabajo normal.
+
+La otra mitad **no lo es**, y va escrito aquí para que nadie lo aborde de
+pasada: cambiar la contraseña o el correo de otra persona no se hace con la
+sesión del navegador. Exige la clave de servicio de Supabase, desde el servidor,
+y una pantalla que la use mal no es un fallo de interfaz — es una escalada de
+privilegios. Requisitos mínimos antes de escribir la primera línea:
+
+- La clave de servicio **nunca** viaja al navegador ni entra en un componente de
+  cliente. Solo en acciones de servidor.
+- Cada acción comprueba que quien la lanza manda en el espacio de esa persona,
+  con `manda_en`. No basta con esconder el botón.
+- Nadie puede subirse a sí mismo de papel ni quitarse su propia comprobación.
+- Todo cambio sobre otra cuenta se anota en `audit_log`: quién, a quién y qué.
+
+## 7. Suelto
 
 - Los botones que no parecen botones en copias publicadas. Necesita la URL.
 - Conversión de moneda del gasto publicitario al panel. Necesita una decisión:
