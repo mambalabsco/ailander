@@ -16,6 +16,75 @@ import type {
   ResearchDocumentStatus,
 } from "@/types/research";
 
+/**
+ * Genera **un** documento, el suyo.
+ *
+ * Va aparte del botón de arriba porque son dos cosas distintas: aquel rehace la
+ * investigación entera y este pide lo que falta. Compartirlos obligaba a elegir
+ * un verbo que sirviera para los dos, y el que había —«Regenerar»— era el
+ * equivocado para el caso más común: un documento que nunca llegó a salir.
+ */
+function GenerateOne({
+  productId,
+  documentId,
+  label,
+}: {
+  productId: string;
+  documentId: ResearchDocumentId;
+  label: string;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [note, setNote] = useState("");
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        variant="secondary"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            try {
+              const result = await generateResearchAction(productId, [documentId]);
+
+              /*
+               * Lo saltado se dice, con su motivo.
+               *
+               * La acción puede aceptarlo o dejarlo fuera —porque le falta algo
+               * de lo que depende, por ejemplo— y devuelve las dos listas.
+               * Diciendo solo «en marcha», un documento rechazado se queda sin
+               * generar y sin que nadie se entere hasta volver a mirar.
+               */
+              const fuera = result.skipped.find((one) => one.document === documentId);
+
+              setNote(
+                fuera
+                  ? `No se pudo: ${fuera.reason}`
+                  : result.queued.includes(documentId)
+                    ? "En marcha. Tarda un rato."
+                    : "No se puso en marcha. Vuelve a intentarlo.",
+              );
+
+              router.refresh();
+            } catch (error) {
+              setNote(error instanceof Error ? error.message : "No se pudo generar.");
+            }
+          })
+        }
+      >
+        {pending ? "Generando…" : `Generar «${label}»`}
+      </Button>
+
+      {/* Que se vea que es solo este y no los seis: es la duda que frena. */}
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        Solo este documento. Los que ya estén generados no se tocan.
+      </span>
+
+      {note ? <span className="text-xs text-slate-600 dark:text-slate-300">{note}</span> : null}
+    </div>
+  );
+}
+
 const STATUS_STYLES: Record<ResearchDocumentStatus, string> = {
   empty: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
   queued: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
@@ -383,9 +452,22 @@ export function DocumentsTab({
                       ) : null}
                     </>
                   ) : (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Este documento aún no se ha generado.
-                    </p>
+                    <div className="grid gap-3">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Este documento aún no se ha generado.
+                      </p>
+
+                      {/*
+                        Su propio botón, y con su propio verbo.
+
+                        Arriba solo había «Regenerar», que promete rehacer algo
+                        que no existe y da a entender que va a cobrar los seis.
+                        Un botón cuyo coste no se sabe es un botón que no se
+                        pulsa: el documento se queda sin generar y la
+                        investigación entera, coja.
+                      */}
+                      <GenerateOne productId={productId} documentId={id} label={meta.title} />
+                    </div>
                   )}
                 </div>
               </details>
