@@ -1,6 +1,10 @@
 # Espacio de trabajo compartido
 
-Estado: **fases 1 a 3 escritas**, sin probar con dos usuarios. Falta la 4. Escrito el 11 de agosto de 2026.
+Estado: **las cuatro fases hechas**, sin probar con dos usuarios.
+
+Falta del todo: el **selector de espacio activo**. La pantalla de Equipo usa el
+primer espacio al que perteneces, así que quien esté en varios solo administra
+uno. Con un espacio por persona —lo normal hoy— no se nota. Escrito el 11 de agosto de 2026.
 
 La fase 1 —`20260811000100_workspace_fase1.sql`— crea `workspaces`,
 `workspace_members` y la columna `workspace_id` en las 49 tablas de datos, y la
@@ -68,10 +72,10 @@ mantenimiento manual eterno.
    opcional: hay que confirmar en cada tabla que un miembro ve lo del espacio
    **y** que alguien de fuera no ve nada. Las dos, siempre — una política que
    deja pasar todo también supera la primera.
-4. **La pantalla de invitar y repartir.** Va la última: sin lo anterior, invitar
-   a alguien lo mete en un espacio que todavía no filtra nada. Lleva dos cosas:
-   el selector de espacio activo, y por cada persona la lista de productos de la
-   que se la saca.
+4. ~~**La pantalla de invitar y repartir.**~~ Hecha: `/equipo`. Añadir por
+   correo a quien ya tenga cuenta, cambiar papel, sacar del equipo, y por
+   persona la lista de productos de los que se la saca. Falta el selector de
+   espacio activo (ver arriba).
 
 ## Cómo se entra a un espacio
 

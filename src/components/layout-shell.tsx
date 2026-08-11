@@ -42,6 +42,7 @@ const navigation: { href: string; label: string; icon: string; needs?: Capabilit
    * entonces se busca en la lista. Y sin permiso porque quien tiene menos
    * acceso es justamente quien más necesita saber cómo se hacen las cosas.
    */
+  { href: "/equipo", label: "Equipo", icon: "◕", needs: "personas" },
   { href: "/gasto", label: "Gasto", icon: "$", needs: "dinero" },
   { href: "/ayuda", label: "Ayuda", icon: "?" },
 ];

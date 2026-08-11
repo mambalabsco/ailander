@@ -706,6 +706,39 @@ type CostCustomRow = {
 
 /* ---------------------------------- Vídeos -------------------------------------- */
 
+/* ------------------------- Espacio de trabajo -------------------------------- */
+
+type WorkspaceRow = {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+};
+
+type WorkspaceMemberRow = {
+  workspace_id: string;
+  user_id: string;
+  role: string;
+  /** Excepciones sobre las capacidades de su papel. Nulo es «las de su papel». */
+  capabilities: string[] | null;
+  created_at: string;
+};
+
+/**
+ * A quién se le saca de qué producto.
+ *
+ * Se guarda lo que se quita, no lo que se concede: por defecto el equipo ve
+ * todo. Al revés, cada producto nuevo nacería invisible hasta que alguien lo
+ * repartiera.
+ */
+type ProductExclusionRow = {
+  workspace_id: string;
+  product_id: string;
+  user_id: string;
+  reason: string;
+  created_at: string;
+};
+
 type VideoRow = {
   id: string;
   user_id: string;
@@ -1048,6 +1081,15 @@ export type Database = {
   public: {
     Tables: {
       profiles: Table<ProfileRow, Partial<ProfileRow> & { id: string }>;
+      workspaces: Table<WorkspaceRow, Partial<WorkspaceRow> & { name: string; created_by: string }>;
+      workspace_members: Table<
+        WorkspaceMemberRow,
+        Partial<WorkspaceMemberRow> & { workspace_id: string; user_id: string }
+      >;
+      product_exclusions: Table<
+        ProductExclusionRow,
+        Partial<ProductExclusionRow> & { workspace_id: string; product_id: string; user_id: string }
+      >;
       stores: Table<StoreRow, Insertable<StoreRow, "brand" | "domain" | "platform" | "mention_brand_in_copy"
           | "shopify_admin_token"
           | "shopify_shop_domain"
