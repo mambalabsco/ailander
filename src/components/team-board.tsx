@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField, TextField } from "@/components/ui";
+import { CAPABILITIES, CAPABILITY_LABELS, capabilitiesOf, type Role } from "@/lib/roles";
 import {
   addMemberAction,
   removeMemberAction,
   setActiveWorkspaceAction,
+  setCapabilitiesAction,
   setExclusionAction,
   setRoleAction,
 } from "@/app/equipo/actions";
@@ -17,6 +19,7 @@ interface Member {
   userId: string;
   email: string;
   role: string;
+  capabilities: string[] | null;
   isMe: boolean;
 }
 
@@ -48,6 +51,7 @@ export function TeamBoard({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [accesos, setAccesos] = useState<string | null>(null);
 
   const correr = (fn: () => Promise<{ ok: boolean; message: string }>) =>
     start(async () => {
@@ -155,6 +159,14 @@ export function TeamBoard({
                 <Button
                   variant="secondary"
                   disabled={pending}
+                  onClick={() => setAccesos(accesos === member.userId ? null : member.userId)}
+                >
+                  Accesos
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  disabled={pending}
                   onClick={() => setAbierto(abierto === member.userId ? null : member.userId)}
                 >
                   Productos
@@ -178,6 +190,69 @@ export function TeamBoard({
                 )}
               </div>
             </div>
+
+            {accesos === member.userId ? (
+              <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+                {/*
+                  Lo que puede hacer, con lo de su papel ya marcado.
+                  Al tocar la primera casilla deja de heredar y pasa a lista
+                  propia: por eso el botón de volver está siempre a la vista.
+                */}
+                <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                  {member.capabilities
+                    ? "Accesos a medida. No sigue los de su papel."
+                    : `Los de ${member.role}. Marca algo para hacerle una excepción.`}
+                </p>
+
+                <div className="grid gap-1 sm:grid-cols-2">
+                  {CAPABILITIES.map((cap) => {
+                    const actuales = member.capabilities ?? capabilitiesOf(member.role as Role);
+                    const tiene = actuales.includes(cap);
+
+                    return (
+                      <label key={cap} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={tiene}
+                          disabled={pending}
+                          onChange={(event) =>
+                            correr(() =>
+                              setCapabilitiesAction({
+                                workspaceId,
+                                userId: member.userId,
+                                capabilities: event.target.checked
+                                  ? [...actuales, cap]
+                                  : actuales.filter((one) => one !== cap),
+                              }),
+                            )
+                          }
+                          className="size-4"
+                        />
+                        {CAPABILITY_LABELS[cap]}
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {member.capabilities ? (
+                  <Button
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() =>
+                      correr(() =>
+                        setCapabilitiesAction({
+                          workspaceId,
+                          userId: member.userId,
+                          capabilities: null,
+                        }),
+                      )
+                    }
+                  >
+                    Volver a los de su papel
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
 
             {abierto === member.userId ? (
               <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">

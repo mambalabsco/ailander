@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   addMemberByEmail,
   removeMember,
+  setCapabilities,
   setExclusion,
   setRole,
 } from "@/lib/data/workspace";
@@ -37,6 +38,33 @@ export async function setRoleAction(input: unknown): Promise<{ ok: boolean; mess
     revalidatePath("/equipo");
 
     return { ok: true, message: "Papel cambiado." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
+  }
+}
+
+export async function setCapabilitiesAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    /*
+     * Sin lista, se vuelve al papel.
+     *
+     * Es lo que permite deshacer una excepción puesta por probar. Sin esa vuelta
+     * atrás, la excepción se queda para siempre y dentro de tres meses nadie
+     * sabe si fue una decisión.
+     */
+    const lista = Array.isArray(raw.capabilities)
+      ? raw.capabilities.map((one) => readText(one)).filter(Boolean)
+      : null;
+
+    await setCapabilities(readText(raw.workspaceId), readText(raw.userId), lista);
+    revalidatePath("/equipo");
+
+    return { ok: true, message: lista ? "Accesos a medida guardados." : "Vuelve a los de su papel." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
   }

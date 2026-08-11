@@ -7,6 +7,7 @@ import {
   can,
   canAssign,
   canDisable,
+  capabilitiesFor,
   capabilitiesOf,
   isRole,
   spendCheck,
@@ -153,4 +154,23 @@ test("quien escribe copys no entra al estudio", () => {
 test("un admin no puede ascender a nadie por encima de sí mismo", () => {
   assert.equal(canAssign(admin, editor, "admin").ok, true);
   assert.equal(canAssign({ id: "d", role: "diseñador" }, editor, "editor").ok, false);
+});
+
+test("las excepciones por persona sustituyen a las del papel, y nulo no es «ninguna»", () => {
+  /*
+   * Nulo significa «las de su papel». Confundirlo con «ninguna» dejaría sin
+   * permisos a todo el que no tenga excepciones —casi todo el mundo— y el fallo
+   * saldría como «no puedo hacer nada», sin ninguna pista de por qué.
+   */
+  assert.deepEqual(capabilitiesFor("redactor", null), capabilitiesOf("redactor"));
+  assert.deepEqual(capabilitiesFor("redactor", undefined), capabilitiesOf("redactor"));
+
+  // Una lista sustituye: «este redactor además publica».
+  assert.deepEqual(capabilitiesFor("redactor", ["gastar", "publicar"]), ["gastar", "publicar"]);
+
+  // Vacía es «no toca nada», que es una decisión legítima y hay que poder tomarla.
+  assert.deepEqual(capabilitiesFor("editor", []), []);
+
+  // Y lo inventado no concede: la columna es texto libre.
+  assert.deepEqual(capabilitiesFor("redactor", ["gastar", "volar"]), ["gastar"]);
 });

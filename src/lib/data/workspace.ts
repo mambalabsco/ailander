@@ -14,6 +14,8 @@ export interface Member {
   userId: string;
   email: string;
   role: string;
+  /** Excepciones sobre las de su papel. Nulo es «las de su papel». */
+  capabilities: string[] | null;
   isMe: boolean;
 }
 
@@ -59,7 +61,7 @@ export async function membersOf(workspaceId: string): Promise<Member[]> {
 
   const { data: filas } = await supabase
     .from("workspace_members")
-    .select("user_id, role")
+    .select("user_id, role, capabilities")
     .eq("workspace_id", workspaceId);
 
   const ids = (filas ?? []).map((row) => row.user_id);
@@ -74,6 +76,7 @@ export async function membersOf(workspaceId: string): Promise<Member[]> {
     // persona por su uuid: se acabaría cambiando el papel del que no era.
     email: correos.get(row.user_id) ?? row.user_id,
     role: row.role,
+    capabilities: row.capabilities,
     isMe: row.user_id === userId,
   }));
 }
@@ -121,6 +124,27 @@ export async function setRole(workspaceId: string, memberId: string, role: strin
   await supabase
     .from("workspace_members")
     .update({ role })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", memberId);
+}
+
+/**
+ * Las excepciones de una persona.
+ *
+ * `null` la devuelve a las de su papel, que es distinto de una lista vacía —eso
+ * es «no toca nada»—. Poder volver atrás importa: sin ello, una excepción puesta
+ * por probar se queda para siempre y nadie sabe si fue a propósito.
+ */
+export async function setCapabilities(
+  workspaceId: string,
+  memberId: string,
+  capabilities: string[] | null,
+) {
+  const { supabase } = await requireContext();
+
+  await supabase
+    .from("workspace_members")
+    .update({ capabilities })
     .eq("workspace_id", workspaceId)
     .eq("user_id", memberId);
 }

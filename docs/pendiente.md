@@ -78,10 +78,11 @@ Pedido: editar los datos de una persona, cambiarle la contraseña, el correo o l
 recuperación, y **dar accesos a partes de la plataforma con independencia de su
 papel**.
 
-La mitad está hecha en la base: `workspace_members.capabilities` existe para eso
-—nulo significa «las de su papel»— y las políticas ya reparten por espacio. Falta
-que `roles.ts` la respete al resolver permisos, y la pantalla que la escriba. Eso
-es trabajo normal.
+**Los accesos independientes del papel ya están hechos.** `capabilitiesFor` los
+resuelve —nulo es «las de su papel», una lista los sustituye, y lo que no está en
+el catálogo se descarta— y se marcan en `/equipo`, botón «Accesos», con vuelta
+atrás. Lo que falta ahí es que las pantallas los lean de la pertenencia y no del
+papel a secas.
 
 La otra mitad **no lo es**, y va escrito aquí para que nadie lo aborde de
 pasada: cambiar la contraseña o el correo de otra persona no se hace con la

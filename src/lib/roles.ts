@@ -115,6 +115,36 @@ export function capabilitiesOf(role: Role): Capability[] {
   return [...(GRANTS[role] ?? [])];
 }
 
+/**
+ * Lo que puede una persona **concreta**, que no siempre es lo de su papel.
+ *
+ * ## Para qué
+ *
+ * Para poder decir «este redactor además publica» sin inventar un papel nuevo
+ * para una persona. Los papeles existen para no repetir la misma conversación
+ * siete veces; las excepciones existen porque en un equipo real siempre hay una.
+ *
+ * ## Cómo se lee `overrides`
+ *
+ * Nulo o ausente significa **las de su papel**. No significa «ninguna»: esa
+ * confusión dejaría sin permisos a todo el que no tenga excepciones, que es casi
+ * todo el mundo, y el fallo aparecería como «no puedo hacer nada» sin más pista.
+ *
+ * Una lista, aunque esté vacía, **sustituye** al papel. Vacía es «este no toca
+ * nada», que es una decisión legítima y hay que poder tomarla.
+ *
+ * Lo que no está en el catálogo se descarta en vez de confiarse: la columna es
+ * texto libre y una capacidad inventada —o una renombrada que quedó vieja— no
+ * puede conceder nada.
+ */
+export function capabilitiesFor(role: Role, overrides?: string[] | null): Capability[] {
+  if (!overrides) return capabilitiesOf(role);
+
+  return overrides.filter((one): one is Capability =>
+    (CAPABILITIES as readonly string[]).includes(one),
+  );
+}
+
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
