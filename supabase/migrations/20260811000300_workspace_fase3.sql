@@ -3,6 +3,14 @@
 -- **Esta migración cambia quién ve qué.** Hasta aquí cada persona veía solo lo
 -- suyo; a partir de aquí ve lo de su espacio.
 --
+-- La comparación del producto va **como texto** en los dos lados.
+--
+-- `product_exclusions.product_id` es texto porque un identificador de producto
+-- aquí no siempre es un `uuid`, y las tablas que cuelgan de un producto no
+-- coinciden todas en el tipo. Comparar sin convertir da «operator does not
+-- exist: text = uuid», que no dice qué tabla lo provocó — y con cuarenta y nueve
+-- generadas en bucle, averiguarlo cuesta más que el propio arreglo.
+--
 -- El nombre de una política es un **identificador**, así que va con `%I` y no
 -- con `%L`: `%L` lo escribe entre comillas simples, que es como se escribe un
 -- texto, y Postgres corta con «syntax error at or near». Se parecen tanto que
@@ -84,13 +92,13 @@ begin
       filtro := filtro || format(
         ' and not exists (select 1 from public.product_exclusions x'
         || ' where x.user_id = (select auth.uid()) and x.workspace_id = %I.workspace_id'
-        || ' and x.product_id = %I.id)', target, target
+        || ' and x.product_id = %I.id::text)', target, target
       );
     elsif tiene_producto then
       filtro := filtro || format(
         ' and not exists (select 1 from public.product_exclusions x'
         || ' where x.user_id = (select auth.uid()) and x.workspace_id = %I.workspace_id'
-        || ' and x.product_id = %I.product_id)', target, target
+        || ' and x.product_id = %I.product_id::text)', target, target
       );
     end if;
 
