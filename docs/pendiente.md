@@ -81,8 +81,8 @@ papel**.
 **Los accesos independientes del papel ya están hechos.** `capabilitiesFor` los
 resuelve —nulo es «las de su papel», una lista los sustituye, y lo que no está en
 el catálogo se descarta— y se marcan en `/equipo`, botón «Accesos», con vuelta
-atrás. Lo que falta ahí es que las pantallas los lean de la pertenencia y no del
-papel a secas.
+atrás. Y ya se aplican de verdad: `requireCapability` y el menú
+resuelven contra la pertenencia, no contra el papel a secas.
 
 La otra mitad **no lo es**, y va escrito aquí para que nadie lo aborde de
 pasada: cambiar la contraseña o el correo de otra persona no se hace con la

@@ -2,8 +2,7 @@ import { ViewTransition } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LayoutShell } from "@/components/layout-shell";
-import { currentProfile } from "@/lib/data/profiles";
-import { capabilitiesOf } from "@/lib/roles";
+import { capabilitiesNow } from "@/lib/permissions";
 import { ThemeScript } from "@/components/theme-script";
 import { getUser } from "@/lib/supabase/session";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -39,7 +38,14 @@ export default async function RootLayout({
    * porque esconder medio menú en la demo haría parecer que faltan pantallas.
    */
   const capabilities = user
-    ? capabilitiesOf((await currentProfile().catch(() => null))?.role ?? "invitado")
+    ? /*
+       * El menú también con las excepciones aplicadas.
+       *
+       * Enseñando lo que da el papel a secas, alguien vería en el menú una
+       * pantalla que al abrirla le rechaza — y al revés, una excepción que le
+       * concede algo quedaría escondida detrás de un menú que no la lista.
+       */
+      await capabilitiesNow().catch(() => [])
     : undefined;
 
   return (

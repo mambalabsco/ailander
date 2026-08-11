@@ -235,3 +235,26 @@ export async function activeWorkspace(): Promise<Space | null> {
 
   return spaces.find((one) => one.id === elegido) ?? spaces[0];
 }
+
+/**
+ * Tu pertenencia al espacio activo, con sus excepciones.
+ *
+ * Devuelve `null` si no perteneces a ninguno, y entonces manda el papel a
+ * secas: es lo que pasa el primer instante tras registrarse, antes de que el
+ * disparador cree el espacio.
+ */
+export async function activeMembership(): Promise<{ capabilities: string[] | null } | null> {
+  const { supabase, userId } = await requireContext();
+
+  const space = await activeWorkspace();
+  if (!space) return null;
+
+  const { data } = await supabase
+    .from("workspace_members")
+    .select("capabilities")
+    .eq("workspace_id", space.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return data ? { capabilities: data.capabilities } : null;
+}
