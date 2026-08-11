@@ -29,6 +29,16 @@ export interface RunRecord {
   error: string | null;
   inputTokens: number;
   outputTokens: number;
+  /** Lo que costó meter el contexto en la caché. */
+  cacheWriteTokens: number;
+  /**
+   * Lo que vino de la caché.
+   *
+   * Es el número que dice si la caché de prompts sirve. Si no crece, no está
+   * funcionando — y como no falla, sin mirarlo «hemos puesto caché» es una
+   * creencia.
+   */
+  cacheReadTokens: number;
   webSearches: number;
   costUsd: number;
   createdAt: string;
@@ -51,6 +61,8 @@ export async function recordRun(input: {
   error?: string | null;
   inputTokens: number;
   outputTokens: number;
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
   webSearches?: number;
 }): Promise<void> {
   try {
@@ -67,6 +79,8 @@ export async function recordRun(input: {
       error: input.error ?? null,
       input_tokens: input.inputTokens,
       output_tokens: input.outputTokens,
+      cache_write_tokens: input.cacheWriteTokens ?? 0,
+      cache_read_tokens: input.cacheReadTokens ?? 0,
       web_searches: input.webSearches ?? 0,
       cost_usd: String(
         estimateCost(input.model ?? "", input.inputTokens, input.outputTokens) +
@@ -101,6 +115,8 @@ export async function listRuns(limit = 100): Promise<RunRecord[]> {
     error: row.error,
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
+    cacheWriteTokens: row.cache_write_tokens ?? 0,
+    cacheReadTokens: row.cache_read_tokens ?? 0,
     webSearches: row.web_searches,
     // Llega como texto desde `numeric`; convertirlo aquí y no en la consulta
     // evita un NaN silencioso al sumar.
@@ -115,6 +131,7 @@ export interface RunTotals {
   outputTokens: number;
   webSearches: number;
   costUsd: number;
+  cacheReadTokens: number;
 }
 
 export function totalsOf(runs: RunRecord[]): RunTotals {
@@ -125,7 +142,8 @@ export function totalsOf(runs: RunRecord[]): RunTotals {
       outputTokens: total.outputTokens + run.outputTokens,
       webSearches: total.webSearches + run.webSearches,
       costUsd: total.costUsd + run.costUsd,
+      cacheReadTokens: total.cacheReadTokens + run.cacheReadTokens,
     }),
-    { runs: 0, inputTokens: 0, outputTokens: 0, webSearches: 0, costUsd: 0 },
+    { runs: 0, inputTokens: 0, outputTokens: 0, webSearches: 0, costUsd: 0, cacheReadTokens: 0 },
   );
 }

@@ -115,6 +115,22 @@ export default async function GastoPage() {
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">tokens en total</p>
           </div>
+
+          {/*
+            Lo que vino de la caché. Es el número que dice si sirve.
+            En cero no significa que esté rota: significa que todavía no se ha
+            puesto. La caché de prompts no falla si sale mal —sigue todo igual y
+            se paga entero—, así que este contador va **antes** que ella.
+          */}
+          <div>
+            <p className="text-2xl font-semibold">
+              {totales.cacheReadTokens.toLocaleString("es-ES")}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              tokens leídos de caché
+              {totales.cacheReadTokens === 0 ? " · aún sin activar" : ""}
+            </p>
+          </div>
         </div>
 
         {repetitivos.length > 0 ? (

@@ -428,6 +428,10 @@ type GenerationRunRow = {
   error: string | null;
   input_tokens: number;
   output_tokens: number;
+  /** Lo que costó **meter** el contexto en la caché. Un poco más que no usarla. */
+  cache_write_tokens: number;
+  /** Lo que vino **de** la caché. Es el número que dice si sirvió. */
+  cache_read_tokens: number;
   web_searches: number;
   cost_usd: string;
   created_at: string;
