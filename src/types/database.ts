@@ -215,6 +215,8 @@ type ResearchDocumentRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   document_id: DbResearchDocumentId;
   status: DbResearchDocumentStatus;
   markdown: string;
@@ -232,6 +234,8 @@ type HookRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   awareness_level: DbAwarenessLevel;
   desire: string;
   title: string;
@@ -248,6 +252,8 @@ type AngleRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   desire: string;
   name: string;
   target_audience: string;
@@ -265,6 +271,8 @@ type CampaignRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   name: string;
   stage: DbFunnelStage;
   country_code: string;
@@ -277,6 +285,8 @@ type PrelandingRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   name: string;
   url: string;
   description: string;
@@ -308,6 +318,8 @@ type ShortAdRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   adset_id: string;
   name: string;
   number: number;
@@ -323,6 +335,8 @@ type CopyRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   angle_id: string | null;
   hook_id: string | null;
   adset_id: string | null;
@@ -356,6 +370,8 @@ type ProductImageRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   pattern: string;
   name: string;
   storage_path: string;
@@ -389,6 +405,8 @@ type PerformanceRecordRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   target_type: DbPerformanceTarget;
   target_id: string;
   rating: DbPerformanceRating;
@@ -504,6 +522,8 @@ type LandingPageRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   copy_id: string | null;
   title: string;
   slug: string;
@@ -543,6 +563,8 @@ type LandingExperimentRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   name: string;
   slug: string;
   active: boolean;
@@ -840,6 +862,8 @@ type VideoRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
+  market_id: string | null;
   copy_id: string | null;
   title: string;
   status: string;
