@@ -14,8 +14,15 @@ import { TOPE_INTENTOS_MEDIA } from "@/lib/instagram/autopilot";
  * así que la seguridad deja de ponerla la base de datos.
  *
  * De ahí la regla de este archivo: **toda consulta lleva su `workspace_id`**,
- * con tres excepciones y solo tres: `contarUltimas24h`, `ultimaPublicacion` y
- * el arriendo de la vuelta (`tomarVuelta` / `soltarVuelta`).
+ * con cuatro excepciones y solo cuatro: `contarUltimas24h`, `ultimaPublicacion`,
+ * el arriendo de la vuelta (`tomarVuelta` / `soltarVuelta`) y `listarActivos`.
+ *
+ * Están enumeradas porque una regla con excepciones sin declarar no sirve de
+ * nada: quien audite el archivo de un vistazo cuenta las que faltan, y si son
+ * más de las que dice la cabecera deja de fiarse de la cabecera. Tres funciones
+ * llegaron a incumplirla sin decirlo —`listarActivos`, `anotarFallo` y
+ * `limpiarFallos`, las tres acotando solo por `product_id`—. Las dos últimas ya
+ * llevan su espacio; la primera no puede.
  *
  * Las dos primeras filtran por `ig_user_id`, no por espacio, porque el tope de
  * 25/24h y la separación mínima los impone Instagram sobre **la cuenta real**,
@@ -29,6 +36,12 @@ import { TOPE_INTENTOS_MEDIA } from "@/lib/instagram/autopilot";
  * La tercera, el arriendo, no toca contenido de nadie: es el semáforo que
  * impide que dos vueltas del cron corran a la vez, y es uno para todo el
  * servidor, no uno por espacio.
+ *
+ * La cuarta, `listarActivos`, es la que **descubre** los espacios: es la única
+ * consulta que no puede llevar el filtro porque su respuesta es precisamente
+ * qué espacios hay que recorrer. A cambio no devuelve contenido —solo la
+ * configuración del piloto— y descarta las filas sin espacio, de modo que todo
+ * lo que sale de ella ya trae el `workspace_id` con el que se acota lo demás.
  */
 
 export interface AutopilotRow {
@@ -594,7 +607,7 @@ export async function tokenDePublicacion(workspaceId: string): Promise<string> {
  * transitorio pausa a los tres seguidos.
  */
 export async function anotarFallo(
-  productId: string,
+  row: { productId: string; workspaceId: string },
   motivo: string,
   permanente: boolean,
 ): Promise<void> {
@@ -603,11 +616,14 @@ export async function anotarFallo(
   const { data, error: errorLectura } = await supabase
     .from("instagram_autopilot")
     .select("fallos_seguidos")
-    .eq("product_id", productId)
+    .eq("workspace_id", row.workspaceId)
+    .eq("product_id", row.productId)
     .limit(1);
 
   if (errorLectura) {
-    throw new Error(`No se pudo leer los fallos seguidos de ${productId}: ${errorLectura.message}`);
+    throw new Error(
+      `No se pudo leer los fallos seguidos de ${row.productId}: ${errorLectura.message}`,
+    );
   }
 
   const seguidos = ((data ?? [])[0]?.fallos_seguidos ?? 0) + 1;
@@ -623,10 +639,11 @@ export async function anotarFallo(
           : `Tres intentos seguidos sin salir. El último: ${motivo}`
         : "",
     })
-    .eq("product_id", productId);
+    .eq("workspace_id", row.workspaceId)
+    .eq("product_id", row.productId);
 
   if (errorEscritura) {
-    throw new Error(`No se pudo anotar el fallo de ${productId}: ${errorEscritura.message}`);
+    throw new Error(`No se pudo anotar el fallo de ${row.productId}: ${errorEscritura.message}`);
   }
 }
 
@@ -638,15 +655,19 @@ export async function anotarFallo(
  * empezar la vuelta — y si alguien la pausó a mano mientras tanto, borrar el
  * motivo aquí se llevaría esa pausa por delante sin que nadie lo pidiera.
  */
-export async function limpiarFallos(productId: string, cuando: string): Promise<void> {
+export async function limpiarFallos(
+  row: { productId: string; workspaceId: string },
+  cuando: string,
+): Promise<void> {
   const supabase = createAdminClient();
 
   const { error } = await supabase
     .from("instagram_autopilot")
     .update({ fallos_seguidos: 0, ultima_publicacion_at: cuando })
-    .eq("product_id", productId);
+    .eq("workspace_id", row.workspaceId)
+    .eq("product_id", row.productId);
 
   if (error) {
-    throw new Error(`No se pudo limpiar los fallos de ${productId}: ${error.message}`);
+    throw new Error(`No se pudo limpiar los fallos de ${row.productId}: ${error.message}`);
   }
 }

@@ -140,7 +140,7 @@ async function darLaVuelta(parte: string[]): Promise<void> {
     } catch (error) {
       const motivo = error instanceof Error ? error.message : "falló sin motivo";
 
-      await anotarFallo(row.productId, motivo, esPermanente(error));
+      await anotarFallo(row, motivo, esPermanente(error));
       parte.push(`${row.productId}: ${motivo}`);
     }
   }
@@ -188,7 +188,7 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
     // Nada se publicó todavía: la pieza vuelve a «aprobado» con su error, no
     // salió esta vez, no está mal.
     await cerrarPublicacion(pieza.id, row.workspaceId, { error: motivo });
-    await anotarFallo(row.productId, motivo, esPermanente(error));
+    await anotarFallo(row, motivo, esPermanente(error));
 
     parte.push(`${row.productId}: no salió — ${motivo}`);
     return;
@@ -196,7 +196,7 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
 
   try {
     await cerrarPublicacion(pieza.id, row.workspaceId, { instagramId, igUserId: row.igUserId });
-    await limpiarFallos(row.productId, new Date().toISOString());
+    await limpiarFallos(row, new Date().toISOString());
 
     parte.push(`${row.productId}: publicada ${instagramId}.`);
   } catch (error) {
