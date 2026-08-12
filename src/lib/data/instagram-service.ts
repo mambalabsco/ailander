@@ -240,7 +240,7 @@ export async function cerrarPublicacion(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  const { error } = await supabase
+  const consulta = supabase
     .from("instagram_posts")
     .update(
       outcome.instagramId
@@ -269,24 +269,46 @@ export async function cerrarPublicacion(
     .eq("id", id)
     .eq("workspace_id", workspaceId);
 
+  /*
+   * Revertir a «aprobado» exige que la fila siga en «publicando».
+   *
+   * Sin este filtro, una llamada tardía con `error` —por ejemplo porque quien
+   * llamó ya la había cerrado con éxito antes y solo falló algo después—
+   * volvería a «aprobado» una pieza que **ya está publicada de verdad** en
+   * Instagram, y la vuelta siguiente la reservaría y la publicaría otra vez.
+   * Es la misma doctrina que `reservarVencida`: la condición va en la
+   * consulta, no en la confianza de quien llama.
+   */
+  const { error } = outcome.instagramId ? await consulta : await consulta.eq("status", "publicando");
+
   if (error) {
     throw new Error(`No se pudo cerrar la publicación ${id}: ${error.message}`);
   }
 }
 
-/** Las recién escritas que aún no tienen media ni hora. */
+/**
+ * Las recién escritas que aún no tienen media ni hora — sin las de vídeo.
+ *
+ * El vídeo no se genera solo todavía (`rellenar`, en la ruta del cron, lo
+ * escribe pero no lo completa), así que una pieza de vídeo nunca dejaría de
+ * cumplir «sin media». Si esta consulta la devolviera, ocuparía para siempre
+ * las primeras posiciones de la ventana de relleno (`slice(0, cuantas)` en el
+ * llamador) y ninguna imagen llegaría a generarse detrás de ella. Se cuentan
+ * aparte, con `contarEsperandoVideo`, para poder avisar sin bloquear la cola.
+ */
 export async function listasSinMedia(row: {
   productId: string;
   workspaceId: string;
-}): Promise<{ id: string; mediaKind: string }[]> {
+}): Promise<{ id: string }[]> {
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("instagram_posts")
-    .select("id, media_kind")
+    .select("id")
     .eq("workspace_id", row.workspaceId)
     .eq("product_id", row.productId)
     .eq("status", "aprobado")
+    .neq("media_kind", "video")
     .is("media_url", null)
     .is("scheduled_at", null)
     .order("created_at", { ascending: true });
@@ -297,7 +319,31 @@ export async function listasSinMedia(row: {
     );
   }
 
-  return (data ?? []).map((one) => ({ id: one.id, mediaKind: one.media_kind }));
+  return (data ?? []).map((one) => ({ id: one.id }));
+}
+
+/** Cuántas piezas del producto están escritas y esperan un vídeo que no se genera solo. */
+export async function contarEsperandoVideo(row: {
+  productId: string;
+  workspaceId: string;
+}): Promise<number> {
+  const supabase = createAdminClient();
+
+  const { count, error } = await supabase
+    .from("instagram_posts")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", row.workspaceId)
+    .eq("product_id", row.productId)
+    .eq("status", "aprobado")
+    .eq("media_kind", "video")
+    .is("media_url", null)
+    .is("scheduled_at", null);
+
+  if (error) {
+    throw new Error(`No se pudo contar lo que espera vídeo de ${row.productId}: ${error.message}`);
+  }
+
+  return count ?? 0;
 }
 
 /** Le pone la hora, ya con imagen. */

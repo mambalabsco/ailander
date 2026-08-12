@@ -7,6 +7,7 @@ import {
   anotarFallo,
   type AutopilotRow,
   cerrarPublicacion,
+  contarEsperandoVideo,
   contarUltimas24h,
   limpiarFallos,
   listarActivos,
@@ -91,16 +92,34 @@ export async function GET(request: Request): Promise<Response> {
   return NextResponse.json({ ok: true, parte });
 }
 
-/** Publica la pieza vencida más atrasada de este producto. */
+/**
+ * Publica la pieza vencida más atrasada de este producto.
+ *
+ * ## Por qué el `try` que revierte no llega hasta el final
+ *
+ * Solo cubre lo que de verdad se puede deshacer: pedir el token y llamar a
+ * Instagram. Si cualquiera de esas dos falla, no se ha publicado nada de
+ * verdad y la pieza puede volver a «aprobado» sin coste.
+ *
+ * En cuanto `publishNow` devuelve un id, la publicación **ya existe en
+ * Instagram** y nada de lo que pase después —que `cerrarPublicacion` falle,
+ * que `limpiarFallos` falle— puede deshacer eso. Antes, esas dos llamadas
+ * vivían dentro del mismo `try`: si `limpiarFallos` lanzaba, el `catch`
+ * volvía a poner la pieza en «aprobado» con `claimed_at: null` — una pieza ya
+ * publicada, con su `instagram_id` y su `scheduled_at` vencido intactos, lista
+ * para que la vuelta siguiente la reservara y la publicara **otra vez**.
+ */
 async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
   const pieza = await reservarVencida(row);
 
   if (!pieza) return;
 
+  let instagramId: string;
+
   try {
     const token = await tokenDePublicacion(row.userId);
 
-    const instagramId = await publishNow(
+    instagramId = await publishNow(
       { igUserId: row.igUserId, token },
       {
         mediaUrl: pieza.mediaUrl,
@@ -109,23 +128,38 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
         isStory: pieza.format === "historia",
       },
     );
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : "falló sin motivo";
 
-    await cerrarPublicacion(pieza.id, row.workspaceId, {
-      instagramId,
-      igUserId: row.igUserId,
-    });
+    // Nada se publicó todavía: la pieza vuelve a «aprobado» con su error, no
+    // salió esta vez, no está mal.
+    await cerrarPublicacion(pieza.id, row.workspaceId, { error: motivo });
+    await anotarFallo(row.productId, motivo, esPermanente(error));
 
+    parte.push(`${row.productId}: no salió — ${motivo}`);
+    return;
+  }
+
+  try {
+    await cerrarPublicacion(pieza.id, row.workspaceId, { instagramId, igUserId: row.igUserId });
     await limpiarFallos(row.productId, new Date().toISOString());
 
     parte.push(`${row.productId}: publicada ${instagramId}.`);
   } catch (error) {
     const motivo = error instanceof Error ? error.message : "falló sin motivo";
 
-    // La pieza vuelve a «aprobado» con su error: no salió esta vez, no está mal.
-    await cerrarPublicacion(pieza.id, row.workspaceId, { error: motivo });
-    await anotarFallo(row.productId, motivo, esPermanente(error));
-
-    parte.push(`${row.productId}: no salió — ${motivo}`);
+    /*
+     * Ya está en Instagram: no se revierte ni se anota como fallo del
+     * autopiloto (eso pausaría una cuenta que sí publicó). Si quien lanzó fue
+     * `cerrarPublicacion`, la fila queda en «publicando» con el filtro de
+     * estado que ahora exige esa función, y el rescate de los 30 minutos la
+     * reservará de nuevo — republicándola en Instagram de verdad, porque la
+     * base no tiene forma de saber que ya salió. Es un defecto conocido y
+     * deliberadamente sin resolver aquí: arreglarlo exige guardar el
+     * resultado de Instagram en otro sitio antes de intentar cerrar, y eso es
+     * más alcance del que pide este arreglo.
+     */
+    parte.push(`${row.productId}: publicada ${instagramId} pero no se pudo cerrar — ${motivo}`);
   }
 }
 
@@ -179,15 +213,26 @@ async function rellenar(
     }
   }
 
-  const sinMedia = (await listasSinMedia(row)).slice(0, cuantas);
+  /*
+   * `listasSinMedia` ya deja fuera las de vídeo — si no lo hiciera, ocuparían
+   * para siempre las primeras posiciones de `slice(0, cuantas)` y ninguna
+   * imagen llegaría a generarse detrás. Se cuentan aparte para poder avisar
+   * sin bloquear la cola.
+   */
+  const [sinMedia, esperandoVideo] = await Promise.all([
+    listasSinMedia(row).then((rows) => rows.slice(0, cuantas)),
+    contarEsperandoVideo(row),
+  ]);
+
+  if (esperandoVideo > 0) {
+    parte.push(
+      `${row.productId}: ${esperandoVideo} pieza(s) esperando vídeo, que no se genera solo.`,
+    );
+  }
+
   const base = new Date();
 
   for (const [index, pieza] of sinMedia.entries()) {
-    if (pieza.mediaKind === "video") {
-      parte.push(`${row.productId}: ${pieza.id} espera vídeo, que no se genera solo.`);
-      continue;
-    }
-
     const media = await generatePostMediaAction({ id: pieza.id, productId: row.productId });
 
     if (!media.ok) {
