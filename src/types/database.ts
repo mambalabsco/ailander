@@ -139,6 +139,32 @@ type ProductRow = {
   amazon_url: string;
   target_age_range: string;
   target_genders: string[];
+  /** Si los seis documentos valen para todos los mercados del producto. */
+  research_shared: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * En qué mercados vive un producto y a qué precio en cada uno.
+ *
+ * Es la verdad sobre los dos: `products.market_id` pasa a ser solo el **mercado
+ * base**, el del precio de `products.price`. Tener la moneda en dos sitios es la
+ * puerta a que discrepen, y cuando discrepan el que se publica es el equivocado.
+ */
+type ProductMarketRow = {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  product_id: string;
+  market_id: string;
+  /** Nulo mientras ese mercado no tiene precio. */
+  price: number | null;
+  /** 'manual' gana siempre: el conversor filtra por esta columna. */
+  price_source: "manual" | "convertido" | "ninguno";
+  /** El día del cambio con el que se convirtió, congelado. Nulo si es manual. */
+  price_fx_day: string | null;
+  price_fx_rate: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -1197,6 +1223,13 @@ export type Database = {
       products: Table<
         ProductRow,
         Insertable<ProductRow, Exclude<keyof ProductRow, "user_id" | "name">>
+      >;
+      product_markets: Table<
+        ProductMarketRow,
+        Insertable<
+          ProductMarketRow,
+          Exclude<keyof ProductMarketRow, "user_id" | "product_id" | "market_id">
+        >
       >;
       product_offers: Table<
         ProductOfferRow,
