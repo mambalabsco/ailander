@@ -103,6 +103,12 @@ El admin escribe el correo. Se comprueba que no exista ya una cuenta con él
 —porque si existe, la persona confirmaría y se encontraría un error suyo por una
 decisión de otro— y se guarda la propuesta. **Nada cambia todavía.**
 
+Esa comprobación solo alcanza a las cuentas que se ven, que son las de los
+espacios propios: RLS no deja mirar las demás, y está bien que no deje. Al caso
+de fuera lo caza el mensaje al confirmar, traduciendo el error de Supabase. Vale
+la pena igual: es la diferencia entre enterarse ahora y que se entere la otra
+persona cuando pulse.
+
 La persona entra y en `/cuenta` le espera: «tu admin pide cambiar tu correo a X.
 Confirmar / Rechazar». Al confirmar, una acción de servidor llama a
 `supabase.auth.updateUser({ email })` con **su** sesión, y Supabase manda sus dos
@@ -132,6 +138,15 @@ que escribir, «¿esta persona está en alguno de mis espacios?»— para leer, 
 acciones de `/admin` no cambian de forma —`requireCapability("personas")`, regla
 pura, `record()`—; lo que cambia es que la base deja de ser más permisiva que
 ellas.
+
+Y el disparador `protect_profile_fields` pregunta lo mismo, así que hay que
+cambiarlo con ellas: si se queda preguntando por el papel global, la política
+nueva no sirve de nada porque un admin de otro espacio seguiría pasando por ahí.
+
+`audit_log` tiene exactamente el mismo agujero —`audit_read_all_for_managers`—
+y se cierra en la misma migración: quien manda lee el registro **de su
+espacio**. Las filas antiguas sin espacio las ve solo quien las escribió, que es
+preferible a enseñárselas a los administradores de todos los equipos.
 
 ### El disparador que falta, y lo que rompe
 
