@@ -335,4 +335,3 @@ del último commit— y recompila solo.
   «Perdido» pasada media hora. Conviene reiniciar cuando no haya nada corriendo.
 - **`npm run logs`** funciona igual en el servidor y es la forma rápida de ver
   qué falló.
-e
