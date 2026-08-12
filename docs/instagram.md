@@ -2,8 +2,25 @@
 
 Pedido: crear imagen, texto y vídeo a partir del producto y publicarlo solo.
 
-Estado: **sin empezar.** Escrito antes para que no se descubra a mitad lo que
-Instagram no deja hacer, que es la mitad del trabajo.
+Estado: **el texto y la cola, hechos. La media y la publicación, no.**
+
+Hecho: el motor de las piezas con los límites reales dentro
+(`src/lib/instagram/content.ts`), la tabla `instagram_posts` con su
+`claimed_at`, la acción que escribe y encola en borrador, y la pantalla
+`/instagram` con la cola, la edición, la aprobación y la hora.
+
+Falta:
+
+1. **Generar la media.** Cada pieza guarda `scene` —qué se ve— y la proporción
+   sale del formato. Es enchufarlo al generador que ya existe y guardar la
+   dirección en `media_url`. **Ojo al enlazarlo de vuelta**: la imagen tiene que
+   quedar atada a *esa* publicación, no suelta en la galería, o al programar no
+   se sabe cuál va con cuál.
+2. **El cron.** Lee lo aprobado con hora pasada, marca `claimed_at` **antes** de
+   llamar, crea el contenedor, espera el procesado y publica. Sin lo primero,
+   dos vueltas del cron publican dos veces.
+3. **La conexión con Meta**, que depende de reautorizar la app con los cuatro
+   permisos.
 
 ## Lo que la API no deja, y cambia el diseño
 
