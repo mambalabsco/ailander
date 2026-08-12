@@ -158,12 +158,18 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
     .map((market) => ({ id: market.id, label: marketLabel(market) }));
 
   /*
-   * La pestaña de precios solo aparece con más de un mercado.
+   * La pestaña de precios aparece en cuanto el producto tiene tienda.
    *
-   * Con uno no hay nada que decidir: el precio es el de la ficha y ya se edita
-   * en Editar producto. Una pestaña más para enseñar una sola fila es ruido.
+   * **Antes se escondía hasta tener más de un mercado, y era un callejón sin
+   * salida:** es justo ahí donde se añaden, así que un producto con uno solo no
+   * podía llegar nunca al segundo. La regla parecía razonable —«con un mercado
+   * no hay nada que decidir»— y olvidaba que la pantalla no solo enseña precios,
+   * también es por donde se entra.
+   *
+   * Sin tienda sí se esconde: los mercados son de la tienda, y sin ella no hay
+   * ninguno que ofrecer.
    */
-  const visibleTabs = TABS.filter((item) => item.id !== "precios" || showSelector(marketIds));
+  const visibleTabs = TABS.filter((item) => item.id !== "precios" || Boolean(productStore));
 
   // Cómo se llama cada mercado, para que las insignias no enseñen un uuid.
   const marketNames = Object.fromEntries(

@@ -71,6 +71,19 @@ export function PricesTab({
         title="Precios por mercado"
         description="El precio escrito a mano manda siempre y es el único que se puede publicar. El convertido es una sugerencia: confírmalo antes de que salga a la calle."
       >
+        {/*
+          Con un solo mercado, lo que hace falta explicar no es el precio: es que
+          esta pantalla es por donde se entra al modo multimercado. Sin decirlo,
+          el desplegable de abajo parece un ajuste menor.
+        */}
+        {prices.length <= 1 ? (
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Este producto vive en un solo mercado, así que se comporta como siempre. Añádele otro
+            aquí abajo y aparecerá el selector de mercado en la cabecera, con el modo general —el
+            que no puede decir nada que no sea cierto en todos los países—.
+          </p>
+        ) : null}
+
         {message ? (
           <p
             className={`mb-4 text-sm ${failed ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}
