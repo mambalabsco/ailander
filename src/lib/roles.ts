@@ -246,6 +246,40 @@ export function canDisable(
   return { ok: true };
 }
 
+/**
+ * Si alguien puede administrar la **cuenta** de otro: su contraseña y su correo.
+ *
+ * Son las mismas tres reglas que `canAssign` porque protegen lo mismo, solo que
+ * aquí lo que está en juego es mayor: quien fija una contraseña puede entrar en
+ * esa cuenta y leerlo todo como esa persona.
+ *
+ * Sobre uno mismo devuelve que no, y no es una limitación: lo propio se cambia
+ * en `/cuenta`, donde Supabase pide la contraseña actual. Permitirlo aquí sería
+ * un camino para saltarse esa comprobación.
+ */
+export function canManageAccount(
+  actor: Member,
+  target: Member,
+): { ok: true } | { ok: false; reason: string } {
+  if (!can(actor.role, "personas")) {
+    return { ok: false, reason: "No tienes permiso para gestionar personas." };
+  }
+
+  if (actor.id === target.id) {
+    return { ok: false, reason: "Lo tuyo se cambia en «Tu cuenta»." };
+  }
+
+  if (target.role === "dueño") {
+    return { ok: false, reason: "Al dueño no se le administra la cuenta." };
+  }
+
+  if (RANK[target.role] > RANK[actor.role]) {
+    return { ok: false, reason: "No puedes administrar la cuenta de alguien por encima de ti." };
+  }
+
+  return { ok: true };
+}
+
 /* ------------------------------- El gasto ---------------------------------- */
 
 /**

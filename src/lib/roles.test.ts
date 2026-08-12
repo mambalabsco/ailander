@@ -7,6 +7,7 @@ import {
   can,
   canAssign,
   canDisable,
+  canManageAccount,
   capabilitiesFor,
   capabilitiesOf,
   isRole,
@@ -173,4 +174,52 @@ test("las excepciones por persona sustituyen a las del papel, y nulo no es «nin
 
   // Y lo inventado no concede: la columna es texto libre.
   assert.deepEqual(capabilitiesFor("redactor", ["gastar", "volar"]), ["gastar"]);
+});
+
+/* --------------------- Administrar la cuenta de otro ----------------------- */
+
+test("a uno mismo no se le administra la cuenta: para eso está /cuenta", () => {
+  const yo = { id: "a", role: "admin" as const };
+
+  assert.equal(canManageAccount(yo, yo).ok, false);
+});
+
+test("al dueño no le administra la cuenta ni un admin", () => {
+  // Es la cuenta que no se puede perder: si un admin pudiera fijarle la
+  // contraseña, un admin equivocado se queda con la plataforma.
+  const result = canManageAccount({ id: "a", role: "admin" }, { id: "b", role: "dueño" });
+
+  assert.equal(result.ok, false);
+});
+
+test("nadie administra la cuenta de alguien de rango mayor", () => {
+  const result = canManageAccount({ id: "a", role: "editor" }, { id: "b", role: "admin" });
+
+  assert.equal(result.ok, false);
+});
+
+test("sin el permiso de personas, no se administra ninguna cuenta", () => {
+  const result = canManageAccount({ id: "a", role: "redactor" }, { id: "b", role: "editor" });
+
+  assert.equal(result.ok, false);
+});
+
+test("un admin sí administra la cuenta de un editor", () => {
+  const result = canManageAccount({ id: "a", role: "admin" }, { id: "b", role: "editor" });
+
+  assert.equal(result.ok, true);
+});
+
+test("cada negativa dice por qué, y no la misma frase", () => {
+  // Un «no puedes» sin motivo obliga a adivinar cuál de las tres reglas saltó.
+  const yo = { id: "a", role: "admin" as const };
+  const motivos = new Set(
+    [
+      canManageAccount(yo, yo),
+      canManageAccount(yo, { id: "b", role: "dueño" }),
+      canManageAccount({ id: "c", role: "redactor" }, { id: "b", role: "editor" }),
+    ].map((result) => (result.ok ? "" : result.reason)),
+  );
+
+  assert.equal(motivos.size, 3);
 });
