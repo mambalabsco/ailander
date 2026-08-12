@@ -51,13 +51,18 @@ vuelta, hasta doce por documento y hasta siete peticiones por reanudación.
 en el panel de Gasto tiene que dejar de ser 0. Si sigue en 0, algo variable se
 cuela delante del bloque marcado y la caché no sirve — y no da ningún error.
 
-**Lo que queda, y por qué no lo he tocado:**
+- **Ocho búsquedas y esfuerzo medio**, decididos el 12 de agosto. Están como
+  `MAX_BUSQUEDAS` y `ESFUERZO` en `research-runner.ts`, con nombre y no
+  escondidos en la llamada, porque lo que compran es **menos evidencia por
+  informe**: es un cambio de calidad. Si los informes salen peor, se suben y se
+  acabó.
 
-- **`max_uses: 12` y `effort: "high"` en la investigación.** Son las dos
-  palancas grandes que quedan: el coste crece con el **cuadrado** de las
-  búsquedas, porque cada vuelta reprocesa lo acumulado. Bajar a 8 quita más de
-  la mitad. Las dos compran lo mismo —menos evidencia por informe— y eso es una
-  decisión de negocio.
+**Lo que queda:**
+
+- **Volver a medir `estimateResearchCost`.** El «suele costar» de los botones
+  sigue diciendo entre 80.000 y 260.000 tokens de entrada, que era verdad con
+  doce búsquedas y sin caché. Ahora sobreestima, que es el lado bueno del error
+  pero es un número falso. Se corrige con los datos de la primera tanda.
 - **Modelo más barato donde no decide nada.** La extracción es el candidato
   obvio y no se puede sin más: `effort` **da error en Haiku 4.5** y
   `extractStructured` lo manda. Está escrito en `provider-config.ts`. Y lo que
