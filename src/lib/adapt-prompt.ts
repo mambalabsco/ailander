@@ -1,4 +1,5 @@
 import "server-only";
+import type { MarketContext } from "@/lib/market-selection";
 
 import { buildProductContext } from "@/lib/copy-prompts";
 import { lengthBrief } from "@/lib/word-count";
@@ -25,6 +26,7 @@ export function buildAdaptPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   method: CopyMethod;
   awarenessLevel: AwarenessLevel;
   sourceText: string;
@@ -39,7 +41,7 @@ export function buildAdaptPrompt(options: {
       ? `**Sigue el original de cerca.** Mantén su estructura, su orden y su longitud casi punto por punto. Cambia el producto, el problema, el mecanismo, los nombres, los datos y los ejemplos por los de esta investigación; conserva el esqueleto y el ritmo.`
       : `**Úsalo como patrón, no como plantilla.** Quédate con lo que lo hace funcionar —por dónde entra, cómo escala la tensión, dónde coloca la prueba y la objeción— y escribe una pieza nueva para este producto. No debe poder reconocerse el original leyéndolo.`;
 
-  return `${buildProductContext(product, research, store)}
+  return `${buildProductContext(product, research, store, options.marketContext)}
 
 ## Antes de empezar: la longitud
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { marketContextFor } from "@/lib/market-context";
 import { findProductAnywhere } from "@/lib/products";
 import { findStore } from "@/lib/store-registry";
 import { readProductResearch } from "@/lib/research-store";
@@ -163,10 +164,13 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
 
   const shapeId = nextShape(usedShapes, readText(raw.shapeId) || undefined).id;
 
+  const marketContext = await marketContextFor(product);
+
   const prompt = buildLandingPrompt({
     product,
     research,
     store,
+    marketContext,
     method,
     baseCopy,
     angle,
@@ -1164,7 +1168,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
   const research = await readProductResearch(productId);
   const store = product.storeId ? await findStore(product.storeId) : null;
   const { buildProductContext } = await import("@/lib/copy-prompts");
-  const context = buildProductContext(product, research, store);
+  const context = buildProductContext(product, research, store, await marketContextFor(product));
 
   return runInBackground({
     productId,
@@ -1587,7 +1591,7 @@ export async function copyCommentsAction(input: unknown): Promise<LaunchResult> 
       const outcome = await generateStructured<{ comments: LandingComment[] }>({
         prompt: buildCommentsPrompt({
           pageText,
-          productContext: buildProductContext(product, research, store),
+          productContext: buildProductContext(product, research, store, await marketContextFor(product)),
           // El país sale del producto: es de donde salen también los nombres y
         // el registro del idioma en el resto de la plataforma.
         countryName: product.country || "España",

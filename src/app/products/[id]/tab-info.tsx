@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { MarketContext } from "@/lib/market-selection";
 import { SectionCard } from "@/components/section-card";
 import { ProductSheetAnalysis } from "@/components/product-sheet-analysis";
 import { Tag } from "@/components/ui";
@@ -11,10 +12,12 @@ interface InfoTabProps {
   product: Product;
   stores: Store[];
   hasApiKey: boolean;
+  /** El mercado que se está mirando. En general no hay precio que enseñar. */
+  marketContext: MarketContext;
 }
 
 /** Ficha editable del producto. Es la información que alimenta los 6 prompts. */
-export function InfoTab({ product, stores, hasApiKey }: InfoTabProps) {
+export function InfoTab({ product, stores, hasApiKey, marketContext }: InfoTabProps) {
   const store = stores.find((item) => item.id === product.storeId);
   const market = store?.markets.find((item) => item.id === product.marketId);
   const money = marketMoney(product, stores);
@@ -73,11 +76,29 @@ export function InfoTab({ product, stores, hasApiKey }: InfoTabProps) {
                 <p>
                   <span className="font-medium">Categoría:</span> {product.category}
                 </p>
+                {/*
+                  En general no se enseña un precio vacío ni a cero: se dice por
+                  qué no hay. Un hueco sin explicar se lee como un dato que falta
+                  y alguien va y lo rellena con el de un país.
+                */}
+                {marketContext.price ? (
+                  <p>
+                    <span className="font-medium">Precio:</span>{" "}
+                    {formatMoney(marketContext.price.amount, money)}
+                    {marketContext.price.source === "convertido" ? (
+                      <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                        convertido · confírmalo antes de publicar
+                      </span>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Sin precio: en general no hay uno solo. Elige un mercado para verlo.
+                  </p>
+                )}
                 <p>
-                  <span className="font-medium">Precio:</span> {formatMoney(product.price, money)}
-                </p>
-                <p>
-                  <span className="font-medium">País:</span> {product.country}
+                  <span className="font-medium">País:</span>{" "}
+                  {marketContext.market?.countryName || "varios"}
                 </p>
                 <p>
                   <span className="font-medium">Idioma:</span> {product.language}

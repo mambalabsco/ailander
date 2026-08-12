@@ -232,7 +232,7 @@ export async function runResearchDocument(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
-  extras?: ResearchExtras;
+  extras: ResearchExtras;
 }): Promise<ResearchRunResult> {
   const { documentId, product, research, store, extras } = options;
 

@@ -1,4 +1,6 @@
 import type { Product } from "@/types";
+import { priceLine } from "@/lib/market-price";
+import type { MarketContext } from "@/lib/market-selection";
 import type { ProductResearch, ResearchDocumentId } from "@/types/research";
 import { RESEARCH_DOCUMENT_META } from "@/types/research";
 import type { Store } from "@/types/store";
@@ -40,22 +42,41 @@ export interface ResearchExtras {
   offers?: ProductOffers | null;
   notes?: ProductNote[];
   currency?: string;
+  /*
+   * El mercado, obligatorio y sin valor por defecto: es el único campo sin `?`,
+   * así que el compilador obliga a pasarlo en todos los llamantes.
+   *
+   * Ojo con lo que se meta aquí: esto viaja dentro del **encargo**, que es el
+   * primer bloque y el que lleva la marca de caché (`research-runner.ts`). Tiene
+   * que ser idéntico entre las vueltas de una misma investigación, o la caché
+   * deja de acertar y se vuelve a pagar el contexto entero en cada búsqueda.
+   */
+  marketContext: MarketContext;
 }
 
-function productLine(product: Product, store?: Store | null, extras?: ResearchExtras): string {
+function productLine(product: Product, store: Store | null | undefined, extras: ResearchExtras): string {
   const offerBlock = extras?.offers
     ? describeOffers(extras.offers, extras.currency ?? "EUR")
     : "";
   const notesBlock = describeNotes(extras?.notes ?? []);
 
+  const market = extras.marketContext.market;
+
   const parts = [
     `Producto: ${product.name}`,
     product.researchInputs?.niche ? `Nicho: ${product.researchInputs.niche}` : "",
-    `País objetivo: ${product.country}`,
+    market
+      ? `País objetivo: ${market.countryName}`
+      : // En general no hay país que investigar, y callarlo no basta: el modelo
+        // elegiría uno y devolvería un informe de mercado sobre un país que
+        // nadie pidió, con la misma cara que si fuera el correcto.
+        "País objetivo: varios (no supongas ninguno; lo que digas tiene que valer para todos)",
     // El idioma del cliente, para saber en qué se le habla. No es el idioma en
     // que se escribe este informe: eso lo fija LANGUAGE_RULE.
-    `Idioma del cliente (para los anuncios, no para este informe): ${product.language}`,
-    product.price > 0 ? `Precio de venta: ${product.price}` : "",
+    `Idioma del cliente (para los anuncios, no para este informe): ${market?.languageName ?? product.language}`,
+    // Vacía en general: investigar con el precio de otro país devuelve la
+    // competencia equivocada en un mercado con otro poder adquisitivo.
+    priceLine("Precio de venta", extras.marketContext.price, market?.currency ?? ""),
     product.description ? `Descripción: ${product.description}` : "",
     store ? `Tienda: ${store.brand} (${store.domain})` : "",
     offerBlock ? `\n${offerBlock}` : "",
@@ -107,8 +128,8 @@ Estos datos son una acotación mía, no una restricción: si la investigación i
 
 export function buildAwarenessPrompt(
   product: Product,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   return `Eres un estratega de investigación de mercados formado en "Breakthrough Advertising" de Eugene Schwartz.
 
@@ -198,8 +219,8 @@ Comienza el informe completo.${LANGUAGE_RULE}${REPORT_ONLY}`;
 
 export function buildCompetitorsPrompt(
   product: Product,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   const urls = product.researchInputs?.competitorUrls ?? [];
   const niche = product.researchInputs?.niche || product.category;
@@ -251,8 +272,8 @@ ${LANGUAGE_RULE}${REPORT_ONLY}`;
 export function buildAvatarsPrompt(
   product: Product,
   research: ProductResearch,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   /*
    * La demografía sale del documento 1 si ya está hecho.
@@ -335,8 +356,8 @@ ${LANGUAGE_RULE}${REPORT_ONLY}`;
 export function buildMasterPrompt(
   product: Product,
   research: ProductResearch,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   const niche = product.researchInputs?.niche || product.category;
   const levels = research.awareness
@@ -394,8 +415,8 @@ ${LANGUAGE_RULE}${REPORT_ONLY}`;
 
 export function buildDesireExtractionPrompt(
   product: Product,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   const competitorUrl = product.researchInputs?.competitorUrls?.[0];
   const amazonUrl = product.researchInputs?.amazonUrl;
@@ -445,8 +466,8 @@ ${LANGUAGE_RULE}${REPORT_ONLY}`;
 export function buildDesireValidationPrompt(
   product: Product,
   research: ProductResearch,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   const niche = product.researchInputs?.niche || product.category;
 
@@ -535,8 +556,8 @@ export function buildResearchPrompt(
   id: ResearchDocumentId,
   product: Product,
   research: ProductResearch,
-  store?: Store | null,
-  extras?: ResearchExtras,
+  store: Store | null | undefined,
+  extras: ResearchExtras,
 ): string {
   switch (id) {
     case "awareness":

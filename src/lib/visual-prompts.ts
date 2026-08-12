@@ -1,4 +1,5 @@
 import type { Product } from "@/types";
+import type { MarketContext } from "@/lib/market-selection";
 import type { ProductResearch } from "@/types/research";
 import type { GeneratedCopy, MarketingAngle } from "@/types/copy";
 import type {
@@ -328,8 +329,9 @@ export function buildProductImagePrompt(options: {
   research: ProductResearch;
   pattern: ProductImagePattern;
   brief: ProductImageBrief;
+  marketContext: MarketContext;
 }): string {
-  const { product, research, pattern, brief } = options;
+  const { product, research, pattern, brief, marketContext } = options;
   const meta = PRODUCT_IMAGE_PATTERN_META[pattern];
 
   const audience = product.targetAudience || "su público objetivo";
@@ -346,7 +348,17 @@ export function buildProductImagePrompt(options: {
     "resena-estrellas": `${product.name} junto a una tarjeta de reseña: cinco estrellas, un nombre de pila y una cita corta y creíble${benefit ? ` sobre ${benefit.toLowerCase()}` : ""}. Tipografía limpia, texto perfectamente legible.`,
     "comparativa-alternativa": `Composición en dos columnas separadas por una línea fina. A la izquierda${competitor ? `, la alternativa habitual del tipo de ${competitor}` : ", la alternativa habitual"}; a la derecha, ${product.name}. Dos o tres puntos cortos bajo cada columna. El texto debe ser el elemento más legible.`,
     "antes-despues": `Dos encuadres idénticos, con la misma luz y el mismo ángulo, etiquetados "Antes" y "Después". La diferencia debe verse pero mantenerse creíble.`,
-    "pack-oferta": `${product.name} en pack sobre fondo limpio, con el precio (${product.price}) en tipografía grande y jerarquía clara. Mucho aire alrededor.`,
+    /*
+     * En general la imagen se compone **con el hueco del precio, sin precio**.
+     *
+     * Es el caso donde más caro sale equivocarse: un número quemado dentro de un
+     * PNG no se corrige cambiando un campo, hay que volver a generar la imagen y
+     * pagarla otra vez. Y si se publica, es el precio de otro país en la página
+     * de este.
+     */
+    "pack-oferta": marketContext.price
+      ? `${product.name} en pack sobre fondo limpio, con el precio (${marketContext.price.amount} ${marketContext.market?.currency ?? ""}) en tipografía grande y jerarquía clara. Mucho aire alrededor.`
+      : `${product.name} en pack sobre fondo limpio, con una zona despejada y amplia en la parte inferior donde después irá el precio. **No escribas ninguna cifra ni símbolo de moneda.** Mucho aire alrededor.`,
   };
 
   const lines = [

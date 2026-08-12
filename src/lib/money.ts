@@ -39,6 +39,24 @@ export function currencyOf(
 }
 
 /**
+ * Moneda y configuración regional de un mercado concreto.
+ *
+ * `marketMoney` las saca del mercado **del producto**, que con varios mercados
+ * ya no es una pregunta con una sola respuesta. Esta las saca del mercado que se
+ * está mirando, que es lo que ahora decide cómo se escribe un importe.
+ */
+export function moneyForMarket(market: {
+  currency: string;
+  languageCode: string;
+  countryCode: string;
+}): { currency: string; locale: string } {
+  return {
+    currency: market.currency || DEFAULT_CURRENCY,
+    locale: `${market.languageCode}-${market.countryCode}`,
+  };
+}
+
+/**
  * Importe con su moneda.
  *
  * Si la configuración regional o la moneda no son válidas —datos escritos a

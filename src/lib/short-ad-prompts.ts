@@ -1,4 +1,5 @@
 import type { Product } from "@/types";
+import type { MarketContext } from "@/lib/market-selection";
 import type { ProductResearch } from "@/types/research";
 import type { MarketingAngle } from "@/types/copy";
 import type { AdSet, FunnelStage, Prelanding, ShortAdFormat } from "@/types/campaign";
@@ -55,6 +56,7 @@ export function buildShortAdBatchPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   adset: AdSet;
   prelandings: Prelanding[];
   angle?: MarketingAngle;
@@ -97,7 +99,7 @@ export function buildShortAdBatchPrompt(options: {
     })
     .join("\n\n");
 
-  return `${buildProductContext(product, research, options.store)}
+  return `${buildProductContext(product, research, options.store, options.marketContext)}
 
 ## Conjunto de anuncios
 

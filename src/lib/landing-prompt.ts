@@ -1,4 +1,5 @@
 import "server-only";
+import type { MarketContext } from "@/lib/market-selection";
 
 import { buildProductContext } from "@/lib/copy-prompts";
 import { findShape, shapeRules } from "@/lib/landing-shapes";
@@ -34,6 +35,7 @@ export function buildLandingPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   method: CopyMethod;
   /** El texto ya escrito, cuando la página se monta sobre un copy existente. */
   baseCopy?: string;
@@ -67,7 +69,7 @@ Doce comentarios que parezcan **capturados de un post de Facebook**, no testimon
 
 Cuatro testimonios con nombre, edad y contexto médico, en el formato de la sección «Esto es lo que dicen quienes ya lo usan». Concretos: qué pasaba antes, cuánto tardaron en notar el cambio, qué cambió exactamente.`;
 
-  return `${buildProductContext(product, research, store)}
+  return `${buildProductContext(product, research, store, options.marketContext)}
 
 ${
   angle

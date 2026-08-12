@@ -1,6 +1,7 @@
 "use server";
 
 import { findStore } from "@/lib/store-registry";
+import { marketContextFor } from "@/lib/market-context";
 import {
   listThemeFiles,
   listThemes,
@@ -317,6 +318,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
   if (!product) throw new Error("No se encontró el producto.");
 
   const research = await readProductResearch(productId);
+  const marketContext = await marketContextFor(product);
 
   /*
    * Las capturas de la página de referencia, si las hay.
@@ -444,6 +446,7 @@ export async function recreatePageAction(form: FormData): Promise<LaunchResult> 
             product,
             research,
             store,
+            marketContext,
             section: job.wanted,
             type: job.type,
             // La de la sección manda sobre la del tema: es lo que hace que un

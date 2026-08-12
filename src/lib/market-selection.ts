@@ -60,6 +60,29 @@ export function stampFor(selection: Selection): string | null {
 export interface MarketBrief {
   countryName: string;
   languageName: string;
+  currency: string;
+}
+
+/**
+ * Todo lo que un encargo necesita saber del mercado, junto.
+ *
+ * Va como un solo parámetro **obligatorio** en los constructores de encargo. Es
+ * a propósito: al no tener valor por defecto, el compilador enumera todos los
+ * sitios que hay que revisar. Un valor por defecto que cayera al precio base
+ * dejaría que un encargo general escribiera el precio de un país, que es
+ * exactamente el fallo caro que todo esto evita.
+ *
+ * **Nada de lo que salga de aquí puede variar entre llamadas de la misma tanda.**
+ * Estos textos van dentro del prefijo cacheado —`buildProductContext` en los
+ * ganchos, el encargo entero en investigación—, y la caché exige que el prefijo
+ * sea idéntico byte a byte: una fecha aquí no da error, simplemente se paga todo
+ * entero y nadie se entera.
+ */
+export interface MarketContext {
+  /** El mercado elegido. **Nulo es general**: no hay país ni precio que dar. */
+  market: MarketBrief | null;
+  /** El precio ya resuelto por la cascada. Nulo en general y sin precio. */
+  price: { amount: number; source: "manual" | "convertido" } | null;
 }
 
 /**
@@ -74,12 +97,8 @@ export interface MarketBrief {
  * escribe en general. Un idioma en blanco haría que el modelo eligiera, y elige
  * inglés.
  */
-export function marketLines(
-  selection: Selection,
-  market: MarketBrief | null,
-  fallbackLanguage: string,
-): string[] {
-  if (selection.kind === "market" && market) {
+export function marketLines(market: MarketBrief | null, fallbackLanguage: string): string[] {
+  if (market) {
     return [`País: ${market.countryName}`, `Idioma de salida: ${market.languageName}`];
   }
 

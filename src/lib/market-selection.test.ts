@@ -69,10 +69,10 @@ test("lo generado en un mercado se guarda con su mercado", () => {
 
 /* ------------------- El país y el idioma de los encargos --------------------- */
 
-const mexico = { countryName: "México", languageName: "Español" };
+const mexico = { countryName: "México", languageName: "Español", currency: "MXN" };
 
 test("en un mercado, el encargo lleva su país y su idioma", () => {
-  assert.deepEqual(marketLines({ kind: "market", marketId: "mx" }, mexico, "Español"), [
+  assert.deepEqual(marketLines(mexico, "Español"), [
     "País: México",
     "Idioma de salida: Español",
   ]);
@@ -81,7 +81,7 @@ test("en un mercado, el encargo lleva su país y su idioma", () => {
 test("en general no hay país, y se dice que no lo nombre", () => {
   // No basta con callarlo: sin instrucción, el modelo se inventa un país al
   // escribir —«aquí en Chile»— y el texto deja de valer para los demás.
-  assert.deepEqual(marketLines({ kind: "general" }, null, "Español"), [
+  assert.deepEqual(marketLines(null, "Español"), [
     "País: varios (NO nombres ningún país, ciudad ni moneda: este texto vale para todos)",
     "Idioma de salida: Español",
   ]);

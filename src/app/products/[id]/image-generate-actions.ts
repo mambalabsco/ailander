@@ -1,6 +1,7 @@
 "use server";
 
 import { runInBackground } from "@/lib/background";
+import { marketContextFor } from "@/lib/market-context";
 import { recordRun } from "@/lib/data/runs";
 import type { LaunchResult } from "@/types/jobs";
 import { findProductAnywhere } from "@/lib/products";
@@ -195,10 +196,12 @@ export async function generateProductImagesAction(input: unknown): Promise<Launc
     patterns,
   };
 
+  const marketContext = await marketContextFor(product);
+
   const jobs = patterns.map((pattern) => ({
     pattern,
     aspectRatio: PRODUCT_IMAGE_PATTERN_META[pattern].aspectRatio,
-    prompt: buildProductImagePrompt({ product, research, pattern, brief }),
+    prompt: buildProductImagePrompt({ product, research, pattern, brief, marketContext }),
   }));
 
   return runInBackground({

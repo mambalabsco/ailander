@@ -1,4 +1,5 @@
 import type { Product } from "@/types";
+import type { MarketContext } from "@/lib/market-selection";
 import type { ProductResearch } from "@/types/research";
 import type { GeneratedCopy, MarketingAngle } from "@/types/copy";
 import type { ShortAd } from "@/types/campaign";
@@ -23,6 +24,7 @@ export function buildIdeasPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   angles: MarketingAngle[];
   copies: GeneratedCopy[];
   shortAds: ShortAd[];
@@ -92,7 +94,7 @@ export function buildIdeasPrompt(options: {
     publirreportajes: `Propón ${count} **ideas de publirreportaje**, cada una con: marco narrativo recomendado, narrador, apertura y el mecanismo que revela.`,
   };
 
-  return `${buildProductContext(product, research, options.store)}
+  return `${buildProductContext(product, research, options.store, options.marketContext)}
 
 ## Lo que ya se ha probado
 

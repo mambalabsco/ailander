@@ -38,6 +38,7 @@ import type { ResearchDocumentId } from "@/types/research";
 import { PRODUCT_IMAGE_PATTERNS } from "@/types/visuals";
 import type { AdVisualPrompt } from "@/types/visuals";
 import { listProductMarkets } from "@/lib/data/product-markets";
+import { marketContextFor } from "@/lib/market-context";
 import { parseSelection, showSelector } from "@/lib/market-selection";
 import { marketLabel } from "@/types/store";
 import { MarketSwitcher } from "@/app/products/[id]/market-switcher";
@@ -141,6 +142,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   const productMarkets = await listProductMarkets(product.id);
   const marketIds = productMarkets.map((item) => item.marketId);
   const selection = parseSelection(mercado, marketIds);
+  const marketContext = await marketContextFor(product, mercado);
 
   const productStore = product.storeId
     ? stores.find((item) => item.id === product.storeId)
@@ -197,6 +199,10 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
         offers,
         notes,
         currency: money.currency,
+        // La vista previa del encargo tiene que enseñar **lo que se va a mandar
+        // de verdad**, con el mercado que esté elegido. Un encargo de muestra
+        // que no coincide con el real es peor que no enseñarlo.
+        marketContext,
       }),
     ]),
   ) as Record<ResearchDocumentId, string>;
@@ -403,8 +409,22 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
         })}
       </nav>
 
-      {activeTab === "panel" ? <PanelTab product={product} research={research} stores={stores} /> : null}
-      {activeTab === "info" ? <InfoTab product={product} stores={stores} hasApiKey={hasApiKey} /> : null}
+      {activeTab === "panel" ? (
+        <PanelTab
+          product={product}
+          research={research}
+          stores={stores}
+          marketContext={marketContext}
+        />
+      ) : null}
+      {activeTab === "info" ? (
+        <InfoTab
+          product={product}
+          stores={stores}
+          hasApiKey={hasApiKey}
+          marketContext={marketContext}
+        />
+      ) : null}
       {activeTab === "oferta" ? (
         <OfferTab
           productId={product.id}
@@ -412,6 +432,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           notes={notes}
           currency={money.currency}
           locale={money.locale}
+          hasMarket={marketContext.market !== null}
         />
       ) : null}
       {activeTab === "documentos" ? (

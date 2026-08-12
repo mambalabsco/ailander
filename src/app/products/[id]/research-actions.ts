@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { marketContextFor } from "@/lib/market-context";
 import { after } from "next/server";
 import { createJob, finishJob } from "@/lib/data/jobs";
 import { runInBackground } from "@/lib/background";
@@ -83,7 +84,19 @@ export async function generateResearchAction(
     listNotes(id).catch(() => []),
   ]);
 
-  const extras = { offers, notes, currency: marketMoney(product, stores).currency };
+  const extras = {
+    offers,
+    notes,
+    currency: marketMoney(product, stores).currency,
+    /*
+     * El mercado, resuelto una vez para toda la investigación.
+     *
+     * Tiene que ser el mismo en las seis vueltas: viaja dentro del encargo, que
+     * es el bloque marcado para la caché, y un encargo que cambie entre vueltas
+     * la desactiva sin dar ningún error — se paga el contexto entero otra vez.
+     */
+    marketContext: await marketContextFor(product),
+  };
 
   /*
    * Lo que se puede lanzar ya. El resto **no se descarta**: espera su turno.

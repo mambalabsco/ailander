@@ -1,4 +1,5 @@
 import "server-only";
+import type { MarketContext } from "@/lib/market-selection";
 
 import { buildProductContext } from "@/lib/copy-prompts";
 import type { Product } from "@/types";
@@ -31,6 +32,7 @@ export function buildSectionCodePrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   /** El papel de la sección y cómo la usa la referencia. */
   section: { kind: string; purpose: string; angle: string };
   /** Cómo se llamará el archivo: `lp-comparativa-1`. */
@@ -56,7 +58,7 @@ export function buildSectionCodePrompt(options: {
 }): string {
   const { section, palette } = options;
 
-  return `${buildProductContext(options.product, options.research, options.store)}
+  return `${buildProductContext(options.product, options.research, options.store, options.marketContext)}
 
 # Escribe una sección de Shopify
 

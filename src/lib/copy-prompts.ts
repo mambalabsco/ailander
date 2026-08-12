@@ -5,6 +5,8 @@ import type { CopyMethod, MarketingAngle } from "@/types/copy";
 import { FACEBOOK_LIMITS } from "@/types/copy";
 import type { Store } from "@/types/store";
 import { currencyOf } from "@/lib/money";
+import { priceLine } from "@/lib/market-price";
+import { marketLines, type MarketContext } from "@/lib/market-selection";
 import { describeOffers, type ProductOffers } from "@/types/offer";
 import { describeNotes, type ProductNote } from "@/types/note";
 import { lengthBrief } from "@/lib/word-count";
@@ -51,7 +53,20 @@ export interface ProductContextExtras {
 export function buildProductContext(
   product: Product,
   research: ProductResearch,
-  store?: Store | null,
+  store: Store | null | undefined,
+  /*
+   * El mercado va **obligatorio y sin valor por defecto**.
+   *
+   * Es lo que obliga a visitar todos los sitios que escriben un encargo: un
+   * valor por defecto que cayera al precio base dejaría que un encargo general
+   * escribiera el precio de un país, y eso no falla, solo sale mal en la página
+   * de otro sitio.
+   *
+   * Ojo con lo que se añada aquí: esto es el **prefijo cacheado** de las tandas
+   * de ganchos, y la caché exige que sea idéntico byte a byte entre llamadas.
+   * Una fecha o un contador metidos aquí no dan error: se paga entero.
+   */
+  marketContext: MarketContext,
   extras?: ProductContextExtras,
 ): string {
   const master = research.master;
@@ -67,6 +82,16 @@ export function buildProductContext(
    */
   const mentionBrand = store ? store.mentionBrandInCopy : true;
 
+  /*
+   * En general la línea del precio **desaparece entera**, no sale vacía ni a
+   * cero: «Precio: 0» le está diciendo al modelo que el producto es gratis.
+   *
+   * Se esparce con `...` en vez de filtrar el array al final porque la línea en
+   * blanco de después del título también es falsa para `filter(Boolean)`, y se
+   * llevaría por delante la separación.
+   */
+  const priceText = priceLine("Precio", marketContext.price, marketContext.market?.currency ?? "");
+
   const lines: string[] = [
     "## Contexto del producto",
     "",
@@ -75,9 +100,8 @@ export function buildProductContext(
       ? `Marca: ${product.brand}`
       : `Marca: ${product.brand} (NO la menciones en el texto)`,
     `Categoría: ${product.category}`,
-    `Precio: ${product.price} ${currencyOf(product, store)}`,
-    `País: ${product.country}`,
-    `Idioma de salida: ${product.language}`,
+    ...(priceText ? [priceText] : []),
+    ...marketLines(marketContext.market, product.language),
     `Descripción: ${product.description}`,
     `Público objetivo: ${product.targetAudience}`,
   ];
@@ -221,6 +245,7 @@ export function buildAnglesPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   offers?: ProductOffers | null;
   notes?: ProductNote[];
   /** Copys ya probados, como referencia de patrón. */
@@ -230,7 +255,7 @@ export function buildAnglesPrompt(options: {
 }): string {
   const { product, research, store, desire, count = 5 } = options;
 
-  return `${buildProductContext(product, research, store, {
+  return `${buildProductContext(product, research, store, options.marketContext, {
     offers: options.offers,
     notes: options.notes,
     swipe: options.swipe,
@@ -326,6 +351,7 @@ export function buildLongCopyPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   offers?: ProductOffers | null;
   notes?: ProductNote[];
   /** Copys ya probados, como referencia de patrón. */
@@ -360,7 +386,7 @@ No hay ángulo definido: esta pieza es la línea base con la que se compararán 
     ? `\n## Gancho de apertura\n\nUsa exactamente esta frase como primera oración del texto:\n\n«${hook}»\n`
     : "";
 
-  return `${buildProductContext(product, research, store, {
+  return `${buildProductContext(product, research, store, options.marketContext, {
     offers: options.offers,
     notes: options.notes,
     swipe: options.swipe,
@@ -517,6 +543,7 @@ export function buildAdvertorialPrompt(options: {
   product: Product;
   research: ProductResearch;
   store?: Store | null;
+  marketContext: MarketContext;
   offers?: ProductOffers | null;
   notes?: ProductNote[];
   /** Copys ya probados, como referencia de patrón. */
@@ -551,7 +578,7 @@ Deseo masivo de fondo: **${desire}**`
 
 No hay ángulo definido. Deduce el mecanismo único del problema y el de la solución de la investigación anterior, y hazlos explícitos en el texto.`;
 
-  return `${buildProductContext(product, research, store, {
+  return `${buildProductContext(product, research, store, options.marketContext, {
     offers: options.offers,
     notes: options.notes,
     swipe: options.swipe,
@@ -583,17 +610,32 @@ ${FACEBOOK_OUTPUT_BLOCK}`;
  * presenta para que confirme: la investigación no empieza sobre datos que nadie
  * ha validado.
  */
-export function buildCompetitorSearchPrompt(product: Product): string {
+export function buildCompetitorSearchPrompt(
+  product: Product,
+  marketContext: MarketContext,
+): string {
   const niche = product.researchInputs?.niche || product.category;
+
+  /*
+   * Sin precio de referencia se busca igual, solo que sin acotar por gama.
+   *
+   * En general no hay uno: dar el de un país haría buscar competidores de un
+   * mercado con el listón de precios de otro, y en países con poder adquisitivo
+   * distinto eso devuelve la competencia equivocada.
+   */
+  const priceText = priceLine(
+    "Precio de referencia",
+    marketContext.price,
+    marketContext.market?.currency ?? "",
+  );
 
   return `Busca marcas competidoras reales del siguiente producto.
 
 Producto: ${product.name}
 Categoría: ${product.category}
 Nicho: ${niche}
-País: ${product.country}
-Descripción: ${product.description}
-Precio de referencia: ${product.price} ${currencyOf(product, null)}
+${marketLines(marketContext.market, product.language)[0]}
+Descripción: ${product.description}${priceText ? `\n${priceText}` : ""}
 
 Busca específicamente marcas **DTC** que vendan principalmente online mediante comercio electrónico, Shopify o embudos de respuesta directa. No incluyas marketplaces, distribuidores, grandes superficies ni marcas que solo vendan en retail físico.
 

@@ -17,6 +17,7 @@ import {
   saveShortAds,
 } from "@/lib/campaign-store";
 import { marketMoney } from "@/lib/money";
+import { marketContextFor } from "@/lib/market-context";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { clampToLimit, generateLongCopy, generateStructured } from "@/lib/generators";
@@ -145,6 +146,18 @@ async function context(productId: unknown) {
     notes,
     swipe: describeSwipeCopies(swipeCopies),
     currency: marketMoney(product, stores).currency,
+    /*
+     * El mercado se resuelve aquí, una vez, y no en cada acción.
+     *
+     * Son nueve las que escriben un encargo, y en la novena se olvidaría. Un
+     * encargo que se olvide del mercado no falla: escribe el precio del país
+     * base en un texto que iba a ir a otro sitio.
+     *
+     * Sin el mercado de la URL todavía: lo pasa el cliente en la tarea 9. Con un
+     * solo mercado —o mientras la migración no esté aplicada— esto devuelve
+     * exactamente lo de siempre.
+     */
+    marketContext: await marketContextFor(product),
   };
 }
 
@@ -227,6 +240,7 @@ export async function generateAnglesAction(
     product: ctx.product,
     research: ctx.research,
     store: ctx.store,
+    marketContext: ctx.marketContext,
     offers: ctx.offers,
     notes: ctx.notes,
     desire: target,
@@ -322,7 +336,7 @@ export async function generateHooksAction(
 
   const { buildProductContext } = await import("@/lib/copy-prompts");
   // `productContext`, no `context`: ese nombre ya es el de la función de arriba.
-  const productContext = buildProductContext(ctx.product, ctx.research, ctx.store, {
+  const productContext = buildProductContext(ctx.product, ctx.research, ctx.store, ctx.marketContext, {
     offers: ctx.offers,
     notes: ctx.notes,
     swipe: ctx.swipe,
@@ -487,6 +501,7 @@ export async function generateCopyAction(input: unknown): Promise<LaunchResult> 
     product: ctx.product,
     research: ctx.research,
     store: ctx.store,
+    marketContext: ctx.marketContext,
     offers: ctx.offers,
     notes: ctx.notes,
     swipe: ctx.swipe,
@@ -629,6 +644,7 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
     product: ctx.product,
     research: ctx.research,
     store: ctx.store,
+    marketContext: ctx.marketContext,
     adset: draftAdset,
     prelandings,
     angle,
@@ -772,7 +788,7 @@ export interface CompetitorCandidate {
 export async function searchCompetitorsAction(productId: unknown): Promise<LaunchResult> {
   const ctx = await context(productId);
 
-  const prompt = buildCompetitorSearchPrompt(ctx.product);
+  const prompt = buildCompetitorSearchPrompt(ctx.product, ctx.marketContext);
 
   return runInBackground({
     productId: ctx.id,
@@ -899,6 +915,7 @@ export async function generateIdeasAction(
     product: ctx.product,
     research: ctx.research,
     store: ctx.store,
+    marketContext: ctx.marketContext,
     angles,
     copies,
     shortAds: trees.flatMap((tree) => tree.adsets.flatMap((node) => node.ads)),
@@ -1084,6 +1101,7 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
     product: ctx.product,
     research: ctx.research,
     store: ctx.store,
+    marketContext: ctx.marketContext,
     method,
     awarenessLevel,
     sourceText,

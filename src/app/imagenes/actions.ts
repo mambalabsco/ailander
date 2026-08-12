@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { marketContextFor } from "@/lib/market-context";
 import { findProductAnywhere } from "@/lib/products";
 import { readProductResearch } from "@/lib/research-store";
 import { readPrimaryImage } from "@/lib/image-store";
@@ -286,7 +287,7 @@ export async function adaptImagesAction(input: unknown): Promise<LaunchResult> {
   }
 
   const research = await readProductResearch(productId);
-  const context = buildProductContext(product, research, null);
+  const context = buildProductContext(product, research, null, await marketContextFor(product));
 
   return runInBackground({
     productId,

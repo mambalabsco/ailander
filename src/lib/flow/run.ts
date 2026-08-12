@@ -1,4 +1,5 @@
 import "server-only";
+import { marketContextFor } from "@/lib/market-context";
 
 import { findProductAnywhere } from "@/lib/products";
 import { readPrimaryImage } from "@/lib/image-store";
@@ -317,7 +318,12 @@ async function runNode(
           // El mismo contexto que usa el resto de la plataforma: dos ideas
           // distintas del mismo producto es cómo salen anuncios que se
           // contradicen entre sí.
-          context: buildProductContext(product, await readProductResearch(ctx.productId), null),
+          context: buildProductContext(
+            product,
+            await readProductResearch(ctx.productId),
+            null,
+            await marketContextFor(product),
+          ),
           format,
           angle,
           language: product.language,

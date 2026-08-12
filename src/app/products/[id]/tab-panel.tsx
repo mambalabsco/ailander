@@ -1,4 +1,5 @@
 import { SectionCard } from "@/components/section-card";
+import type { MarketContext } from "@/lib/market-selection";
 import { EmptyState, Tag } from "@/components/ui";
 import {
   CategoricalSplitBar,
@@ -19,9 +20,11 @@ interface PanelTabProps {
   product: Product;
   research: ProductResearch;
   stores: Store[];
+  /** El mercado que se está mirando. En general no hay precio con el que comparar. */
+  marketContext: MarketContext;
 }
 
-export function PanelTab({ product, research, stores }: PanelTabProps) {
+export function PanelTab({ product, research, stores, marketContext }: PanelTabProps) {
   const { awareness, competitors, desireValidation, master } = research;
   const money = marketMoney(product, stores);
 
@@ -70,8 +73,24 @@ export function PanelTab({ product, research, stores }: PanelTabProps) {
   const comparable = priceComparison.filter((entry) => entry.currency === money.currency);
   const otherCurrencies = priceComparison.filter((entry) => entry.currency !== money.currency);
 
+  /*
+   * En general el producto **no entra** en la gráfica de precios.
+   *
+   * La gráfica compara tu precio con el de la competencia. Sin precio no hay
+   * nada que comparar, y meterlo con el del país base pondría tu barra en una
+   * moneda contra competidores de otra: una comparación falsa con cara de
+   * correcta, que es el mismo fallo que ya costó caro con los gastos en dólares.
+   */
   const priceData = [
-    { label: `${product.name} (tuyo)`, value: product.price, currency: money.currency },
+    ...(marketContext.price
+      ? [
+          {
+            label: `${product.name} (tuyo)`,
+            value: marketContext.price.amount,
+            currency: money.currency,
+          },
+        ]
+      : []),
     ...comparable,
   ];
 

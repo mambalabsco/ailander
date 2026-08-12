@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { marketContextFor } from "@/lib/market-context";
 import { requireCapability } from "@/lib/permissions";
 import { runInBackground } from "@/lib/background";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -564,7 +565,7 @@ export async function buildFlowAction(input: unknown): Promise<{
 
     const outcome = await generateStructured<FlowPlan>({
       prompt: buildFlowPrompt({
-        context: buildProductContext(product, research, null),
+        context: buildProductContext(product, research, null, await marketContextFor(product)),
         idea: readText(raw.idea),
         chosenAngle: chosen
           ? `${chosen.name} — ${chosen.desire}. Para ${chosen.targetAudience}. ${chosen.problemMechanism}`
@@ -758,7 +759,7 @@ export async function cloneFlowAction(input: unknown): Promise<{
       prompt: buildClonePrompt({
         analysis: reference.analysis,
         referenceName: reference.name,
-        context: buildProductContext(product, research, null),
+        context: buildProductContext(product, research, null, await marketContextFor(product)),
         nodeMenu: describeNodeMenu(),
         voice,
         videoModels: VIDEO_GENERATORS.map((model) => ({

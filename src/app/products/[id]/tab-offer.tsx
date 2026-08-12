@@ -17,6 +17,15 @@ interface OfferTabProps {
   notes: ProductNote[];
   currency: string;
   locale: string;
+  /*
+   * Si hay mercado elegido. La oferta son precios, así que sigue la misma regla
+   * que el precio: en general no se enseña.
+   *
+   * Los escalones **por mercado** son otro trabajo, anotado en la spec. Hasta
+   * entonces los que hay son del mercado base, y enseñarlos bajo el nombre de
+   * otro país sería exactamente el error que esto evita.
+   */
+  hasMarket: boolean;
 }
 
 function emptyTier(quantity: number): OfferTier {
@@ -39,7 +48,7 @@ function emptyTier(quantity: number): OfferTier {
  * de fondo de embudo, y las notas son lo que el equipo sabe y ninguna
  * investigación puede averiguar.
  */
-export function OfferTab({ productId, offers, notes, currency, locale }: OfferTabProps) {
+export function OfferTab({ productId, offers, notes, currency, locale, hasMarket }: OfferTabProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +88,7 @@ export function OfferTab({ productId, offers, notes, currency, locale }: OfferTa
 
   return (
     <div className="space-y-6">
+      {hasMarket ? (
       <SectionCard
         title="Oferta"
         description="Los packs, el ahorro por cantidad, los regalos y la suscripción. Es lo que vende el anuncio: sin esto, el copy solo sabe decir el precio de una unidad."
@@ -245,6 +255,14 @@ export function OfferTab({ productId, offers, notes, currency, locale }: OfferTa
           </Button>
         </div>
       </SectionCard>
+      ) : (
+        <SectionCard title="Oferta" description="Los packs y lo que cuesta cada uno.">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Los packs son precios, y en general no hay uno solo. Elige un mercado para verlos y
+            editarlos.
+          </p>
+        </SectionCard>
+      )}
 
       <SectionCard
         title="Suscripción y garantía"
