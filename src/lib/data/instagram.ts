@@ -79,6 +79,13 @@ export async function addPosts(
     showsProduct: boolean;
     mediaKind: string;
   }[],
+  /**
+   * Si nacen aprobadas.
+   *
+   * Por defecto no: nada sale a la cuenta de la marca sin que alguien lo lea.
+   * En automático sí, y quien lo enciende acepta que no lo va a leer nadie.
+   */
+  approved = false,
 ): Promise<number> {
   const { supabase, userId } = await requireContext();
 
@@ -96,9 +103,7 @@ export async function addPosts(
         scene: one.scene,
         shows_product: one.showsProduct,
         media_kind: one.mediaKind,
-        // Nacen en borrador, siempre. Nada sale a la cuenta de la marca sin que
-        // alguien lo haya leído.
-        status: "borrador",
+        status: approved ? "aprobado" : "borrador",
       })),
     )
     .select("id");

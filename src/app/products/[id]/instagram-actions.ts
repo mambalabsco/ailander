@@ -27,6 +27,15 @@ export async function generateInstagramAction(input: unknown): Promise<{
   const productId = readText(raw.productId);
   const format = findFormat(readText(raw.format));
   const count = Math.min(Math.max(Number(raw.count) || 3, 1), 10);
+  /*
+   * Aprobar al crear, para que salga sin que nadie lo mire.
+   *
+   * Va como opción y no por defecto: quien lo enciende está aceptando que el
+   * texto y la imagen que salgan a la cuenta de la marca no los va a leer
+   * nadie. Es una decisión legítima —el agente escribe bien y el ritmo importa
+   * más que la perfección— pero tiene que tomarse a propósito, no heredarse.
+   */
+  const auto = raw.auto === true;
 
   if (!productId) return { ok: false, message: "Falta el producto." };
 
@@ -118,12 +127,17 @@ export async function generateInstagramAction(input: unknown): Promise<{
       }))
       .filter((one) => one.caption.trim());
 
-    const saved = await addPosts(productId, posts);
+    const saved = await addPosts(productId, posts, auto);
 
     revalidatePath(`/products/${productId}`);
 
     return saved > 0
-      ? { ok: true, message: `${saved} publicación(es) en borrador. Revísalas antes de programar.` }
+      ? {
+          ok: true,
+          message: auto
+            ? `${saved} publicación(es) aprobadas. Saldrán sin que nadie las lea.`
+            : `${saved} publicación(es) en borrador. Revísalas antes de programar.`,
+        }
       : { ok: false, message: "No devolvió ninguna publicación usable." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
@@ -289,6 +303,7 @@ export async function planWeekAction(input: unknown): Promise<{
   const productId = readText(raw.productId);
   const days = Math.min(Math.max(Number(raw.days) || 7, 1), 14);
   const hour = Math.min(Math.max(Number(raw.hour) || 19, 0), 23);
+  const auto = raw.auto === true;
 
   if (!productId) return { ok: false, message: "Falta el producto." };
 
@@ -308,7 +323,7 @@ export async function planWeekAction(input: unknown): Promise<{
     const fallos: string[] = [];
 
     for (const { format, count } of countsFor(plan)) {
-      const result = await generateInstagramAction({ productId, format, count });
+      const result = await generateInstagramAction({ productId, format, count, auto });
 
       if (!result.ok) {
         fallos.push(`${format}: ${result.message}`);
@@ -325,7 +340,7 @@ export async function planWeekAction(input: unknown): Promise<{
      * tanda falló, y el calendario diría que hay siete cuando hay cuatro.
      */
     const sinFecha = (await listPosts(productId)).filter(
-      (one) => !one.scheduledAt && one.status === "borrador",
+      (one) => !one.scheduledAt && (one.status === "borrador" || one.status === "aprobado"),
     );
 
     const hoy = new Date();
@@ -346,7 +361,7 @@ export async function planWeekAction(input: unknown): Promise<{
         `${Math.min(sinFecha.length, days)} publicación(es) programadas, una al día a las ${hour}:00.`,
         ` Reparto: ${plan.join(", ")}.`,
         fallos.length > 0 ? ` No salieron: ${fallos.join("; ")}.` : "",
-        " Quedan en borrador: apruébalas una a una.",
+        auto ? " Aprobadas: saldrán solas." : " Quedan en borrador: apruébalas una a una.",
       ].join(""),
     };
   } catch (error) {

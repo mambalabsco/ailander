@@ -65,10 +65,14 @@ export function weekPlan(days: number, from = 0): string[] {
    *
    * El reel es lo único que alcanza a quien no te sigue, así que no puede ser
    * una rareza; pero es lo que más cuesta producir y llenar la semana de reels
-   * termina en semanas sin publicar. La historia no entra aquí porque dura un
-   * día y se decide sobre la marcha, no con siete días de antelación.
+   * termina en semanas sin publicar.
+   *
+   * La historia entra desde que el agente publica solo. Cuando lo hacía una
+   * persona no tenía sentido programarla con siete días —dura veinticuatro
+   * horas y se decide sobre la marcha—, pero un agente que publica a diario sí
+   * puede sostener el hueco diario que Instagram premia.
    */
-  const ciclo = ["reel", "feed", "carrusel"];
+  const ciclo = ["reel", "feed", "carrusel", "historia"];
   const plan: string[] = [];
 
   for (let i = 0; i < Math.max(0, days); i += 1) {

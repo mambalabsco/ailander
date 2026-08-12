@@ -44,6 +44,14 @@ export function InstagramQueue({
   const [format, setFormat] = useState("feed");
   const [count, setCount] = useState(3);
   const [note, setNote] = useState("");
+  /*
+   * Aprobar al crear.
+   *
+   * Apagado por defecto y con el aviso al lado: encenderlo significa que el
+   * texto y la imagen que salen a la cuenta de la marca no los va a leer nadie.
+   * Es una decisión legítima, pero tiene que tomarse a propósito.
+   */
+  const [auto, setAuto] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
 
@@ -83,7 +91,7 @@ export function InstagramQueue({
         <Button
           variant="primary"
           disabled={pending || !productId}
-          onClick={() => correr(() => generateInstagramAction({ productId, format, count }))}
+          onClick={() => correr(() => generateInstagramAction({ productId, format, count, auto }))}
         >
           {pending ? "Escribiendo…" : "Escribir publicaciones"}
         </Button>
@@ -96,13 +104,25 @@ export function InstagramQueue({
         <Button
           variant="secondary"
           disabled={pending || !productId}
-          onClick={() => correr(() => planWeekAction({ productId, days: 7 }))}
+          onClick={() => correr(() => planWeekAction({ productId, days: 7, auto }))}
         >
           {pending ? "…" : "Planificar la semana"}
         </Button>
 
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={auto}
+            onChange={(event) => setAuto(event.target.checked)}
+            className="size-4"
+          />
+          Aprobar solo
+        </label>
+
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          Salen en borrador. La imagen o el vídeo se generan después, cuando decidas cuáles valen.
+          {auto
+            ? "Saldrán sin que nadie las lea. La imagen se genera igual después."
+            : "Salen en borrador. La imagen o el vídeo se generan después, cuando decidas cuáles valen."}
         </span>
       </div>
 

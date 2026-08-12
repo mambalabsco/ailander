@@ -44,10 +44,10 @@ test("la semana se reparte, no se sortea", () => {
    * abandonada aunque tenga el mismo número de piezas. El ritmo se decide
    * antes.
    */
-  const plan = weekPlan(6);
+  const plan = weekPlan(8);
 
-  assert.equal(plan.length, 6);
-  assert.equal(new Set(plan).size, 3, "los tres formatos entran");
+  assert.equal(plan.length, 8);
+  assert.equal(new Set(plan).size, 4, "los cuatro formatos entran, historias incluidas");
   assert.ok(!plan.some((one, i) => i > 0 && one === plan[i - 1]), "nunca dos iguales seguidos");
 });
 
@@ -70,5 +70,5 @@ test("el plan se traduce a cuántas pedir de cada formato", () => {
   assert.equal(cuentas.reduce((total, one) => total + one.count, 0), 7);
   // En el orden del catálogo: la pantalla enseña siempre lo mismo en el mismo
   // sitio, aunque el plan empiece por otro día.
-  assert.deepEqual(cuentas.map((one) => one.format), ["feed", "carrusel", "reel"]);
+  assert.deepEqual(cuentas.map((one) => one.format), ["feed", "carrusel", "reel", "historia"]);
 });
