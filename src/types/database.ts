@@ -710,6 +710,30 @@ type CostCustomRow = {
 
 /* ---------------------------------- Vídeos -------------------------------------- */
 
+/* ---------------------------- Instagram -------------------------------------- */
+
+type InstagramPostRow = {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  product_id: string;
+  format: string;
+  caption: string;
+  hashtags: string[];
+  /** Qué se ve, para poder generar la media. */
+  scene: string;
+  media_url: string | null;
+  /** `borrador` → `aprobado` → `publicando` → `publicado` | `error`. */
+  status: string;
+  scheduled_at: string | null;
+  /** Cuándo la cogió el cron. Es lo que evita publicar dos veces. */
+  claimed_at: string | null;
+  published_at: string | null;
+  instagram_id: string | null;
+  error: string;
+  created_at: string;
+};
+
 /* ------------------------- Espacio de trabajo -------------------------------- */
 
 type WorkspaceRow = {
@@ -1089,6 +1113,10 @@ export type Database = {
       workspace_members: Table<
         WorkspaceMemberRow,
         Partial<WorkspaceMemberRow> & { workspace_id: string; user_id: string }
+      >;
+      instagram_posts: Table<
+        InstagramPostRow,
+        Partial<InstagramPostRow> & { product_id: string }
       >;
       product_exclusions: Table<
         ProductExclusionRow,

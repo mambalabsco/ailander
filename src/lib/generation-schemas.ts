@@ -571,3 +571,24 @@ export const ADAPTED_FIELDS_SCHEMA = object({
     items: object({ path: str, text: str }),
   },
 });
+
+/* ------------------------- Publicaciones de Instagram ---------------------- */
+
+/**
+ * `first` va aparte del cuerpo, y no es un capricho de formato.
+ *
+ * Instagram corta el pie a los ~125 caracteres. Pidiéndolo todo junto, el
+ * modelo escribe un párrafo y el gancho queda detrás del corte — donde nadie
+ * lo lee. Separado, hay algo que se puede medir y enseñar en la vista previa.
+ */
+export const INSTAGRAM_POSTS_SCHEMA = object({
+  posts: {
+    type: "array",
+    items: object({
+      first: str,
+      body: str,
+      scene: str,
+      hashtags: { type: "array", items: str },
+    }),
+  },
+});
