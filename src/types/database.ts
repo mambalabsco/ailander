@@ -735,6 +735,27 @@ type InstagramPostRow = {
   published_at: string | null;
   instagram_id: string | null;
   error: string;
+  /** En qué cuenta salió. Es lo que permite contar el tope por cuenta. */
+  ig_user_id: string | null;
+  created_at: string;
+};
+
+/** El autopiloto de un producto: si publica solo, dónde y a qué ritmo. */
+type InstagramAutopilotRow = {
+  product_id: string;
+  user_id: string;
+  workspace_id: string | null;
+  activo: boolean;
+  /** La cuenta de Instagram. `null` mientras no se elige ninguna. */
+  ig_user_id: string | null;
+  por_dia: number;
+  colchon_dias: number;
+  hora_desde: number;
+  hora_hasta: number;
+  ultima_publicacion_at: string | null;
+  fallos_seguidos: number;
+  /** Vacío es «no está pausado». Con texto, dice por qué. */
+  pausado_por: string;
   created_at: string;
 };
 
@@ -1121,6 +1142,10 @@ export type Database = {
       instagram_posts: Table<
         InstagramPostRow,
         Partial<InstagramPostRow> & { product_id: string }
+      >;
+      instagram_autopilot: Table<
+        InstagramAutopilotRow,
+        Partial<InstagramAutopilotRow> & { product_id: string }
       >;
       product_exclusions: Table<
         ProductExclusionRow,
