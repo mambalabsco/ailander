@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
 
-import { cabenPorDia, decide, horaProgramada, SEPARACION_MINUTOS } from "@/lib/instagram/autopilot";
+import {
+  cabenPorDia,
+  decide,
+  horaProgramada,
+  SEPARACION_MINUTOS,
+  TOPE_INTENTOS_MEDIA,
+} from "@/lib/instagram/autopilot";
 import { esPermanente } from "@/lib/instagram/errors";
 import { publishNow } from "@/lib/instagram/publish";
 import {
   anotarFallo,
+  anotarIntentoMedia,
   type AutopilotRow,
   cerrarPublicacion,
   contarEsperandoVideo,
+  contarSinImagen,
   contarUltimas24h,
   limpiarFallos,
   listarActivos,
@@ -264,14 +272,29 @@ async function rellenar(
    * imagen llegaría a generarse detrás. Se cuentan aparte para poder avisar
    * sin bloquear la cola.
    */
-  const [sinMedia, esperandoVideo] = await Promise.all([
+  const [sinMedia, esperandoVideo, atascadas] = await Promise.all([
     listasSinMedia(row).then((rows) => rows.slice(0, cuantas)),
     contarEsperandoVideo(row),
+    contarSinImagen(row),
   ]);
 
   if (esperandoVideo > 0) {
     parte.push(
       `${row.productId}: ${esperandoVideo} pieza(s) esperando vídeo, que no se genera solo.`,
+    );
+  }
+
+  /*
+   * Lo que ya no se reintenta se dice en cada vuelta.
+   *
+   * Callarlo lo convertiría en lo de siempre: una pieza aprobada, sin imagen y
+   * sin fecha que nadie va a publicar y que nadie sabe que está ahí. Cada una
+   * lleva además su motivo escrito en la cola.
+   */
+  if (atascadas > 0) {
+    parte.push(
+      `${row.productId}: ${atascadas} pieza(s) sin imagen tras ${TOPE_INTENTOS_MEDIA} intentos.` +
+        " No se reintentan: míralas en la cola.",
     );
   }
 
@@ -307,9 +330,18 @@ async function rellenar(
     const media = await generatePostMediaAction({ id: pieza.id, productId: row.productId });
 
     if (!media.ok) {
-      // No pausa el piloto: no publicar hoy es peor que gastar dos veces en una
-      // imagen. La vuelta siguiente lo reintenta.
-      parte.push(`${row.productId}: sin imagen para ${pieza.id} — ${media.message}`);
+      /*
+       * No pausa el piloto —no publicar hoy es peor que gastar dos veces en una
+       * imagen— pero sí se cuenta. Sin la cuenta, una pieza que falla siempre
+       * se regenera 288 veces al día, cada una pagada, y el parte repite la
+       * misma línea sin que nada indique que ya es la número cuatrocientas.
+       */
+      const intentos = await anotarIntentoMedia(row, pieza.id, media.message);
+
+      parte.push(
+        `${row.productId}: sin imagen para ${pieza.id} (intento ${intentos}` +
+          ` de ${TOPE_INTENTOS_MEDIA}) — ${media.message}`,
+      );
       continue;
     }
 

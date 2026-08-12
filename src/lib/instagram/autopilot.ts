@@ -21,6 +21,19 @@ export const TOPE_API = 25;
  */
 export const SEPARACION_MINUTOS = 90;
 
+/**
+ * Cuántas veces se le intenta generar la imagen a una pieza antes de dejarla.
+ *
+ * El relleno regeneraba la imagen de cada pieza sin media en **cada** vuelta:
+ * con la sesión del generador caída, o con una proporción que no acierta nunca,
+ * son 288 generaciones pagadas al día por pieza atascada, para siempre.
+ *
+ * Cinco son unos veinticinco minutos de reintentos, que cubre de sobra un
+ * tropiezo pasajero. Lo que no se arregle en cinco no se va a arreglar solo, y
+ * a partir de ahí lo único que crece es la factura.
+ */
+export const TOPE_INTENTOS_MEDIA = 5;
+
 export interface AutopilotState {
   /** ISO. Se pasa en vez de leer el reloj para poder probarlo. */
   ahora: string;

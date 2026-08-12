@@ -737,6 +737,8 @@ type InstagramPostRow = {
   error: string;
   /** En qué cuenta salió. Es lo que permite contar el tope por cuenta. */
   ig_user_id: string | null;
+  /** Cuántas veces se le ha intentado generar la imagen. El tope corta el gasto. */
+  intentos_media: number;
   created_at: string;
 };
 

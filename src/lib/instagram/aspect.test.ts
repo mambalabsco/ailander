@@ -14,6 +14,16 @@ test("el cuadrado y el apaisado también valen en el feed", () => {
   assert.equal(checkAspect(1910, 1000, "feed").ok, true);
 });
 
+test("una vertical de 1080×1351 vale: el generador no clava el píxel", () => {
+  /*
+   * 0.7994 contra un 0.8 exacto. Sin holgura se rechazaba siempre, y como el
+   * relleno regeneraba la imagen en cada vuelta, esa pieza costaba una
+   * generación cada cinco minutos para volver a caer por lo mismo. La rama
+   * vertical ya tenía ±0.03 desde el principio.
+   */
+  assert.equal(checkAspect(1080, 1351, "feed").ok, true);
+});
+
 test("más alta que 4:5 no vale en el feed, y se dice por qué", () => {
   const resultado = checkAspect(1080, 1920, "feed");
 

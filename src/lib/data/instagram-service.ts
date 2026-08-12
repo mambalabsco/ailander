@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { TOPE_INTENTOS_MEDIA } from "@/lib/instagram/autopilot";
 
 /**
  * La cola vista desde el cron, que no es nadie.
@@ -393,6 +394,10 @@ export async function cerrarPublicacion(
  * las primeras posiciones de la ventana de relleno (`slice(0, cuantas)` en el
  * llamador) y ninguna imagen llegaría a generarse detrás de ella. Se cuentan
  * aparte, con `contarEsperandoVideo`, para poder avisar sin bloquear la cola.
+ *
+ * Y tampoco devuelve las que ya agotaron sus intentos: regenerar la imagen de
+ * una pieza que falla siempre son 288 generaciones pagadas al día, para
+ * siempre. Se cuentan con `contarSinImagen` para poder decirlo.
  */
 export async function listasSinMedia(row: {
   productId: string;
@@ -409,6 +414,7 @@ export async function listasSinMedia(row: {
     .neq("media_kind", "video")
     .is("media_url", null)
     .is("scheduled_at", null)
+    .lt("intentos_media", TOPE_INTENTOS_MEDIA)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -418,6 +424,81 @@ export async function listasSinMedia(row: {
   }
 
   return (data ?? []).map((one) => ({ id: one.id }));
+}
+
+/**
+ * Anota que se le intentó generar la imagen y no salió.
+ *
+ * Al agotar los intentos el motivo se escribe en la fila, no solo en el parte:
+ * el parte vive en un archivo de registro del servidor y la pieza se quedaría
+ * en la cola, aprobada y sin imagen, sin que nada explicara por qué no sale. En
+ * `error` lo enseña la propia cola, en rojo, donde se mira.
+ *
+ * Devuelve cuántos intentos lleva ya.
+ */
+export async function anotarIntentoMedia(
+  row: { productId: string; workspaceId: string },
+  id: string,
+  motivo: string,
+): Promise<number> {
+  const supabase = createAdminClient();
+
+  const { data, error: errorLectura } = await supabase
+    .from("instagram_posts")
+    .select("intentos_media")
+    .eq("id", id)
+    .eq("workspace_id", row.workspaceId)
+    .limit(1);
+
+  if (errorLectura) {
+    throw new Error(`No se pudo leer los intentos de imagen de ${id}: ${errorLectura.message}`);
+  }
+
+  const intentos = ((data ?? [])[0]?.intentos_media ?? 0) + 1;
+  const agotados = intentos >= TOPE_INTENTOS_MEDIA;
+
+  const { error: errorEscritura } = await supabase
+    .from("instagram_posts")
+    .update({
+      intentos_media: intentos,
+      error: agotados
+        ? `Sin imagen tras ${intentos} intentos: ${motivo}. Ya no se reintenta sola.`
+        : motivo,
+    })
+    .eq("id", id)
+    .eq("workspace_id", row.workspaceId);
+
+  if (errorEscritura) {
+    throw new Error(`No se pudo anotar el intento de imagen de ${id}: ${errorEscritura.message}`);
+  }
+
+  return intentos;
+}
+
+/** Cuántas piezas del producto se quedaron sin imagen tras agotar los intentos. */
+export async function contarSinImagen(row: {
+  productId: string;
+  workspaceId: string;
+}): Promise<number> {
+  const supabase = createAdminClient();
+
+  const { count, error } = await supabase
+    .from("instagram_posts")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", row.workspaceId)
+    .eq("product_id", row.productId)
+    .eq("status", "aprobado")
+    .neq("media_kind", "video")
+    .is("media_url", null)
+    .gte("intentos_media", TOPE_INTENTOS_MEDIA);
+
+  if (error) {
+    throw new Error(
+      `No se pudo contar lo atascado sin imagen de ${row.productId}: ${error.message}`,
+    );
+  }
+
+  return count ?? 0;
 }
 
 /** Cuántas piezas del producto están escritas y esperan un vídeo que no se genera solo. */

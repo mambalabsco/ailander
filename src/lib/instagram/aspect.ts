@@ -16,9 +16,20 @@
 const FEED_MIN = 0.8;
 const FEED_MAX = 1.91;
 
+/**
+ * La misma holgura en las dos ramas, y por el mismo motivo.
+ *
+ * El feed comparaba contra un límite exacto mientras la vertical sí tenía
+ * margen. Una imagen de 1080×1351 da 0.7994 y se rechazaba **siempre**: el
+ * generador no clava el píxel, así que la pieza se quedaba sin imagen y el
+ * relleno la reintentaba en cada vuelta, pagando una generación cada vez para
+ * volver a rechazarla por cuatro diezmilésimas. Instagram no se pone así de
+ * fino: quien recortaba era este archivo.
+ */
+const TOLERANCIA = 0.03;
+
 /** Vertical completa. Se deja holgura: los generadores no clavan el píxel. */
 const VERTICAL = 9 / 16;
-const VERTICAL_TOLERANCIA = 0.03;
 
 export function checkAspect(
   width: number,
@@ -32,7 +43,7 @@ export function checkAspect(
   const ratio = width / height;
 
   if (formatId === "reel" || formatId === "historia") {
-    const bien = Math.abs(ratio - VERTICAL) <= VERTICAL_TOLERANCIA;
+    const bien = Math.abs(ratio - VERTICAL) <= TOLERANCIA;
 
     return bien
       ? { ok: true, reason: "" }
@@ -42,14 +53,14 @@ export function checkAspect(
         };
   }
 
-  if (ratio < FEED_MIN) {
+  if (ratio < FEED_MIN - TOLERANCIA) {
     return {
       ok: false,
       reason: `Más alta de lo que admite el feed: el límite es 4:5 y esta mide ${width}×${height}.`,
     };
   }
 
-  if (ratio > FEED_MAX) {
+  if (ratio > FEED_MAX + TOLERANCIA) {
     return {
       ok: false,
       reason: `Más ancha de lo que admite el feed: el límite es 1.91:1 y esta mide ${width}×${height}.`,
