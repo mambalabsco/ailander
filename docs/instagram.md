@@ -25,12 +25,27 @@ Esto no es opcional ni se puede rodear con más código:
 - **El vídeo tiene requisitos propios** —duración, proporción, códec— y si no
   los cumple el contenedor falla en el procesado, no al crearlo.
 
-## Lo que ya está y hay que mirar antes de escribir nada
+## Lo que ya está: la app sirve, el token no
 
-Existen las tablas `meta_apps` y `meta_logins`. **Comprobar qué guardan**: si ya
-hay token de Página con los permisos de publicación, esto es conectar; si solo
-son credenciales de anuncios, hay que pedir permisos nuevos y volver a pasar por
-la autorización.
+Comprobado en `meta-oauth.ts`: la conexión actual pide **un solo permiso,
+`ads_read`**, y a propósito —está escrito allí que no se pide gestión de
+anuncios porque la plataforma solo lee gasto.
+
+Un token lleva dentro los permisos con los que nació. Así que el que hay **no
+puede publicar**, y no por poco: no tiene ninguno de los que hacen falta.
+
+**La misma app de Meta vale.** Lo que hay que hacer es añadirle estos permisos y
+**volver a autorizar**, que genera un token nuevo:
+
+    instagram_basic              ver la cuenta de Instagram vinculada
+    instagram_content_publish    publicar
+    pages_show_list              encontrar la Página
+    pages_read_engagement        leer la Página vinculada
+
+Es la misma lección que con la app de Shopify: añadir un permiso no basta, hay
+que reinstalar o reautorizar. Y conviene que los nuevos vayan en una conexión
+aparte y no ampliando la de anuncios: si algo sale mal con los de publicación,
+el gasto del panel no debería dejar de leerse.
 
 ## La forma
 
