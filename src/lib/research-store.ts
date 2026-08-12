@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import type { Selection } from "@/lib/market-price";
 import path from "path";
 import type { ProductHook, ProductResearch } from "@/types/research";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -58,8 +59,8 @@ export async function saveProductResearch(productId: string, research: ProductRe
   return research;
 }
 
-export async function readProductHooks(productId: string): Promise<ProductHook[]> {
-  if (isSupabaseConfigured()) return db.readProductHooks(productId);
+export async function readProductHooks(productId: string, selection?: Selection): Promise<ProductHook[]> {
+  if (isSupabaseConfigured()) return db.readProductHooks(productId, selection);
 
   const stored = await readJson<ProductHook[]>(hooksPath, []);
   const own = stored.filter((hook) => hook.productId === productId);
@@ -68,13 +69,13 @@ export async function readProductHooks(productId: string): Promise<ProductHook[]
   return [];
 }
 
-export async function saveProductHooks(productId: string, hooks: ProductHook[]) {
+export async function saveProductHooks(productId: string, hooks: ProductHook[], marketId?: string | null) {
   if (isSupabaseConfigured()) {
     // En Postgres los ganchos se **añaden**: los ya marcados como usados son
     // justo lo que evita repetir el mismo gancho, y reemplazar la lista los
     // perdería. Solo entran los que todavía no tienen id de base de datos.
     const nuevos = hooks.filter((hook) => !hook.id || hook.id.length < 32);
-    return db.addProductHooks(productId, nuevos);
+    return db.addProductHooks(productId, nuevos, marketId);
   }
 
   const stored = await readJson<ProductHook[]>(hooksPath, []);

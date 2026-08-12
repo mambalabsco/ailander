@@ -1,4 +1,6 @@
 import "server-only";
+import { marketFilter } from "@/lib/market-filter";
+import type { Selection } from "@/lib/market-price";
 
 import { requireContext } from "@/lib/supabase/session";
 import type { Shot, ShotRole } from "@/lib/video/shots";
@@ -99,13 +101,14 @@ function parseWords(value: unknown): TimedWord[] {
   return words;
 }
 
-export async function listVideos(productId: string): Promise<Video[]> {
+export async function listVideos(productId: string, selection?: Selection): Promise<Video[]> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("videos")
     .select("*")
     .eq("product_id", productId)
+    .or(marketFilter(selection))
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`No se pudieron leer los vídeos: ${error.message}`);

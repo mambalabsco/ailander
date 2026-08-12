@@ -83,6 +83,12 @@ export interface MarketContext {
   market: MarketBrief | null;
   /** El precio ya resuelto por la cascada. Nulo en general y sin precio. */
   price: { amount: number; source: "manual" | "convertido" } | null;
+  /**
+   * En qué modo se está, para sellar lo que se genere y para filtrar lo que se
+   * lee. Va aquí y no aparte para que una acción no pueda escribir un encargo de
+   * un mercado y sellar la pieza con otro: se resuelven juntos o no se resuelven.
+   */
+  selection: Selection;
 }
 
 /**

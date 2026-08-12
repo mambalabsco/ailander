@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import type { Selection } from "@/lib/market-price";
 import path from "path";
 import type {
   AnglePerformance,
@@ -26,8 +27,8 @@ async function readAll(): Promise<PerformanceRecord[]> {
   }
 }
 
-export async function readPerformance(productId: string): Promise<PerformanceRecord[]> {
-  if (isSupabaseConfigured()) return db.readPerformance(productId);
+export async function readPerformance(productId: string, selection?: Selection): Promise<PerformanceRecord[]> {
+  if (isSupabaseConfigured()) return db.readPerformance(productId, selection);
 
   const all = await readAll();
   const own = all.filter((record) => record.productId === productId);

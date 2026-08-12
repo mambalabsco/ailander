@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { stampFor } from "@/lib/market-selection";
 import { findProductAnywhere } from "@/lib/products";
 import { findStore, listStores } from "@/lib/store-registry";
 import { readProductResearch, saveProductHooks } from "@/lib/research-store";
@@ -276,7 +277,7 @@ export async function generateAnglesAction(
           desire: target,
           createdAt: new Date().toISOString(),
         })),
-      ]);
+      ], stampFor(ctx.marketContext.selection));
 
       return outcome("research", "angulos", ctx, `${data.angles.length} ángulos nuevos.`, {
         inputTokens,
@@ -432,7 +433,7 @@ Cada gancho es la primera frase de un anuncio: lo que hace parar el scroll. Requ
 
           // Se guarda al terminar cada combinación, no al final de todas: si la
           // séptima falla, las seis anteriores ya están a salvo y pagadas.
-          await saveProductHooks(ctx.id, hooks);
+          await saveProductHooks(ctx.id, hooks, stampFor(ctx.marketContext.selection));
           created += hooks.length;
         } catch (error) {
           failures.push(
@@ -568,7 +569,7 @@ Ningún prompt de este documento los genera, pero el gestor de anuncios los exig
     createdAt: new Date().toISOString(),
   };
 
-  await saveCopies(ctx.id, [...existing, copy]);
+  await saveCopies(ctx.id, [...existing, copy], stampFor(ctx.marketContext.selection));
 
       /*
        * El gancho queda marcado como usado.
@@ -1147,7 +1148,7 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
         createdAt: new Date().toISOString(),
       };
 
-      await saveCopies(ctx.id, [...existing, copy]);
+      await saveCopies(ctx.id, [...existing, copy], stampFor(ctx.marketContext.selection));
 
       return outcome(
         "copy",

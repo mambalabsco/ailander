@@ -1,4 +1,6 @@
 import "server-only";
+import { marketFilter } from "@/lib/market-filter";
+import type { Selection } from "@/lib/market-price";
 
 import { requireContext } from "@/lib/supabase/session";
 import type { GeneratedCopy, MarketingAngle } from "@/types/copy";
@@ -36,13 +38,14 @@ function toAngle(row: Tables<"angles">): MarketingAngle {
   };
 }
 
-export async function readAngles(productId: string): Promise<MarketingAngle[]> {
+export async function readAngles(productId: string, selection?: Selection): Promise<MarketingAngle[]> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("angles")
     .select("*")
     .eq("product_id", productId)
+    .or(marketFilter(selection))
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(`No se pudieron leer los ángulos: ${error.message}`);
@@ -59,6 +62,7 @@ export async function readAngles(productId: string): Promise<MarketingAngle[]> {
 export async function addAngles(
   productId: string,
   angles: Omit<MarketingAngle, "id" | "productId" | "createdAt">[],
+  marketId?: string | null,
 ): Promise<MarketingAngle[]> {
   if (angles.length === 0) return [];
 
@@ -70,6 +74,7 @@ export async function addAngles(
       angles.map((angle) => ({
         user_id: userId,
         product_id: productId,
+        market_id: marketId ?? null,
         desire: angle.desire,
         name: angle.name,
         target_audience: angle.targetAudience,
@@ -161,13 +166,14 @@ function parseBeats(value: unknown): StoryBeat[] {
   return beats;
 }
 
-export async function readCopies(productId: string): Promise<GeneratedCopy[]> {
+export async function readCopies(productId: string, selection?: Selection): Promise<GeneratedCopy[]> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("copies")
     .select("*")
     .eq("product_id", productId)
+    .or(marketFilter(selection))
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`No se pudieron leer los copys: ${error.message}`);
@@ -177,6 +183,7 @@ export async function readCopies(productId: string): Promise<GeneratedCopy[]> {
 export async function addCopies(
   productId: string,
   copies: Omit<GeneratedCopy, "id" | "productId" | "createdAt">[],
+  marketId?: string | null,
 ): Promise<GeneratedCopy[]> {
   if (copies.length === 0) return [];
 
@@ -188,6 +195,7 @@ export async function addCopies(
       copies.map((copy) => ({
         user_id: userId,
         product_id: productId,
+        market_id: marketId ?? null,
         angle_id: copy.angleId ?? null,
         hook_id: copy.hookId ?? null,
         adset_id: copy.adsetId ?? null,

@@ -1,4 +1,6 @@
 import "server-only";
+import { marketFilter } from "@/lib/market-filter";
+import type { Selection } from "@/lib/market-price";
 
 import { requireContext } from "@/lib/supabase/session";
 import { emptyProductResearch, type ProductResearch, type ProductHook } from "@/types/research";
@@ -160,13 +162,14 @@ function toHook(row: Tables<"hooks">): ProductHook {
   };
 }
 
-export async function readProductHooks(productId: string): Promise<ProductHook[]> {
+export async function readProductHooks(productId: string, selection?: Selection): Promise<ProductHook[]> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("hooks")
     .select("*")
     .eq("product_id", productId)
+    .or(marketFilter(selection))
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(`No se pudieron leer los ganchos: ${error.message}`);
@@ -183,6 +186,7 @@ export async function readProductHooks(productId: string): Promise<ProductHook[]
 export async function addProductHooks(
   productId: string,
   hooks: Omit<ProductHook, "id" | "productId">[],
+  marketId?: string | null,
 ): Promise<ProductHook[]> {
   if (hooks.length === 0) return [];
 
@@ -194,6 +198,7 @@ export async function addProductHooks(
       hooks.map((hook) => ({
         user_id: userId,
         product_id: productId,
+        market_id: marketId ?? null,
         title: hook.title,
         body: hook.body,
         awareness_level: hook.awarenessLevel,

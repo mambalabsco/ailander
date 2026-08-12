@@ -44,7 +44,7 @@ export async function marketContextFor(
 
   if (selection.kind === "general") {
     // General: ni país ni precio. Es el modo entero, no una carencia de datos.
-    return { market: null, price: null };
+    return { market: null, price: null, selection };
   }
 
   const market = store ? findMarket(store, selection.marketId) : undefined;
@@ -60,6 +60,7 @@ export async function marketContextFor(
         // se cayó a mitad de un borrado. Mejor lo del producto que nada.
         briefFromProduct(product, store),
     price: resolvePrice(selection, prices),
+    selection,
   };
 }
 
@@ -68,6 +69,15 @@ function legacyContext(product: Product, store: Store | null): MarketContext {
   return {
     market: briefFromProduct(product, store),
     price: product.price > 0 ? { amount: product.price, source: "manual" } : null,
+    /*
+     * Se sella con el mercado base, que es con el que la migración etiqueta todo
+     * lo que ya existe. Así, lo que se genere antes de migrar queda igual que lo
+     * de antes en vez de quedar marcado como general —o sea, como válido en
+     * países donde nadie ha comprobado que lo sea—.
+     */
+    selection: product.marketId
+      ? { kind: "market", marketId: product.marketId }
+      : { kind: "general" },
   };
 }
 

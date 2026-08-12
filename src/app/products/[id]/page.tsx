@@ -90,13 +90,33 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   const [{ id }, { tab, mercado }] = await Promise.all([params, searchParams]);
   const activeTab = resolveTab(tab);
 
-  const [product, research, hooks, angles, copies, images, ads, hasApiKey, hasHiggsfieldKey] =
+  /*
+   * El producto se lee **solo y antes** que lo demás, y no es un descuido.
+   *
+   * De él salen sus mercados, y de esos el modo en el que se está mirando; y del
+   * modo sale qué piezas se ven. Leerlo todo a la vez y filtrar después
+   * significaría traer los copys de los cuatro países para enseñar los de uno.
+   *
+   * Cuesta un viaje más a la base. Es el precio de que la pantalla no pueda
+   * enseñar el texto de otro mercado ni por un instante.
+   */
+  const product = await findProductAnywhere(id);
+
+  if (!product) {
+    notFound();
+  }
+
+  const productMarkets = await listProductMarkets(product.id);
+  const marketIds = productMarkets.map((item) => item.marketId);
+  const selection = parseSelection(mercado, marketIds);
+  const marketContext = await marketContextFor(product, mercado);
+
+  const [research, hooks, angles, copies, images, ads, hasApiKey, hasHiggsfieldKey] =
     await Promise.all([
-      findProductAnywhere(id),
       readProductResearch(id),
-      readProductHooks(id),
-      readAngles(id),
-      readCopies(id),
+      readProductHooks(id, selection),
+      readAngles(id, selection),
+      readCopies(id, selection),
       readProductImages(id),
       listAds(),
       hasActiveProviderKey(),
@@ -107,7 +127,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
     readCampaignTrees(id),
     readPrelandings(id),
     nextNumbers(id),
-    readPerformance(id),
+    readPerformance(id, selection),
     listStores(),
   ]);
 
@@ -129,22 +149,6 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
     adsetAngles,
     records: performanceRecords,
   });
-
-  if (!product) {
-    notFound();
-  }
-
-  /*
-   * En qué mercado se está mirando la ficha.
-   *
-   * Con un solo mercado no hay selector y `parseSelection` devuelve ese mercado
-   * siempre: la ficha se comporta exactamente como antes de todo esto. El modo
-   * general solo existe cuando el producto tiene de verdad más de un país.
-   */
-  const productMarkets = await listProductMarkets(product.id);
-  const marketIds = productMarkets.map((item) => item.marketId);
-  const selection = parseSelection(mercado, marketIds);
-  const marketContext = await marketContextFor(product, mercado);
 
   const productStore = product.storeId
     ? stores.find((item) => item.id === product.storeId)
@@ -274,9 +278,9 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   if (isSupabaseConfigured()) {
     const [loadedLandings, loadedSwipe, loadedVideos, blueprints, loadedReferences] =
       await Promise.all([
-      listLandings(product.id).catch(() => []),
+      listLandings(product.id, selection).catch(() => []),
       listSwipeCopies(id).catch(() => []),
-      listVideos(product.id).catch(() => []),
+      listVideos(product.id, selection).catch(() => []),
       listBlueprints().catch(() => []),
       listVideoReferences().catch(() => []),
     ]);

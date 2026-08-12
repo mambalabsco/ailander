@@ -1,4 +1,6 @@
 import "server-only";
+import { marketFilter } from "@/lib/market-filter";
+import type { Selection } from "@/lib/market-price";
 
 import { requireContext } from "@/lib/supabase/session";
 import type { LandingTheme } from "@/lib/landing-theme";
@@ -106,13 +108,14 @@ export async function saveLanding(input: {
   return toLanding(data);
 }
 
-export async function listLandings(productId: string): Promise<LandingPage[]> {
+export async function listLandings(productId: string, selection?: Selection): Promise<LandingPage[]> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("landing_pages")
     .select("*")
     .eq("product_id", productId)
+    .or(marketFilter(selection))
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`No se pudieron leer las páginas: ${error.message}`);

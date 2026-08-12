@@ -1,4 +1,6 @@
 import "server-only";
+import { marketFilter } from "@/lib/market-filter";
+import type { Selection } from "@/lib/market-price";
 
 import { requireContext } from "@/lib/supabase/session";
 import type {
@@ -40,13 +42,14 @@ function toRecord(row: Tables<"performance_records">): PerformanceRecord {
   };
 }
 
-export async function readPerformance(productId: string): Promise<PerformanceRecord[]> {
+export async function readPerformance(productId: string, selection?: Selection): Promise<PerformanceRecord[]> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("performance_records")
     .select("*")
-    .eq("product_id", productId);
+    .eq("product_id", productId)
+    .or(marketFilter(selection));
 
   if (error) throw new Error(`No se pudo leer el rendimiento: ${error.message}`);
   return (data ?? []).map(toRecord);

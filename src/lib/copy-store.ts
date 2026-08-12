@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import type { Selection } from "@/lib/market-price";
 import path from "path";
 import type { GeneratedCopy, MarketingAngle } from "@/types/copy";
 import { anglesFixture, copiesFixture } from "@/lib/copy-fixture";
@@ -25,8 +26,8 @@ async function writeJson(filePath: string, value: unknown) {
   await fs.writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
 }
 
-export async function readAngles(productId: string): Promise<MarketingAngle[]> {
-  if (isSupabaseConfigured()) return db.readAngles(productId);
+export async function readAngles(productId: string, selection?: Selection): Promise<MarketingAngle[]> {
+  if (isSupabaseConfigured()) return db.readAngles(productId, selection);
 
   const stored = await readJson<MarketingAngle[]>(anglesPath, []);
   const own = stored.filter((angle) => angle.productId === productId);
@@ -35,12 +36,12 @@ export async function readAngles(productId: string): Promise<MarketingAngle[]> {
   return [];
 }
 
-export async function saveAngles(productId: string, angles: MarketingAngle[]) {
+export async function saveAngles(productId: string, angles: MarketingAngle[], marketId?: string | null) {
   if (isSupabaseConfigured()) {
     // Los copys ya escritos apuntan a sus ángulos con clave foránea, así que
     // solo se insertan los nuevos en vez de reemplazar la lista.
     const nuevos = angles.filter((angle) => !angle.id || angle.id.length < 32);
-    return db.addAngles(productId, nuevos);
+    return db.addAngles(productId, nuevos, marketId);
   }
 
   const stored = await readJson<MarketingAngle[]>(anglesPath, []);
@@ -49,8 +50,8 @@ export async function saveAngles(productId: string, angles: MarketingAngle[]) {
   return angles;
 }
 
-export async function readCopies(productId: string): Promise<GeneratedCopy[]> {
-  if (isSupabaseConfigured()) return db.readCopies(productId);
+export async function readCopies(productId: string, selection?: Selection): Promise<GeneratedCopy[]> {
+  if (isSupabaseConfigured()) return db.readCopies(productId, selection);
 
   const stored = await readJson<GeneratedCopy[]>(copiesPath, []);
   const own = stored.filter((copy) => copy.productId === productId);
@@ -59,10 +60,10 @@ export async function readCopies(productId: string): Promise<GeneratedCopy[]> {
   return [];
 }
 
-export async function saveCopies(productId: string, copies: GeneratedCopy[]) {
+export async function saveCopies(productId: string, copies: GeneratedCopy[], marketId?: string | null) {
   if (isSupabaseConfigured()) {
     const nuevos = copies.filter((copy) => !copy.id || copy.id.length < 32);
-    return db.addCopies(productId, nuevos);
+    return db.addCopies(productId, nuevos, marketId);
   }
 
   const stored = await readJson<GeneratedCopy[]>(copiesPath, []);
