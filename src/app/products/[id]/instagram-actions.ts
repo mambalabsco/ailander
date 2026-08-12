@@ -8,6 +8,7 @@ import { readProductResearch } from "@/lib/research-store";
 import { addPosts, deletePost, listPosts, updatePost } from "@/lib/data/instagram";
 import { buildCaption, buildContentPrompt, findFormat } from "@/lib/instagram/content";
 import { countsFor, recentSummary, weekPlan } from "@/lib/instagram/plan";
+import { buildHookGuide, pickArchetypes } from "@/lib/instagram/hooks";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -103,6 +104,14 @@ export async function generateInstagramAction(input: unknown): Promise<{
           count,
         }),
         memoria,
+        /*
+         * Una fórmula distinta por pieza, y siguiendo donde se quedó.
+         *
+         * Sin esto el modelo repite la forma que le funcionó en la primera —lo
+         * mismo que pasaba con los formatos— y diez publicaciones acaban
+         * empezando igual aunque hablen de cosas distintas.
+         */
+        buildHookGuide(pickArchetypes(count, anteriores.length)),
       ]
         .filter(Boolean)
         .join("\n\n"),
