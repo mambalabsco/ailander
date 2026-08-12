@@ -13,15 +13,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * así que la seguridad deja de ponerla la base de datos.
  *
  * De ahí la regla de este archivo: **toda consulta lleva su `workspace_id`**,
- * con dos excepciones y solo dos: `contarUltimas24h` y `ultimaPublicacion`.
- * Ambas filtran por `ig_user_id`, no por espacio, porque el tope de 25/24h y
- * la separación mínima los impone Instagram sobre **la cuenta real**, no sobre
- * el espacio interno — filtrar por espacio daría un recuento que permite
- * pasarse del límite que de verdad importa. Las dos devuelven solo agregados
- * de filas ya públicas (`status = 'publicado'`), nunca contenido. Cualquier
- * otra consulta sin espacio es un fallo: devuelve las publicaciones de otro
- * cliente sin dar ningún error, que es la peor forma que tiene un fallo de
- * manifestarse.
+ * con tres excepciones y solo tres: `contarUltimas24h`, `ultimaPublicacion` y
+ * el arriendo de la vuelta (`tomarVuelta` / `soltarVuelta`).
+ *
+ * Las dos primeras filtran por `ig_user_id`, no por espacio, porque el tope de
+ * 25/24h y la separación mínima los impone Instagram sobre **la cuenta real**,
+ * no sobre el espacio interno — filtrar por espacio daría un recuento que
+ * permite pasarse del límite que de verdad importa. Las dos devuelven solo
+ * agregados de filas ya públicas (`status = 'publicado'`), nunca contenido.
+ * Cualquier otra consulta sin espacio es un fallo: devuelve las publicaciones
+ * de otro cliente sin dar ningún error, que es la peor forma que tiene un fallo
+ * de manifestarse.
+ *
+ * La tercera, el arriendo, no toca contenido de nadie: es el semáforo que
+ * impide que dos vueltas del cron corran a la vez, y es uno para todo el
+ * servidor, no uno por espacio.
  */
 
 export interface AutopilotRow {
@@ -36,6 +42,93 @@ export interface AutopilotRow {
   ultimaPublicacionAt: string | null;
   fallosSeguidos: number;
   pausadoPor: string;
+}
+
+/**
+ * Minutos tras los que una vuelta que no soltó el arriendo se da por muerta.
+ *
+ * El mismo criterio que el rescate de `reservarVencida`, y por el mismo motivo:
+ * si el proceso muere entre tomar y soltar, sin plazo el arriendo se queda
+ * tomado para siempre y el autopiloto no vuelve a publicar nunca — callado.
+ */
+const ARRIENDO_MUERTO_MINUTOS = 30;
+
+/**
+ * Coge el turno de esta vuelta, o dice que no hay.
+ *
+ * ## Por qué hace falta si el `crontab` ya lleva `flock`
+ *
+ * Porque `flock` solo cubre al cron. La ruta es HTTP y responde a cualquiera
+ * que traiga el secreto: una llamada a mano desde el portátil mientras el cron
+ * está dentro no la ve ningún `flock`, y son justo las dos vueltas que se
+ * pisan. Dos vueltas a la vez publican dos piezas distintas con segundos de
+ * diferencia —cada una leyó el tope y la última publicación antes de que la
+ * otra escribiera— saltándose los 90 minutos y sumando las dos contra el tope
+ * del día.
+ *
+ * Devuelve el token con el que soltarlo, o `null` si lo tiene otra vuelta.
+ */
+export async function tomarVuelta(nombre = "instagram"): Promise<string | null> {
+  const supabase = createAdminClient();
+
+  const ahora = new Date();
+  const muerta = new Date(ahora.getTime() - ARRIENDO_MUERTO_MINUTOS * 60 * 1000).toISOString();
+  const token = crypto.randomUUID();
+
+  /*
+   * La fila se crea la primera vez y nunca más.
+   *
+   * `ignoreDuplicates` es un `on conflict do nothing`: sin él, el alta de cada
+   * vuelta pisaría el `tomado_at` de la vuelta que está corriendo y el arriendo
+   * no serviría para nada.
+   */
+  const { error: errorAlta } = await supabase
+    .from("cron_arriendos")
+    .upsert(
+      { nombre, tomado_at: null, token: "" },
+      { onConflict: "nombre", ignoreDuplicates: true },
+    );
+
+  if (errorAlta) {
+    throw new Error(`No se pudo preparar el arriendo ${nombre}: ${errorAlta.message}`);
+  }
+
+  // Quién se lo queda lo decide la base, no quien llama: el `update` con el
+  // predicado dentro solo cambia la fila si sigue libre o si ya venció.
+  const { data, error } = await supabase
+    .from("cron_arriendos")
+    .update({ tomado_at: ahora.toISOString(), token })
+    .eq("nombre", nombre)
+    .or(`tomado_at.is.null,tomado_at.lt.${muerta}`)
+    .select("nombre");
+
+  if (error) {
+    throw new Error(`No se pudo tomar el arriendo ${nombre}: ${error.message}`);
+  }
+
+  return (data ?? []).length > 0 ? token : null;
+}
+
+/**
+ * Suelta el turno, y solo si sigue siendo el nuestro.
+ *
+ * El filtro por token no es adorno: una vuelta que se pasó de los treinta
+ * minutos ya no tiene el arriendo —lo rescató la siguiente— y soltarlo al
+ * terminar dejaría a dos vueltas corriendo a la vez, que es exactamente lo que
+ * esto existe para evitar.
+ */
+export async function soltarVuelta(token: string, nombre = "instagram"): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("cron_arriendos")
+    .update({ tomado_at: null, token: "" })
+    .eq("nombre", nombre)
+    .eq("token", token);
+
+  if (error) {
+    throw new Error(`No se pudo soltar el arriendo ${nombre}: ${error.message}`);
+  }
 }
 
 /**

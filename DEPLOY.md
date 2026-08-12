@@ -278,8 +278,21 @@ El autopiloto no tiene proceso propio: cada vuelta la dispara una llamada HTTP a
 `/instagram` y no publica nunca. En el `crontab` del usuario `plataforma`:
 
 ```
-*/5 * * * * curl -sS -H "Authorization: Bearer $CRON_SECRET" https://<dominio>/api/cron/instagram >> /var/log/ig-autopilot.log 2>&1
+*/5 * * * * flock -n /run/ig-autopilot.lock curl -sS -H "Authorization: Bearer $CRON_SECRET" https://<dominio>/api/cron/instagram >> /var/log/ig-autopilot.log 2>&1
 ```
+
+**El `flock` no es opcional.** Una vuelta que rellene el colchón tarda minutos
+—una llamada al modelo por formato, más una generación de imagen por pieza, en
+serie—, y el cron dispara otra a los cinco. Sin `flock`, las dos corren a la vez:
+cada una leyó cuántas van hoy y cuándo salió la última **antes** de que la otra
+publicara, así que las dos se creen dentro del límite y salen dos piezas con
+segundos de diferencia, saltándose los 90 minutos de separación. `-n` es «si ya
+hay una, no esperes: no la lances». Esperar solo apilaría vueltas.
+
+La aplicación además toma su propio arriendo en la base (`cron_arriendos`),
+porque `flock` no cubre a quien llame la ruta a mano desde su portátil mientras
+el cron está dentro. Son las dos capas: una tapa el cron, la otra tapa todo lo
+demás.
 
 Cinco minutos son 288 vueltas al día, doce veces el tope diario de la API de
 Instagram. No es un descuido: el ritmo de publicación lo marcan los

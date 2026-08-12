@@ -15,7 +15,9 @@ import {
   listasSinMedia,
   programar,
   reservarVencida,
+  soltarVuelta,
   tokenDePublicacion,
+  tomarVuelta,
   ultimaPublicacion,
 } from "@/lib/data/instagram-service";
 
@@ -34,6 +36,16 @@ import {
  *
  * Porque publicar es lo que tiene hora. Si la vuelta se queda sin tiempo, lo que
  * se pierde es el relleno, y el relleno espera cinco minutos sin que se note.
+ *
+ * ## Por qué una vuelta a la vez, y no dos
+ *
+ * Porque el tope de 24h y la última publicación se leen **al empezar** cada
+ * producto y no se vuelven a mirar al reservar. La reserva de `instagram_posts`
+ * protege una fila de salir dos veces; no protege a la cuenta de que dos
+ * vueltas solapadas publiquen dos piezas **distintas** con segundos de
+ * diferencia, saltándose los 90 minutos y sumando las dos contra el tope del
+ * día. En cuanto el relleno funcione, una vuelta durará minutos y el
+ * solapamiento será lo normal, no la excepción.
  */
 export async function GET(request: Request): Promise<Response> {
   const secreto = process.env.CRON_SECRET?.trim();
@@ -53,6 +65,41 @@ export async function GET(request: Request): Promise<Response> {
 
   const parte: string[] = [];
 
+  const token = await tomarVuelta();
+
+  if (!token) {
+    /*
+     * Otra vuelta está dentro: esta se va sin tocar nada.
+     *
+     * No es un error y no se cuenta como tal. Con el cron cada cinco minutos
+     * hay 288 oportunidades al día: saltarse una no retrasa nada, y entrar a la
+     * vez sí publica de más.
+     */
+    return NextResponse.json({
+      ok: true,
+      parte: ["Hay otra vuelta del autopiloto en curso. Esta se salta."],
+    });
+  }
+
+  try {
+    await darLaVuelta(parte);
+  } finally {
+    try {
+      await soltarVuelta(token);
+    } catch (error) {
+      // Se dice, no se traga: un arriendo que no se suelta deja al autopiloto
+      // callado media hora, hasta que el plazo lo rescate.
+      parte.push(
+        `No se pudo soltar el arriendo: ${error instanceof Error ? error.message : "sin motivo"}.`,
+      );
+    }
+  }
+
+  return NextResponse.json({ ok: true, parte });
+}
+
+/** El trabajo de la vuelta, ya con el turno tomado. */
+async function darLaVuelta(parte: string[]): Promise<void> {
   for (const row of await listarActivos()) {
     try {
       const [publicadas, ultima, listas] = await Promise.all([
@@ -88,8 +135,6 @@ export async function GET(request: Request): Promise<Response> {
       parte.push(`${row.productId}: ${motivo}`);
     }
   }
-
-  return NextResponse.json({ ok: true, parte });
 }
 
 /**

@@ -759,6 +759,20 @@ type InstagramAutopilotRow = {
   created_at: string;
 };
 
+/**
+ * El semáforo de las vueltas del cron: una a la vez.
+ *
+ * No lleva `workspace_id` a propósito: no es un dato de nadie, es un turno, y
+ * es uno para todo el servidor.
+ */
+type CronArriendoRow = {
+  nombre: string;
+  /** Nulo es «libre». Con hora, «lo tiene alguien desde entonces». */
+  tomado_at: string | null;
+  /** Quién lo tiene, para que solo lo suelte quien lo cogió. */
+  token: string;
+};
+
 /* ------------------------- Espacio de trabajo -------------------------------- */
 
 type WorkspaceRow = {
@@ -1149,6 +1163,7 @@ export type Database = {
         InstagramAutopilotRow,
         Partial<InstagramAutopilotRow> & { product_id: string }
       >;
+      cron_arriendos: Table<CronArriendoRow, Partial<CronArriendoRow> & { nombre: string }>;
       product_exclusions: Table<
         ProductExclusionRow,
         Partial<ProductExclusionRow> & { workspace_id: string; product_id: string; user_id: string }
