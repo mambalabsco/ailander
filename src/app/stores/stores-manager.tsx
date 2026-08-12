@@ -28,6 +28,7 @@ import {
   deleteStoreAction,
   saveStoreAppAction,
   removeMarketAction,
+  updateMarketAction,
   updateStoreAction,
 } from "@/app/stores/actions";
 
@@ -91,6 +92,13 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
   const [newStore, setNewStore] = useState(emptyStore);
   const [marketDrafts, setMarketDrafts] = useState<Record<string, typeof emptyMarket>>({});
   const [openMarketForm, setOpenMarketForm] = useState<string | null>(null);
+  /*
+   * Qué mercado se está corrigiendo, si es que se está corrigiendo alguno.
+   *
+   * El formulario es el mismo para añadir y para corregir: son los mismos seis
+   * campos y duplicarlo serían dos sitios donde arreglar el próximo fallo.
+   */
+  const [editingMarket, setEditingMarket] = useState<string | null>(null);
   // Borradores por tienda: lo guardado nunca vuelve del servidor.
   const [appDrafts, setAppDrafts] = useState<Record<string, { key?: string; secret?: string }>>({});
   const [shopDrafts, setShopDrafts] = useState<Record<string, string>>({});
@@ -345,7 +353,12 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
 
                   <div className="flex shrink-0 gap-2">
                     <Button
-                      onClick={() => setOpenMarketForm(openMarketForm === store.id ? null : store.id)}
+                      onClick={() => {
+                        const abierto = openMarketForm === store.id;
+                        setEditingMarket(null);
+                        if (!abierto) updateDraft(store.id, emptyMarket);
+                        setOpenMarketForm(abierto ? null : store.id);
+                      }}
                     >
                       {openMarketForm === store.id ? "Cerrar" : "Añadir mercado"}
                     </Button>
@@ -535,6 +548,26 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    updateDraft(store.id, {
+                                      countryName: market.countryName,
+                                      countryCode: market.countryCode,
+                                      languageName: market.languageName,
+                                      languageCode: market.languageCode,
+                                      currency: market.currency,
+                                      pathPrefix: market.pathPrefix,
+                                      domain: market.domain ?? "",
+                                    });
+                                    setEditingMarket(market.id);
+                                    setOpenMarketForm(store.id);
+                                  }}
+                                  disabled={isPending}
+                                  className="mr-3 text-xs text-slate-500 underline-offset-2 hover:underline disabled:opacity-40 dark:text-slate-400"
+                                >
+                                  Corregir
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     if (count > 0) {
                                       setError(
                                         `«${marketLabel(market)}» tiene ${count} producto(s). Muévelos o bórralos antes.`,
@@ -562,10 +595,14 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                       onSubmit={(event) => {
                         event.preventDefault();
                         run(
-                          () => addMarketAction(store.id, draft),
+                          () =>
+                            editingMarket
+                              ? updateMarketAction(store.id, editingMarket, draft)
+                              : addMarketAction(store.id, draft),
                           () => {
                             updateDraft(store.id, emptyMarket);
                             setOpenMarketForm(null);
+                            setEditingMarket(null);
                           },
                         );
                       }}
@@ -648,7 +685,11 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                       </div>
                       <div className="mt-4">
                         <Button type="submit" variant="primary" disabled={isPending}>
-                          {isPending ? "Añadiendo..." : "Añadir mercado"}
+                          {isPending
+                            ? "Guardando..."
+                            : editingMarket
+                              ? "Guardar cambios"
+                              : "Añadir mercado"}
                         </Button>
                       </div>
                     </form>

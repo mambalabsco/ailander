@@ -1,7 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addMarket, deleteStore, findStore, removeMarket, saveStore } from "@/lib/store-registry";
+import {
+  addMarket,
+  deleteStore,
+  findStore,
+  removeMarket,
+  saveStore,
+  updateMarket,
+} from "@/lib/store-registry";
 import type { Store, StoreMarket, StorePlatform } from "@/types/store";
 import { findCountry, findLanguage } from "@/lib/locales";
 
@@ -184,6 +191,81 @@ export async function addMarketAction(storeId: string, input: unknown) {
   };
 
   const updated = await addMarket(id, market);
+  revalidatePath("/stores");
+  revalidatePath("/products");
+  return updated;
+}
+
+/**
+ * Corrige un mercado ya creado.
+ *
+ * Existe por un caso muy concreto: el mercado principal con el idioma mal
+ * puesto. No se podía quitar —es el único, y tiene productos— así que no había
+ * forma de arreglarlo desde la plataforma.
+ */
+export async function updateMarketAction(storeId: string, marketId: string, input: unknown) {
+  const id = readText(storeId);
+  const market = readText(marketId);
+  if (!id || !market) throw new Error("Faltan la tienda o el mercado.");
+
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const countryName = readText(raw.countryName);
+  const languageName = readText(raw.languageName);
+  if (!countryName || !languageName) {
+    throw new Error("Un mercado necesita país e idioma.");
+  }
+
+  const store = await findStore(id);
+  if (!store) throw new Error("No se encontró la tienda.");
+
+  const current = store.markets.find((item) => item.id === market);
+  if (!current) throw new Error("Ese mercado ya no existe en esta tienda.");
+
+  // Mismas defensas que al añadir: el código sale del nombre cuando no viene, y
+  // un idioma que no se reconoce se dice, en vez de acabar en un check de la
+  // base que en producción no se lee.
+  const countryCode = (readText(raw.countryCode) || findCountry(countryName)?.code || "")
+    .toUpperCase()
+    .slice(0, 2);
+
+  const languageCode = (readText(raw.languageCode) || findLanguage(languageName)?.code || "")
+    .toLowerCase()
+    .slice(0, 5);
+
+  if (countryCode.length < 2) {
+    throw new Error(
+      `No reconozco el país «${countryName}». Escribe su código de dos letras, por ejemplo MX.`,
+    );
+  }
+
+  if (languageCode.length < 2) {
+    throw new Error(
+      `No reconozco el idioma «${languageName}». Elígelo de la lista, por ejemplo Español.`,
+    );
+  }
+
+  // Contra los **otros**, no contra sí mismo: guardar un mercado sin cambiarle
+  // el país ni el idioma no puede considerarse un duplicado de él mismo.
+  const duplicate = store.markets.some(
+    (item) =>
+      item.id !== market &&
+      item.countryCode === countryCode &&
+      item.languageCode === languageCode,
+  );
+  if (duplicate) {
+    throw new Error("Ya hay otro mercado con ese país e idioma en esta tienda.");
+  }
+
+  const updated = await updateMarket(id, market, {
+    countryCode,
+    countryName,
+    languageCode,
+    languageName,
+    currency: readText(raw.currency, current.currency).toUpperCase().slice(0, 3),
+    domain: normalizeDomain(readText(raw.domain)) || undefined,
+    pathPrefix: normalizePrefix(readText(raw.pathPrefix)),
+  });
+
   revalidatePath("/stores");
   revalidatePath("/products");
   return updated;

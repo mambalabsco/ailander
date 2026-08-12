@@ -207,6 +207,66 @@ export async function addMarket(storeId: string, market: Omit<StoreMarket, "id">
   return findStore(storeId);
 }
 
+/**
+ * Corrige un mercado ya creado.
+ *
+ * Hacía falta porque un mercado solo se podía añadir o quitar, y quitar está
+ * bloqueado cuando tiene productos o cuando es el único: un mercado principal
+ * con el idioma mal escrito no tenía ninguna salida.
+ *
+ * El `id` no se toca, así que `product_markets` y las tablas que llevan
+ * `market_id` siguen apuntando a lo mismo. Corregir un mercado no mueve ninguna
+ * pieza de sitio.
+ *
+ * Los productos que viven en él sí se corrigen: guardan su país y su idioma como
+ * texto, copiado de aquí al crearlos, y dejarlos con el viejo sería tener dos
+ * verdades sobre lo mismo — con la equivocada saliendo en la ficha.
+ */
+export async function updateMarket(
+  storeId: string,
+  marketId: string,
+  market: Omit<StoreMarket, "id" | "isPrimary">,
+): Promise<Store | null> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("store_markets")
+    .update({
+      country_code: market.countryCode,
+      country_name: market.countryName,
+      language_code: market.languageCode,
+      language_name: market.languageName,
+      currency: market.currency,
+      domain: market.domain ?? "",
+      path_prefix: market.pathPrefix,
+    })
+    .eq("id", marketId)
+    .eq("store_id", storeId);
+
+  if (error) {
+    // 23505: ese país e idioma ya son otro mercado de la misma tienda.
+    if (error.code === "23505") {
+      throw new Error("Ya hay otro mercado con ese país e idioma en esta tienda.");
+    }
+    throw new Error(`No se pudo corregir el mercado: ${error.message}`);
+  }
+
+  const { error: productsError } = await supabase
+    .from("products")
+    .update({ country: market.countryName, language: market.languageName })
+    .eq("market_id", marketId);
+
+  // No tumba la operación: el mercado ya está corregido, que es lo que se pidió.
+  // Se dice, porque quedarían productos diciendo el idioma viejo.
+  if (productsError) {
+    throw new Error(
+      `El mercado se corrigió, pero sus productos siguen con el país e idioma anteriores: ${productsError.message}`,
+    );
+  }
+
+  return findStore(storeId);
+}
+
 export async function removeMarket(storeId: string, marketId: string): Promise<boolean> {
   const { supabase } = await requireContext();
 

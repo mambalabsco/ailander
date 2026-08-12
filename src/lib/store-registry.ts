@@ -117,6 +117,25 @@ export async function addMarket(storeId: string, market: StoreMarket): Promise<S
   return saveStore({ ...store, markets });
 }
 
+export async function updateMarket(
+  storeId: string,
+  marketId: string,
+  market: Omit<StoreMarket, "id" | "isPrimary">,
+): Promise<Store | null> {
+  if (isSupabaseConfigured()) return db.updateMarket(storeId, marketId, market);
+
+  const store = await findStore(storeId);
+  if (!store) return null;
+
+  // En el modo de ficheros los productos viven en otro JSON y no se tocan: es
+  // el modo de probar sin base de datos, no el que usa nadie de verdad.
+  const markets = store.markets.map((item) =>
+    item.id === marketId ? { ...item, ...market, id: item.id, isPrimary: item.isPrimary } : item,
+  );
+
+  return saveStore({ ...store, markets });
+}
+
 export async function removeMarket(storeId: string, marketId: string): Promise<boolean> {
   if (isSupabaseConfigured()) return db.removeMarket(storeId, marketId);
 
