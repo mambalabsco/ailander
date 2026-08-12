@@ -160,11 +160,30 @@ async function outcome(
   kind: JobKind,
   ctx: { id: string; product: { name: string } },
   message: string,
-  usage: { inputTokens: number; outputTokens: number },
+  /*
+   * Los tokens de caché viajan aparte de los de entrada.
+   *
+   * `generateStructured` los devuelve desde ayer y aquí se tiraban: no llegaban
+   * ni a `estimateCost` ni al registro. La consecuencia es que la caché podía
+   * estar ahorrando dinero de verdad y el panel seguiría enseñando el gasto de
+   * antes — no hay ningún error que avise, solo el contador que nunca sube.
+   */
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  },
 ): Promise<JobOutcome> {
   const { copyModel, researchModel } = await import("@/lib/claude");
   const model = role === "copy" ? await copyModel() : await researchModel();
-  const costUsd = estimateCost(model, usage.inputTokens, usage.outputTokens);
+  const costUsd = estimateCost(
+    model,
+    usage.inputTokens,
+    usage.outputTokens,
+    usage.cacheReadTokens ?? 0,
+    usage.cacheWriteTokens ?? 0,
+  );
 
   await recordRun({
     productId: ctx.id,
@@ -176,6 +195,8 @@ async function outcome(
     model,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage.cacheWriteTokens ?? 0,
   });
 
   return {
@@ -224,7 +245,7 @@ export async function generateAnglesAction(
     kind: "angulos",
     label: `Ángulos · ${target}`,
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
+      const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         angles: Omit<MarketingAngle, "id" | "productId" | "desire" | "createdAt">[];
       }>({ prompt, schema: ANGLES_SCHEMA, role: "research" });
 
@@ -246,6 +267,8 @@ export async function generateAnglesAction(
       return outcome("research", "angulos", ctx, `${data.angles.length} ángulos nuevos.`, {
         inputTokens,
         outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
       });
     },
   });
@@ -482,7 +505,8 @@ Ningún prompt de este documento los genera, pero el gestor de anuncios los exig
    * notaba. Si sale corta, `generateLongCopy` pide una ampliación antes de
    * guardarla.
    */
-  const { data, inputTokens, outputTokens } = await generateLongCopy({
+  const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } =
+    await generateLongCopy({
     prompt,
     schema: LONG_COPY_SCHEMA,
     range: method.wordRange,
@@ -528,6 +552,8 @@ Ningún prompt de este documento los genera, pero el gestor de anuncios los exig
       return outcome("copy", "copys", ctx, `${data.note}. Está en borrador.`, {
         inputTokens,
         outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
       });
     },
   });
@@ -601,7 +627,7 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
     kind: "anuncios",
     label: `Anuncios · ${theme || ctx.product.name}`,
     work: async () => {
-  const { data, inputTokens, outputTokens } = await generateStructured<{
+  const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         campaign: { name: string; theme: string; focus: string };
         adsets: {
           name: string;
@@ -735,7 +761,7 @@ export async function searchCompetitorsAction(productId: unknown): Promise<Launc
     kind: "competidores",
     label: `Buscar competidores de ${ctx.product.name}`,
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
+      const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         competitors: CompetitorCandidate[];
       }>({
         prompt,
@@ -869,7 +895,7 @@ export async function generateIdeasAction(
     kind: "ideas",
     label: `Ideas · ${kind}`,
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
+      const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         ideas: GeneratedIdea[];
       }>({ prompt, schema: IDEAS_SCHEMA, role: "research" });
 
@@ -927,7 +953,7 @@ export async function analyzeProductSheetAction(
     kind: "ficha",
     label: `Analizar la ficha de ${ctx.product.name}`,
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
+      const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         ingredients: {
           name: string;
           role: string;
@@ -1058,7 +1084,8 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
        * el `wordCount` que el modelo declaraba de sí mismo, así que una
        * adaptación de cuatrocientas palabras podía decir mil doscientas.
        */
-      const { data, inputTokens, outputTokens } = await generateLongCopy({
+      const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } =
+    await generateLongCopy({
         prompt,
         schema: LONG_COPY_SCHEMA,
         range: method.wordRange,

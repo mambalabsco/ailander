@@ -182,7 +182,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
     kind: "landing",
     label: `Página · ${method.name}`,
     work: async () => {
-      const { data, inputTokens, outputTokens } = await generateStructured<{
+      const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         title: string;
         slug: string;
         header?: { enabled: boolean; announcement: string; logoText: string; kicker: string };
@@ -242,6 +242,8 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
         model,
         inputTokens,
         outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
       });
 
       return {
