@@ -10,6 +10,7 @@ import { buildCaption, buildContentPrompt, buildFocusNote, findFormat } from "@/
 import { countsFor, recentSummary, weekPlan } from "@/lib/instagram/plan";
 import { buildHookGuide, pickArchetypes } from "@/lib/instagram/hooks";
 import { isRepeat } from "@/lib/instagram/duplicates";
+import { mostRecent } from "@/lib/instagram/recency";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -87,8 +88,22 @@ export async function generateInstagramAction(input: unknown): Promise<{
      * vacía y la cuenta se queda muda. El único rastro es una línea en el
      * parte. Quince es lo que dice el diseño y lo que ya usa `recentSummary`:
      * más atrás no es repetirse, es tener una línea.
+     *
+     * Por eso importa el **orden** con el que se recortan esas quince.
+     * `anteriores` sale de `listPosts`, que ordena por `scheduled_at`
+     * ascendente —lo próximo primero, para la pantalla de la cola— y no por
+     * cuándo se escribió cada pieza. Recortando ese mismo orden con
+     * `.slice(0, 15)` se cogen las quince con la fecha de publicación más
+     * próxima, que con más de quince piezas en la cuenta son las más
+     * **antiguas** en la práctica: una pieza publicada hace medio año
+     * conserva un `scheduled_at` pequeño y se cuela delante de la que se
+     * escribió ayer y todavía no tiene hora. El filtro duro —`isRepeat`, más
+     * abajo— acabaría comparando el gancho recién escrito contra el del año
+     * pasado y dejándolo pasar sin avisar: justo lo contrario de para lo que
+     * existe. `mostRecent` ordena una copia por recencia antes de recortar,
+     * sin tocar el orden que usa la pantalla de la cola.
      */
-    const ultimas = anteriores.slice(0, 15);
+    const ultimas = mostRecent(anteriores, 15);
 
     const memoria = recentSummary(
       ultimas.map((one) => ({
