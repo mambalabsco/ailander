@@ -129,3 +129,91 @@ export async function deleteInstagramPostAction(input: unknown): Promise<{
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
   }
 }
+
+/**
+ * Genera la imagen de **esa** publicación y la deja atada a ella.
+ *
+ * ## Por qué se guarda en la fila y no en la galería
+ *
+ * Porque una imagen suelta en el montón no dice a qué pie acompaña. Con dos
+ * piezas se recuerda; con veinte no, y entonces hay que emparejarlas a mano
+ * justo cuando toca publicar. Guardando la dirección en la fila, la pieza está
+ * completa o no está.
+ *
+ * ## Y por qué usa la foto real del producto
+ *
+ * Porque sin ella el modelo se inventa el envase, y un envase inventado en la
+ * cuenta de la marca es peor que no publicar: quien lo vea y luego reciba el
+ * producto verá que no es el mismo.
+ */
+export async function generatePostMediaAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const id = readText(raw.id);
+  const productId = readText(raw.productId);
+
+  if (!id || !productId) return { ok: false, message: "Falta la publicación." };
+
+  try {
+    const { listPosts, updatePostMedia } = await import("@/lib/data/instagram");
+    const post = (await listPosts(productId)).find((one) => one.id === id);
+
+    if (!post) return { ok: false, message: "Esa publicación ya no existe." };
+    if (!post.scene) return { ok: false, message: "Esta publicación no dice qué se ve." };
+
+    const { findFormat } = await import("@/lib/instagram/content");
+    const { generateWithCli, listCliModels } = await import("@/lib/higgsfield-cli");
+    const { pickImageModel } = await import("@/lib/image-adapt");
+    const { readPrimaryImage } = await import("@/lib/image-store");
+
+    const model = pickImageModel((await listCliModels("image")).map((one) => one.slug));
+    if (!model) {
+      return {
+        ok: false,
+        message: "El CLI de Higgsfield no ofrece ningún modelo de imagen. Revisa la sesión en Estudio.",
+      };
+    }
+
+    /*
+     * La foto del producto va de referencia, si la hay.
+     *
+     * Sin ella se genera igual —una escena sin producto es válida en
+     * Instagram—, pero se avisa: es la diferencia entre una foto de la marca y
+     * una foto de archivo con un envase inventado.
+     */
+    const primary = await readPrimaryImage(productId).catch(() => null);
+    const references: { filename: string; bytes: Uint8Array }[] = [];
+
+    if (primary?.url) {
+      const response = await fetch(primary.url, { cache: "no-store" }).catch(() => null);
+
+      if (response?.ok) {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength > 0) references.push({ filename: "producto.png", bytes });
+      }
+    }
+
+    const generated = await generateWithCli({
+      model,
+      prompt: post.scene,
+      aspectRatio: findFormat(post.format).aspectRatio,
+      references,
+    });
+
+    const url = generated.imageUrls[0];
+    if (!url) return { ok: false, message: "No devolvió ninguna imagen." };
+
+    await updatePostMedia(id, url);
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: true,
+      message: references.length > 0 ? "Imagen lista." : "Imagen lista, pero sin la foto del producto: revisa el envase.",
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
+  }
+}

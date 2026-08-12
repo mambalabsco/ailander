@@ -4,8 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, SelectField } from "@/components/ui";
 import { FORMATS, visiblePart } from "@/lib/instagram/content";
+import { CopyableBlock } from "@/components/copyable";
 import {
   deleteInstagramPostAction,
+  generatePostMediaAction,
   generateInstagramAction,
   updateInstagramPostAction,
 } from "@/app/products/[id]/instagram-actions";
@@ -148,17 +150,59 @@ export function InstagramQueue({
               </div>
             </div>
 
-            {/*
-              Lo que se lee sin pulsar «más», en negrita, y el resto apagado.
-              Es la única forma de ver antes de publicar si el gancho cayó al
-              otro lado del corte.
-            */}
-            <p className="text-sm leading-6">
-              <strong>{visiblePart(post.caption)}</strong>
-              <span className="text-slate-400">
-                {post.caption.slice(visiblePart(post.caption).length)}
-              </span>
-            </p>
+            <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+              {/*
+                La imagen a la izquierda y el texto a la derecha: es el orden en
+                el que se publica —se elige la foto y se pega el pie—, y verlos
+                juntos es lo que dice si pegan el uno con el otro.
+              */}
+              <div className="w-40">
+                {post.mediaUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={post.mediaUrl}
+                      alt=""
+                      className="w-40 rounded-xl border border-slate-200 dark:border-slate-800"
+                    />
+                    <a
+                      href={post.mediaUrl}
+                      download
+                      className="mt-1 inline-block text-xs text-violet-600 underline underline-offset-4 dark:text-violet-400"
+                    >
+                      Descargar
+                    </a>
+                  </>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    disabled={pending || !post.scene}
+                    onClick={() =>
+                      correr(() => generatePostMediaAction({ id: post.id, productId }))
+                    }
+                  >
+                    {pending ? "…" : "Generar imagen"}
+                  </Button>
+                )}
+              </div>
+
+              <div>
+                {/*
+                  Todo el pie en un bloque que se copia de una vez: es lo que se
+                  pega en Instagram, con sus etiquetas incluidas. Copiarlo a
+                  trozos es donde se pierden las etiquetas o el salto de línea
+                  que deja el gancho solo.
+                */}
+                <CopyableBlock value={post.caption} label="el pie">
+                  <p className="text-sm leading-6">
+                    <strong>{visiblePart(post.caption)}</strong>
+                    <span className="text-slate-400">
+                      {post.caption.slice(visiblePart(post.caption).length)}
+                    </span>
+                  </p>
+                </CopyableBlock>
+              </div>
+            </div>
 
             {post.scene ? (
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">

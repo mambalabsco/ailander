@@ -111,3 +111,10 @@ export async function deletePost(id: string): Promise<void> {
 
   await supabase.from("instagram_posts").delete().eq("id", id);
 }
+
+/** Ata la media a su publicación. Ver la acción: suelta no sirve de nada. */
+export async function updatePostMedia(id: string, mediaUrl: string): Promise<void> {
+  const { supabase } = await requireContext();
+
+  await supabase.from("instagram_posts").update({ media_url: mediaUrl }).eq("id", id);
+}
