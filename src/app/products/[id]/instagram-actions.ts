@@ -77,8 +77,21 @@ export async function generateInstagramAction(input: unknown): Promise<{
      */
     const anteriores = await listPosts(productId).catch(() => []);
 
+    /*
+     * Las últimas quince, y las mismas para el encargo y para el filtro duro.
+     *
+     * El filtro comparaba contra **todo** el historial. Según crece, cualquier
+     * gancho se parece a alguno de doscientos: suben los falsos positivos,
+     * `saved` cae a cero, `escribir` no baja nunca y el cron llama al modelo
+     * cada cinco minutos —del orden de mil veces al día— mientras la cola se
+     * vacía y la cuenta se queda muda. El único rastro es una línea en el
+     * parte. Quince es lo que dice el diseño y lo que ya usa `recentSummary`:
+     * más atrás no es repetirse, es tener una línea.
+     */
+    const ultimas = anteriores.slice(0, 15);
+
     const memoria = recentSummary(
-      anteriores.map((one) => ({
+      ultimas.map((one) => ({
         format: one.format,
         scene: one.scene,
         // El pie completo no: lo que hay que no repetir es el gancho, y es lo
@@ -156,7 +169,7 @@ export async function generateInstagramAction(input: unknown): Promise<{
      * no solo contra la base: pedir cinco de golpe y que dos sean la misma es
      * justo el caso que más se da.
      */
-    const ganchosPrevios = anteriores.map((one) => one.caption.split("\n")[0] ?? "");
+    const ganchosPrevios = ultimas.map((one) => one.caption.split("\n")[0] ?? "");
     const posts: typeof escritas = [];
     let repetidas = 0;
 
