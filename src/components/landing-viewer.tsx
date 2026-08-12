@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { mediaKindOf } from "@/lib/landing-copy-html";
+import { buildMotionPrompt } from "@/lib/landing-motion";
 import { CopyableBlock } from "@/components/copyable";
 import { AdVisualSender } from "@/components/ad-visual-sender";
 import { ImageDownloads } from "@/components/image-downloads";
@@ -480,6 +481,45 @@ export function LandingViewer({
                   playsInline
                   className="mt-2 max-h-48 rounded-xl border border-slate-200 dark:border-slate-800"
                 />
+              ) : null}
+
+              {/*
+                El encargo de vídeo, al lado del de foto y no en su lugar.
+
+                Un hueco puede querer las dos cosas —una foto para probar y un
+                bucle para la versión buena—, y sustituir uno por otro obligaría
+                a elegir antes de haber visto ninguno. Se copia y se pega en
+                Higgsfield o en kie.
+              */}
+              {mediaKindOf(slot.prompt) === "" ? (
+                <details className="mb-2">
+                  <summary className="cursor-pointer text-xs text-violet-600 dark:text-violet-400">
+                    Encargo para vídeo en bucle
+                  </summary>
+
+                  <CopyableBlock
+                    value={buildMotionPrompt({
+                      scene: slot.prompt,
+                      productName: page.title,
+                      aspectRatio: slot.aspectRatio,
+                    })}
+                    label="el encargo de vídeo"
+                    maxHeightClass="max-h-48"
+                  >
+                    <pre className="mt-1 whitespace-pre-wrap font-mono text-xs leading-5">
+                      {buildMotionPrompt({
+                        scene: slot.prompt,
+                        productName: page.title,
+                        aspectRatio: slot.aspectRatio,
+                      })}
+                    </pre>
+                  </CopyableBlock>
+
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Pégalo en Higgsfield o en kie, y sube el resultado aquí: acepta WEBM, MP4, GIF o
+                    WEBP animado.
+                  </p>
+                </details>
               ) : null}
 
               <CopyableBlock value={slot.prompt} label="Prompt" maxHeightClass="max-h-32">
