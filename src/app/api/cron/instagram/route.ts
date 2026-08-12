@@ -288,7 +288,8 @@ async function rellenar(
 
   if (caben < row.porDia) {
     parte.push(
-      `${row.productId}: entre las ${row.horaDesde} y las ${row.horaHasta} solo caben ${caben} al día` +
+      `${row.productId}: entre las ${row.horaDesde} y las ${row.horaHasta} de ${row.zonaHoraria}` +
+        ` solo caben ${caben} al día` +
         ` con ${SEPARACION_MINUTOS} minutos entre ellas. Las ${row.porDia} pedidas se reparten en más días.`,
     );
   }
@@ -321,6 +322,7 @@ async function rellenar(
         porDia: row.porDia,
         horaDesde: row.horaDesde,
         horaHasta: row.horaHasta,
+        zonaHoraria: row.zonaHoraria,
         semilla: pieza.id,
       }),
     );

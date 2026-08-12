@@ -5,6 +5,7 @@ import {
   cabenPorDia,
   decide,
   horaProgramada,
+  mismaHoraEnUTC,
   SEPARACION_MINUTOS,
   TOPE_API,
 } from "./autopilot.ts";
@@ -95,16 +96,32 @@ test("no poder publicar no impide seguir rellenando", () => {
   assert.equal(resultado.escribir, 3);
 });
 
-/** Una pieza en su hueco, con la ventana de siempre. */
-const hora = (hueco: number, semilla: string, porDia = 1, desde = 18, hasta = 21) =>
+/** Una pieza en su hueco, con la ventana de siempre y el reloj de siempre. */
+const hora = (
+  hueco: number,
+  semilla: string,
+  porDia = 1,
+  desde = 18,
+  hasta = 21,
+  zonaHoraria = "UTC",
+) =>
   horaProgramada({
     base: new Date(base.ahora),
     hueco,
     porDia,
     horaDesde: desde,
     horaHasta: hasta,
+    zonaHoraria,
     semilla,
   });
+
+/** Qué hora marca ese instante en esa zona. */
+const horaEn = (iso: string, zona: string): number =>
+  Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: zona, hourCycle: "h23", hour: "2-digit" }).format(
+      new Date(iso),
+    ),
+  );
 
 test("la hora cae dentro de la ventana", () => {
   const cuando = new Date(hora(0, "pieza-uno"));
@@ -202,6 +219,69 @@ test("la ventana abierta de par en par no pega el final de un día con el princi
 
     assert.ok(minutos >= SEPARACION_MINUTOS, `entre ${i - 1} y ${i}: ${minutos} minutos`);
   }
+});
+
+test("la misma ventana en dos zonas da instantes distintos", () => {
+  /*
+   * Era el fallo silencioso: la ventana se leía en UTC y nada lo decía. Quien
+   * pedía de 18 a 21 desde México publicaba a las 12:00 locales y solo se
+   * enteraba mirando a qué hora salía la cuenta.
+   */
+  const enUTC = hora(0, "pieza", 1, 18, 21, "UTC");
+  const enMexico = hora(0, "pieza", 1, 18, 21, "America/Mexico_City");
+
+  assert.notEqual(enUTC, enMexico);
+  assert.equal(horaEn(enUTC, "UTC") >= 18 && horaEn(enUTC, "UTC") <= 21, true);
+
+  const local = horaEn(enMexico, "America/Mexico_City");
+  assert.ok(local >= 18 && local <= 21, `en México salió a las ${local}`);
+});
+
+test("una zona con desfase de media hora también cae dentro de la ventana", () => {
+  // India va a +5:30. Un desfase en horas enteras la deja media hora fuera de
+  // la franja, y media hora antes de las 18:00 son las 17:30: fuera.
+  for (const hueco of [0, 1, 2]) {
+    const cuando = hora(hueco, `pieza-${hueco}`, 2, 18, 21, "Asia/Kolkata");
+    const local = horaEn(cuando, "Asia/Kolkata");
+
+    assert.ok(local >= 18 && local <= 21, `${cuando} son las ${local} en Kolkata`);
+  }
+
+  /*
+   * Y la media hora está de verdad ahí. La misma pieza con la misma ventana:
+   * en Kolkata el día de calendario local ya es el siguiente —a las 19:00 UTC
+   * allí es la madrugada— y al instante hay que restarle 5:30. La diferencia
+   * son 24h − 5:30 = 1.110 minutos, que con un desfase en horas enteras no
+   * saldría.
+   */
+  const enUTC = new Date(hora(0, "pieza-0", 2, 18, 21, "UTC")).getTime();
+  const enKolkata = new Date(hora(0, "pieza-0", 2, 18, 21, "Asia/Kolkata")).getTime();
+
+  assert.equal((enKolkata - enUTC) / 60_000, 1_110);
+});
+
+test("con horario de verano la ventana sigue siendo la de pared", () => {
+  // Madrid está en CEST en agosto: +2. Si el desfase se calculara con el
+  // instante equivocado, la pieza saldría una hora antes durante medio año.
+  const cuando = hora(0, "pieza", 1, 18, 21, "Europe/Madrid");
+  const local = horaEn(cuando, "Europe/Madrid");
+
+  assert.ok(local >= 18 && local <= 21, `en Madrid salió a las ${local}`);
+});
+
+test("una zona que no existe no tumba la vuelta: se programa en UTC", () => {
+  assert.equal(hora(0, "pieza", 1, 18, 21, "Marte/Olympus"), hora(0, "pieza", 1, 18, 21, "UTC"));
+});
+
+test("el panel puede decir a qué hora UTC equivale la ventana", () => {
+  const cuando = new Date(base.ahora);
+
+  assert.equal(mismaHoraEnUTC(18, "UTC", cuando), "18:00");
+  // India va a +5:30, y media hora es exactamente lo que un desplegable de
+  // horas enteras no sabría enseñar.
+  assert.equal(mismaHoraEnUTC(18, "Asia/Kolkata", cuando), "12:30");
+  // Agosto en Madrid es CEST, +2.
+  assert.equal(mismaHoraEnUTC(18, "Europe/Madrid", cuando), "16:00");
 });
 
 test("la separación mínima es la que dice la constante", () => {

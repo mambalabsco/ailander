@@ -12,6 +12,28 @@ const entre = (value: unknown, min: number, max: number, porDefecto: number): nu
   return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), min), max) : porDefecto;
 };
 
+/**
+ * La zona horaria, comprobada contra `Intl` y no contra una lista escrita aquí.
+ *
+ * Una lista propia se queda vieja —los nombres de la base de datos de zonas
+ * cambian— y un valor inventado no falla al guardarlo: falla mucho después, al
+ * programar, y entonces el producto se queda sin vuelta. Preguntando a `Intl`,
+ * lo que se guarda es lo mismo que va a saber interpretar quien programe.
+ */
+const zonaValida = (value: unknown): string => {
+  const zona = readText(value);
+
+  if (!zona) return "UTC";
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zona });
+
+    return zona;
+  } catch {
+    return "UTC";
+  }
+};
+
 export async function saveAutopilotAction(input: unknown): Promise<{
   ok: boolean;
   message: string;
@@ -64,6 +86,7 @@ export async function saveAutopilotAction(input: unknown): Promise<{
       // medianoche, y aquí no se admite. Se ordena en silencio.
       horaDesde: Math.min(horaDesde, horaHasta),
       horaHasta: Math.max(horaDesde, horaHasta),
+      zonaHoraria: zonaValida(raw.zonaHoraria),
     });
 
     revalidatePath("/instagram");

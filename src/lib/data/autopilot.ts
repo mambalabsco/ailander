@@ -11,6 +11,13 @@ export interface Autopilot {
   colchonDias: number;
   horaDesde: number;
   horaHasta: number;
+  /**
+   * IANA (`America/Mexico_City`). En qué reloj se leen las dos horas de arriba.
+   *
+   * Sin esto la ventana era la del servidor sin que nada lo dijera, y pedir de
+   * 18 a 21 desde México publicaba a las 12:00 locales.
+   */
+  zonaHoraria: string;
   ultimaPublicacionAt: string | null;
   /** Vacío es «no está pausado». Con texto, dice por qué se apagó solo. */
   pausadoPor: string;
@@ -42,6 +49,7 @@ export async function readAutopilot(productId: string): Promise<Autopilot | null
     colchonDias: row.colchon_dias,
     horaDesde: row.hora_desde,
     horaHasta: row.hora_hasta,
+    zonaHoraria: row.zona_horaria || "UTC",
     ultimaPublicacionAt: row.ultima_publicacion_at,
     pausadoPor: row.pausado_por,
   };
@@ -70,6 +78,7 @@ export async function saveAutopilot(
       colchon_dias: patch.colchonDias,
       hora_desde: patch.horaDesde,
       hora_hasta: patch.horaHasta,
+      zona_horaria: patch.zonaHoraria,
     },
     { onConflict: "product_id" },
   );

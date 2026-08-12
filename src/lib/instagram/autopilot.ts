@@ -125,6 +125,104 @@ export function cabenPorDia(horaDesde: number, horaHasta: number): number {
 }
 
 /**
+ * La misma marca de tiempo, contada en la zona que se le pida.
+ *
+ * `Intl` es lo único que sabe de horarios de verano y de desfases que no son
+ * horas enteras (India va a +5:30). Hacerlo a mano con un número de horas
+ * funciona hasta el domingo en que un país cambia la hora, y entonces la cuenta
+ * publica una hora antes durante seis meses sin que nada falle.
+ */
+function partesEnZona(
+  instante: Date,
+  zona: string,
+): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: zona,
+    // `hour12: false` da «24» a medianoche en algunos motores, y 24 no es una
+    // hora: `h23` es lo que devuelve 0.
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instante);
+
+  const leer = (tipo: string): number =>
+    Number(partes.find((una) => una.type === tipo)?.value ?? "0");
+
+  return {
+    year: leer("year"),
+    month: leer("month"),
+    day: leer("day"),
+    hour: leer("hour"),
+    minute: leer("minute"),
+    second: leer("second"),
+  };
+}
+
+/** Minutos que hay que sumarle a UTC para leer la hora de pared de esa zona. */
+function desfaseMinutos(instante: Date, zona: string): number {
+  const { year, month, day, hour, minute, second } = partesEnZona(instante, zona);
+  const comoSiFueraUTC = Date.UTC(year, month - 1, day, hour, minute, second);
+
+  // El instante, redondeado al segundo: `formatToParts` no da milisegundos, y
+  // sin redondear el desfase saldría con una fracción de minuto inventada.
+  return (comoSiFueraUTC - Math.floor(instante.getTime() / 1000) * 1000) / 60_000;
+}
+
+/**
+ * Una zona que `Intl` no conozca no puede tumbar la vuelta.
+ *
+ * La columna es texto libre y el valor puede venir de una fila vieja o de un
+ * cambio de nombre de la base de datos de zonas. Cayendo a UTC se programa a la
+ * hora que se programaba antes de que existiera la columna, que es lo peor que
+ * puede pasar; lanzando, el producto entero se queda sin vuelta.
+ */
+function zonaUsable(zona: string): string {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zona });
+
+    return zona;
+  } catch {
+    return "UTC";
+  }
+}
+
+/**
+ * El instante real de una hora de pared en una zona.
+ *
+ * Dos pasadas a propósito: la primera estima el desfase usando un instante que
+ * todavía es el equivocado —la hora de pared leída como si fuera UTC— y la
+ * segunda lo corrige con el instante ya casi bueno. Con una sola pasada, las
+ * madrugadas en que un país cambia la hora salen desplazadas sesenta minutos.
+ */
+function instanteDe(pared: number, zona: string): Date {
+  const primera = pared - desfaseMinutos(new Date(pared), zona) * 60_000;
+
+  return new Date(pared - desfaseMinutos(new Date(primera), zona) * 60_000);
+}
+
+/**
+ * Esa hora de pared, dicha en UTC, con el desfase de hoy.
+ *
+ * Existe para el panel: los campos decían «Desde las / Hasta las» sin unidad, y
+ * una franja sin reloj es una franja que cada uno lee como quiere. Enseñando al
+ * lado a qué hora UTC equivale, se ve de un vistazo si la ventana es la que se
+ * quería — que es donde estaba el fallo de las seis horas de diferencia.
+ */
+export function mismaHoraEnUTC(hora: number, zonaHoraria: string, base = new Date()): string {
+  const zona = zonaUsable(zonaHoraria);
+  const hoy = partesEnZona(base, zona);
+  const instante = instanteDe(Date.UTC(hoy.year, hoy.month - 1, hoy.day, hora, 0), zona);
+
+  const dosCifras = (valor: number): string => String(valor).padStart(2, "0");
+
+  return `${dosCifras(instante.getUTCHours())}:${dosCifras(instante.getUTCMinutes())}`;
+}
+
+/**
  * A qué hora sale una pieza, dentro de la ventana y sin clavar el minuto.
  *
  * Hoy `planWeekAction` pone las 19:00 en punto todos los días. Publicar siete
@@ -147,6 +245,15 @@ export function cabenPorDia(horaDesde: number, horaHasta: number): number {
  * Estirar el reparto es peor que perderlas —una pieza sin hora no la publica
  * nadie y nadie la ve— pero se dice en el parte, que es lo que permite corregir
  * la ventana o el ritmo.
+ *
+ * ## Y por qué la ventana no es UTC
+ *
+ * Porque antes lo era y nada lo decía: se usaba `setUTCHours` mientras el
+ * `planWeekAction` de al lado usaba `setHours` local, y los dos relojes
+ * coincidían solo porque el servidor va en UTC. Pedir la franja de 18 a 21
+ * desde México publicaba a las 12:00 locales. La ventana se interpreta en la
+ * zona del producto y lo que se devuelve es el instante, en UTC, que le
+ * corresponde.
  */
 export function horaProgramada(opciones: {
   base: Date;
@@ -155,10 +262,13 @@ export function horaProgramada(opciones: {
   porDia: number;
   horaDesde: number;
   horaHasta: number;
+  /** IANA (`America/Mexico_City`). La ventana se lee en este reloj. */
+  zonaHoraria: string;
   /** Para el minuto. Estable por pieza: dos vueltas no le ponen dos horas. */
   semilla: string;
 }): string {
   const { base, hueco, porDia, horaDesde, horaHasta, semilla } = opciones;
+  const zona = zonaUsable(opciones.zonaHoraria);
 
   const desde = Math.min(horaDesde, horaHasta);
   const ventana = ventanaMinutos(horaDesde, horaHasta);
@@ -183,9 +293,16 @@ export function horaProgramada(opciones: {
   // pieza a la anterior, y aun así queda a la separación mínima o más.
   const desplazamiento = Math.min(puesto * paso + (n % (holgura + 1)), ventana - 1);
 
-  const cuando = new Date(base);
-  cuando.setUTCDate(base.getUTCDate() + dia);
-  cuando.setUTCHours(0, desde * 60 + desplazamiento, 0, 0);
+  /*
+   * El día se cuenta en el calendario de la zona, no en el del servidor.
+   *
+   * Sumando 24 horas al instante, el día que un país cambia la hora se salta o
+   * se repite una fecha. `Date.UTC` normaliza el desbordamiento del día y del
+   * minuto, así que el 32 de agosto es el 1 de septiembre y el minuto 1.100 es
+   * la tarde.
+   */
+  const hoy = partesEnZona(base, zona);
+  const pared = Date.UTC(hoy.year, hoy.month - 1, hoy.day + dia, 0, desde * 60 + desplazamiento);
 
-  return cuando.toISOString();
+  return instanteDe(pared, zona).toISOString();
 }

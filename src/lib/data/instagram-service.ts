@@ -39,6 +39,8 @@ export interface AutopilotRow {
   colchonDias: number;
   horaDesde: number;
   horaHasta: number;
+  /** IANA. En qué reloj se lee la ventana: sin esto sería la del servidor. */
+  zonaHoraria: string;
   ultimaPublicacionAt: string | null;
   fallosSeguidos: number;
   pausadoPor: string;
@@ -162,6 +164,9 @@ export async function listarActivos(): Promise<AutopilotRow[]> {
     colchonDias: row.colchon_dias,
     horaDesde: row.hora_desde,
     horaHasta: row.hora_hasta,
+    // Vacío no: una cadena vacía no es una zona y `Intl` la rechaza. UTC es lo
+    // que hacía antes de que la columna existiera.
+    zonaHoraria: row.zona_horaria || "UTC",
     ultimaPublicacionAt: row.ultima_publicacion_at,
     fallosSeguidos: row.fallos_seguidos,
     pausadoPor: row.pausado_por,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Field, SelectField, TextField } from "@/components/ui";
 import { resumeAutopilotAction, saveAutopilotAction } from "@/app/instagram/autopilot-actions";
+import { mismaHoraEnUTC } from "@/lib/instagram/autopilot";
 import type { Autopilot } from "@/lib/data/autopilot";
 
 /**
@@ -16,6 +17,31 @@ import type { Autopilot } from "@/lib/data/autopilot";
  * ven exactamente igual desde fuera: la cuenta está callada. Sin el motivo, la
  * única forma de distinguirlos es entrar al servidor a leer el registro.
  */
+
+/**
+ * Las zonas que conoce el navegador, y si no las da, unas cuantas a mano.
+ *
+ * Escribir la lista aquí sería garantizar que se queda vieja: los nombres de la
+ * base de datos de zonas cambian cada pocos años. `supportedValuesOf` da
+ * exactamente las que `Intl` sabe interpretar, que son las mismas que va a saber
+ * interpretar quien programe la publicación.
+ */
+const ZONAS: string[] = (() => {
+  const propias = Intl.supportedValuesOf?.("timeZone") ?? [];
+
+  return propias.length > 0
+    ? propias
+    : [
+        "UTC",
+        "America/Mexico_City",
+        "America/Bogota",
+        "America/Lima",
+        "America/Santiago",
+        "America/Argentina/Buenos_Aires",
+        "America/New_York",
+        "Europe/Madrid",
+      ];
+})();
 export function AutopilotPanel({
   productId,
   estado,
@@ -38,6 +64,17 @@ export function AutopilotPanel({
   const [colchonDias, setColchonDias] = useState(estado?.colchonDias ?? 3);
   const [horaDesde, setHoraDesde] = useState(estado?.horaDesde ?? 18);
   const [horaHasta, setHoraHasta] = useState(estado?.horaHasta ?? 21);
+  const [zonaHoraria, setZonaHoraria] = useState(
+    /*
+     * Una zona guardada que este navegador ya no conozca cae a UTC.
+     *
+     * No es teórico: los nombres de la base de datos de zonas se retiran y se
+     * renombran. Sin esto, el desplegable no tendría esa opción y
+     * `toLocaleString` lanzaría al pintar — el panel entero en blanco por un
+     * nombre viejo.
+     */
+    ZONAS.includes(estado?.zonaHoraria ?? "") ? (estado?.zonaHoraria as string) : "UTC",
+  );
 
   const correr = (fn: () => Promise<{ ok: boolean; message: string }>) =>
     start(async () => {
@@ -103,7 +140,7 @@ export function AutopilotPanel({
             onChange={(e) => setColchonDias(Number(e.target.value))}
           />
         </Field>
-        <Field label="Desde las">
+        <Field label={`Desde las (${zonaHoraria})`}>
           <TextField
             type="number"
             min={0}
@@ -112,7 +149,7 @@ export function AutopilotPanel({
             onChange={(e) => setHoraDesde(Number(e.target.value))}
           />
         </Field>
-        <Field label="Hasta las">
+        <Field label={`Hasta las (${zonaHoraria})`}>
           <TextField
             type="number"
             min={0}
@@ -122,6 +159,28 @@ export function AutopilotPanel({
           />
         </Field>
       </div>
+
+      {/*
+        La zona va junto a la franja y no escondida: sin ella, «de 18 a 21» era
+        la hora del servidor —UTC— y quien lo configuraba desde México creía
+        haber pedido la tarde cuando había pedido el mediodía.
+      */}
+      <Field label="Zona horaria">
+        <SelectField value={zonaHoraria} onChange={(e) => setZonaHoraria(e.target.value)}>
+          {ZONAS.map((una) => (
+            <option key={una} value={una}>
+              {una}
+            </option>
+          ))}
+        </SelectField>
+      </Field>
+
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Publicará entre las {String(horaDesde).padStart(2, "0")}:00 y las{" "}
+        {String(horaHasta).padStart(2, "0")}:59 de {zonaHoraria}, que hoy son de las{" "}
+        {mismaHoraEnUTC(horaDesde, zonaHoraria)} a las {mismaHoraEnUTC(horaHasta, zonaHoraria)} en
+        UTC.
+      </p>
 
       <label className="flex items-start gap-2 text-sm">
         <input
@@ -153,6 +212,7 @@ export function AutopilotPanel({
                 colchonDias,
                 horaDesde,
                 horaHasta,
+                zonaHoraria,
               }),
             )
           }
@@ -163,7 +223,17 @@ export function AutopilotPanel({
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {listas} lista(s) por delante
           {estado?.ultimaPublicacionAt
-            ? ` · última publicación ${new Date(estado.ultimaPublicacionAt).toLocaleString()}`
+            ? /*
+               * En la zona del producto, no en la de quien mira.
+               *
+               * `toLocaleString()` a secas usa el reloj del navegador en el
+               * cliente y el del servidor al renderizar: además de descuadrar
+               * la hidratación, contaba la última publicación en un reloj y la
+               * ventana en otro, que es justo la confusión que esto arregla.
+               */
+              ` · última publicación ${new Date(estado.ultimaPublicacionAt).toLocaleString("es", {
+                timeZone: zonaHoraria,
+              })} (${zonaHoraria})`
             : " · todavía no ha publicado nada"}
         </p>
       </div>

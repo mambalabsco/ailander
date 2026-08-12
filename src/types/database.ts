@@ -752,6 +752,8 @@ type InstagramAutopilotRow = {
   colchon_dias: number;
   hora_desde: number;
   hora_hasta: number;
+  /** IANA (`America/Mexico_City`). En qué reloj se leen las dos horas de arriba. */
+  zona_horaria: string;
   ultima_publicacion_at: string | null;
   fallos_seguidos: number;
   /** Vacío es «no está pausado». Con texto, dice por qué. */
