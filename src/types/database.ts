@@ -1062,6 +1062,8 @@ type AvatarShotRow = {
 type MetaLoginRow = {
   id: string;
   user_id: string;
+  /** Del espacio, no de quien la creó: la política de lectura acota por aquí. */
+  workspace_id: string | null;
   name: string;
   /** No sale de aquí: a la pantalla van el nombre y la caducidad. */
   access_token: string;

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { resumeAutopilot, saveAutopilot } from "@/lib/data/autopilot";
+import { findProductAnywhere } from "@/lib/products";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -38,13 +39,29 @@ export async function saveAutopilotAction(input: unknown): Promise<{
   const horaHasta = entre(raw.horaHasta, 0, 23, 21);
 
   try {
+    /*
+     * `product_id` es la clave primaria global de `instagram_autopilot`, y esta
+     * acción es un endpoint público: cualquiera puede mandar el id de un
+     * producto ajeno. El `upsert` de `saveAutopilot` no lo filtra —el
+     * disparador rellena `workspace_id` con el de quien llama, así que la
+     * política de inserción siempre deja pasar— y si esa fila ya existía de
+     * otro espacio, quedaría ocupada para siempre: el dueño legítimo caería en
+     * `ON CONFLICT DO UPDATE`, que su política de actualización sí rechaza.
+     *
+     * Por eso se lee primero por la capa de sesión: RLS acota a lo del espacio
+     * de quien llama, así que si no aparece, da igual que no exista o que sea
+     * de otro — no se distingue, para no dar pistas.
+     */
+    const product = await findProductAnywhere(productId);
+    if (!product) return { ok: false, message: "Ese producto no existe." };
+
     await saveAutopilot(productId, {
       activo,
       igUserId,
       porDia: entre(raw.porDia, 1, 5, 1),
       colchonDias: entre(raw.colchonDias, 1, 14, 3),
       // Al revés no es un error de quien lo puso: es una ventana que cruza la
-      // medianoche, y aquí no se admite. Se ordena y se dice en el mensaje.
+      // medianoche, y aquí no se admite. Se ordena en silencio.
       horaDesde: Math.min(horaDesde, horaHasta),
       horaHasta: Math.max(horaDesde, horaHasta),
     });

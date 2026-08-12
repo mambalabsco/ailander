@@ -19,11 +19,16 @@ export interface Autopilot {
 export async function readAutopilot(productId: string): Promise<Autopilot | null> {
   const { supabase } = await requireContext();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("instagram_autopilot")
     .select("*")
     .eq("product_id", productId)
     .limit(1);
+
+  // Propagado, no tragado: si se devuelve `null` también cuando la lectura
+  // falla, un fallo de red se ve igual que «nadie lo ha configurado» y el
+  // panel enseña los valores por defecto en vez de decir que algo se rompió.
+  if (error) throw new Error(`No se pudo leer el autopiloto de ${productId}: ${error.message}`);
 
   const row = (data ?? [])[0];
 
@@ -55,7 +60,7 @@ export async function saveAutopilot(
 ): Promise<void> {
   const { supabase, userId } = await requireContext();
 
-  await supabase.from("instagram_autopilot").upsert(
+  const { error } = await supabase.from("instagram_autopilot").upsert(
     {
       product_id: productId,
       user_id: userId,
@@ -68,6 +73,8 @@ export async function saveAutopilot(
     },
     { onConflict: "product_id" },
   );
+
+  if (error) throw new Error(`No se pudo guardar el autopiloto: ${error.message}`);
 }
 
 /**
@@ -79,8 +86,10 @@ export async function saveAutopilot(
 export async function resumeAutopilot(productId: string): Promise<void> {
   const { supabase } = await requireContext();
 
-  await supabase
+  const { error } = await supabase
     .from("instagram_autopilot")
     .update({ pausado_por: "", fallos_seguidos: 0 })
     .eq("product_id", productId);
+
+  if (error) throw new Error(`No se pudo reanudar el autopiloto: ${error.message}`);
 }

@@ -367,18 +367,29 @@ export async function programar(id: string, workspaceId: string, cuando: string)
  * Se elige el acceso de Meta que **tenga el permiso de publicar**, no el
  * primero: la conexión de anuncios nació con `ads_read` a secas y con ella el
  * contenedor falla con un error que no dice que faltaba un permiso.
+ *
+ * Se busca por **espacio de trabajo**, no por la persona que encendió el
+ * piloto: `meta_logins` es del equipo, igual que todo lo demás desde agosto de
+ * 2026, y quien conectó la cuenta con permiso de publicar no tiene por qué ser
+ * quien configuró el autopiloto. Filtrando por `user_id` el desplegable del
+ * panel ofrece conexiones que este cliente admin —que no pasa por RLS— nunca
+ * iba a encontrar: la vuelta lanza «ninguna conexión tiene permiso», lo cuenta
+ * como fallo permanente y pausa un piloto que la persona dejó, con razón,
+ * convencida de que iba a funcionar.
  */
-export async function tokenDePublicacion(userId: string): Promise<string> {
+export async function tokenDePublicacion(workspaceId: string): Promise<string> {
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("meta_logins")
     .select("access_token, scopes, token_expires_at")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .order("is_default", { ascending: false });
 
   if (error) {
-    throw new Error(`No se pudieron leer las conexiones de Meta de ${userId}: ${error.message}`);
+    throw new Error(
+      `No se pudieron leer las conexiones de Meta del espacio ${workspaceId}: ${error.message}`,
+    );
   }
 
   const valido = (data ?? []).find(

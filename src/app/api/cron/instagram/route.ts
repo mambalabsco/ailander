@@ -117,7 +117,7 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
   let instagramId: string;
 
   try {
-    const token = await tokenDePublicacion(row.userId);
+    const token = await tokenDePublicacion(row.workspaceId);
 
     instagramId = await publishNow(
       { igUserId: row.igUserId, token },
