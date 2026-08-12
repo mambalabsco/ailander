@@ -1789,16 +1789,29 @@ async function rellenar(
     "@/app/products/[id]/instagram-actions"
   );
 
-  const escrito = await generateInstagramAction({
-    productId: row.productId,
-    format: "feed",
-    count: cuantas,
-    auto: true,
-  });
+  /*
+   * El reparto de formatos, con el que ya existe.
+   *
+   * Pidiendo siempre «feed» la cuenta publicaría la misma forma todos los días
+   * y no saldría un solo reel — que es lo único que alcanza a quien no te sigue.
+   * `weekPlan` ya sabe repartir y continuar donde se quedó: reescribirlo aquí
+   * sería tener dos repartos que se separan a la primera corrección.
+   */
+  const { countsFor, weekPlan } = await import("@/lib/instagram/plan");
 
-  if (!escrito.ok) {
-    parte.push(`${row.productId}: no se pudo escribir — ${escrito.message}`);
-    return;
+  for (const { format, count } of countsFor(weekPlan(cuantas, yaHay))) {
+    const escrito = await generateInstagramAction({
+      productId: row.productId,
+      format,
+      count,
+      auto: true,
+    });
+
+    if (!escrito.ok) {
+      // Que falle un formato no deja sin escribir a los demás: media semana es
+      // mejor que ninguna.
+      parte.push(`${row.productId}: no se pudo escribir ${format} — ${escrito.message}`);
+    }
   }
 
   const sinMedia = (await listasSinMedia(row)).slice(0, cuantas);
