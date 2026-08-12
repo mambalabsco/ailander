@@ -9,6 +9,7 @@ import { addPosts, deletePost, listPosts, updatePost } from "@/lib/data/instagra
 import { buildCaption, buildContentPrompt, buildFocusNote, findFormat } from "@/lib/instagram/content";
 import { countsFor, recentSummary, weekPlan } from "@/lib/instagram/plan";
 import { buildHookGuide, pickArchetypes } from "@/lib/instagram/hooks";
+import { isRepeat } from "@/lib/instagram/duplicates";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -130,11 +131,9 @@ export async function generateInstagramAction(input: unknown): Promise<{
       maxTokens: 8_000,
     });
 
-    const posts = (written.data.posts ?? [])
+    const escritas = (written.data.posts ?? [])
       .map((one) => ({
         format: format.id,
-        // La primera línea y el cuerpo se juntan aquí, separados por un salto:
-        // es lo que hace que el gancho quede solo delante del corte.
         caption: buildCaption({
           text: [one.first?.trim(), one.body?.trim()].filter(Boolean).join("\n\n"),
           hashtags: one.hashtags ?? [],
@@ -146,18 +145,61 @@ export async function generateInstagramAction(input: unknown): Promise<{
       }))
       .filter((one) => one.caption.trim());
 
+    /*
+     * El filtro duro contra repetirse.
+     *
+     * `recentSummary` ya se lo pidió en el encargo, y funciona las primeras
+     * veces: sobre la décima el modelo vuelve a la forma que le sale bien. Una
+     * petición se puede desoír; esto no.
+     *
+     * Se compara también contra lo que lleva escrito **en esta misma tanda**,
+     * no solo contra la base: pedir cinco de golpe y que dos sean la misma es
+     * justo el caso que más se da.
+     */
+    const ganchosPrevios = anteriores.map((one) => one.caption.split("\n")[0] ?? "");
+    const posts: typeof escritas = [];
+    let repetidas = 0;
+
+    for (const una of escritas) {
+      const gancho = una.caption.split("\n")[0] ?? "";
+
+      if (isRepeat(gancho, ganchosPrevios)) {
+        repetidas += 1;
+        continue;
+      }
+
+      ganchosPrevios.push(gancho);
+      posts.push(una);
+    }
+
     const saved = await addPosts(productId, posts, auto);
 
     revalidatePath(`/products/${productId}`);
 
+    /*
+     * Las descartadas se cuentan en voz alta.
+     *
+     * Pedir cinco y recibir tres sin explicación parece un fallo. Diciéndolo, es
+     * información: el modelo se está repitiendo y quizá haga falta cambiar el
+     * enfoque en vez de pedir más.
+     */
+    const nota = repetidas > 0 ? ` ${repetidas} descartada(s) por repetir un gancho ya usado.` : "";
+
     return saved > 0
       ? {
           ok: true,
-          message: auto
-            ? `${saved} publicación(es) aprobadas. Saldrán sin que nadie las lea.`
-            : `${saved} publicación(es) en borrador. Revísalas antes de programar.`,
+          message:
+            (auto
+              ? `${saved} publicación(es) aprobadas. Saldrán sin que nadie las lea.`
+              : `${saved} publicación(es) en borrador. Revísalas antes de programar.`) + nota,
         }
-      : { ok: false, message: "No devolvió ninguna publicación usable." };
+      : {
+          ok: false,
+          message:
+            repetidas > 0
+              ? `Las ${repetidas} que escribió repetían ganchos ya usados. Prueba con otro enfoque.`
+              : "No devolvió ninguna publicación usable.",
+        };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
   }
@@ -279,6 +321,36 @@ export async function generatePostMediaAction(input: unknown): Promise<{
 
     const url = generated.imageUrls[0];
     if (!url) return { ok: false, message: "No devolvió ninguna imagen." };
+
+    /*
+     * La proporción, comprobada aquí y no por Meta.
+     *
+     * Meta acepta el contenedor, se pone a procesarlo y falla **dentro**, con un
+     * estado de error cuyo mensaje no dice que el problema era la proporción.
+     * Para entonces la pieza ya está marcada como «publicando» y hay que
+     * rescatarla a mano.
+     *
+     * Si no se puede medir la imagen se deja pasar: quedarse sin publicar por no
+     * haber podido descargarla es peor que arriesgarse a que Meta la rechace.
+     */
+    const { checkAspect } = await import("@/lib/instagram/aspect");
+    const sharp = (await import("sharp")).default;
+
+    const bytes = await fetch(url, { cache: "no-store" })
+      .then((response) => (response.ok ? response.arrayBuffer() : null))
+      .catch(() => null);
+
+    if (bytes) {
+      const { width, height } = await sharp(Buffer.from(bytes)).metadata();
+      const proporcion = checkAspect(width ?? 0, height ?? 0, post.format);
+
+      if (!proporcion.ok) {
+        return {
+          ok: false,
+          message: `${proporcion.reason} Vuelve a generarla: guardada, fallaría al publicar.`,
+        };
+      }
+    }
 
     await updatePostMedia(id, url);
     revalidatePath(`/products/${productId}`);
