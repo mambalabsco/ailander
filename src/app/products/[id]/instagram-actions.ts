@@ -7,7 +7,7 @@ import { findProductAnywhere } from "@/lib/products";
 import { readProductResearch } from "@/lib/research-store";
 import { addPosts, deletePost, listPosts, updatePost } from "@/lib/data/instagram";
 import { buildCaption, buildContentPrompt, findFormat } from "@/lib/instagram/content";
-import { recentSummary } from "@/lib/instagram/plan";
+import { countsFor, recentSummary, weekPlan } from "@/lib/instagram/plan";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -258,6 +258,96 @@ export async function generatePostMediaAction(input: unknown): Promise<{
           : references.length > 0
             ? "Imagen lista, con la foto del producto de referencia."
             : "Imagen lista, pero sin la foto del producto: revisa que el envase se parezca.",
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
+  }
+}
+
+/**
+ * Planifica una semana entera: qué formato cada día y a qué hora.
+ *
+ * ## Por qué el reparto y no «dame siete»
+ *
+ * Porque siete piezas sin reparto salen casi todas del mismo formato —el modelo
+ * repite el que le funcionó en la primera— y una cuenta con cinco reels
+ * seguidos y luego cuatro días en blanco parece abandonada aunque publique lo
+ * mismo. El ritmo se decide antes de escribir.
+ *
+ * ## Y por qué queda en borrador con fecha
+ *
+ * Porque planificar no es aprobar. Sale el calendario entero para poder mirarlo
+ * de una vez —que es cuando se ve si la semana tiene sentido— y cada pieza se
+ * aprueba después, una a una.
+ */
+export async function planWeekAction(input: unknown): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  const productId = readText(raw.productId);
+  const days = Math.min(Math.max(Number(raw.days) || 7, 1), 14);
+  const hour = Math.min(Math.max(Number(raw.hour) || 19, 0), 23);
+
+  if (!productId) return { ok: false, message: "Falta el producto." };
+
+  try {
+    /*
+     * El plan continúa donde se quedó el anterior.
+     *
+     * Empezando siempre por el mismo formato, dos semanas seguidas arrancan
+     * igual y el patrón se nota a la tercera.
+     */
+    const yaHay = (await listPosts(productId).catch(() => [])).length;
+    const plan = weekPlan(days, yaHay);
+
+    const { updatePost } = await import("@/lib/data/instagram");
+
+    let puestas = 0;
+    const fallos: string[] = [];
+
+    for (const { format, count } of countsFor(plan)) {
+      const result = await generateInstagramAction({ productId, format, count });
+
+      if (!result.ok) {
+        fallos.push(`${format}: ${result.message}`);
+        continue;
+      }
+
+      puestas += count;
+    }
+
+    /*
+     * Las fechas se ponen después, sobre lo que quedó sin programar.
+     *
+     * Repartir a ciegas pondría fecha a piezas que no llegaron a crearse si una
+     * tanda falló, y el calendario diría que hay siete cuando hay cuatro.
+     */
+    const sinFecha = (await listPosts(productId)).filter(
+      (one) => !one.scheduledAt && one.status === "borrador",
+    );
+
+    const hoy = new Date();
+
+    for (const [index, post] of sinFecha.slice(0, days).entries()) {
+      const cuando = new Date(hoy);
+      cuando.setDate(hoy.getDate() + index + 1);
+      cuando.setHours(hour, 0, 0, 0);
+
+      await updatePost(post.id, { scheduledAt: cuando.toISOString() });
+    }
+
+    revalidatePath(`/products/${productId}`);
+
+    return {
+      ok: puestas > 0,
+      message: [
+        `${Math.min(sinFecha.length, days)} publicación(es) programadas, una al día a las ${hour}:00.`,
+        ` Reparto: ${plan.join(", ")}.`,
+        fallos.length > 0 ? ` No salieron: ${fallos.join("; ")}.` : "",
+        " Quedan en borrador: apruébalas una a una.",
+      ].join(""),
     };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };

@@ -8,6 +8,7 @@ import { CopyableBlock } from "@/components/copyable";
 import {
   deleteInstagramPostAction,
   generatePostMediaAction,
+  planWeekAction,
   generateInstagramAction,
   updateInstagramPostAction,
 } from "@/app/products/[id]/instagram-actions";
@@ -85,6 +86,19 @@ export function InstagramQueue({
           onClick={() => correr(() => generateInstagramAction({ productId, format, count }))}
         >
           {pending ? "Escribiendo…" : "Escribir publicaciones"}
+        </Button>
+
+        {/*
+          Planificar va al lado de escribir y no escondido: es la forma de
+          usarlo cuando ya se confía, y «dame tres» la de cuando se está
+          probando algo concreto.
+        */}
+        <Button
+          variant="secondary"
+          disabled={pending || !productId}
+          onClick={() => correr(() => planWeekAction({ productId, days: 7 }))}
+        >
+          {pending ? "…" : "Planificar la semana"}
         </Button>
 
         <span className="text-xs text-slate-500 dark:text-slate-400">
