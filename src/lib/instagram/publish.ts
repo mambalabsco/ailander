@@ -1,5 +1,7 @@
 import "server-only";
 
+import { InstagramError } from "./errors.ts";
+
 /**
  * Publicar en Instagram: contenedor, espera y publicación.
  *
@@ -47,15 +49,24 @@ async function graph(
 
   if (!response.ok) {
     /*
-     * El mensaje de Meta se devuelve tal cual.
+     * El mensaje de Meta se devuelve tal cual, y el código va aparte.
      *
      * Los suyos dicen qué pasó —«la cuenta no es profesional», «el vídeo dura
      * demasiado»— y traducirlos a «no se pudo publicar» obliga a ir al registro
-     * para averiguar lo que ya venía escrito.
+     * para averiguar lo que ya venía escrito. Pero decidir **si se reintenta**
+     * leyendo ese texto es frágil: se decide por el código.
      */
-    const error = (data.error ?? {}) as { message?: string };
+    const error = (data.error ?? {}) as {
+      message?: string;
+      code?: number;
+      error_subcode?: number;
+    };
 
-    throw new Error(error.message ?? `Instagram respondió ${response.status}.`);
+    throw new InstagramError(
+      error.message ?? `Instagram respondió ${response.status}.`,
+      Number(error.code ?? 0),
+      Number(error.error_subcode ?? 0),
+    );
   }
 
   return data;
