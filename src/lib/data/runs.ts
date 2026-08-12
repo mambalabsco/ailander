@@ -83,7 +83,13 @@ export async function recordRun(input: {
       cache_read_tokens: input.cacheReadTokens ?? 0,
       web_searches: input.webSearches ?? 0,
       cost_usd: String(
-        estimateCost(input.model ?? "", input.inputTokens, input.outputTokens) +
+        estimateCost(
+          input.model ?? "",
+          input.inputTokens,
+          input.outputTokens,
+          input.cacheReadTokens ?? 0,
+          input.cacheWriteTokens ?? 0,
+        ) +
           // Las búsquedas web se facturan aparte: unos 10 dólares por millar.
           (input.webSearches ?? 0) * 0.01,
       ),

@@ -165,10 +165,43 @@ export async function runResearchDocument(options: {
     model,
   });
 
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+  /*
+   * El encargo va en un bloque con marca de caché, y no como texto suelto.
+   *
+   * ## Por qué aquí está el dinero
+   *
+   * Medido el 12 de agosto de 2026 sobre las 47 llamadas registradas: la
+   * investigación se llevó 15,4 millones de tokens de **entrada** —dos tercios
+   * de todo el gasto de la plataforma— contra apenas 1,07 de salida. Esa
+   * desproporción no es un prompt gigante: es el bucle de búsqueda, que
+   * reprocesa el encargo entero en cada vuelta, hasta doce por documento, más
+   * hasta siete peticiones por las reanudaciones. El mismo texto, pagado a
+   * precio entero veintitantas veces.
+   *
+   * Con la marca, la primera vuelta escribe la caché —cuesta un 25% más— y
+   * todas las demás la leen a una décima parte. A la segunda lectura ya sale a
+   * cuenta, y aquí se lee muchas más veces que dos.
+   *
+   * ## Cómo se comprueba que funciona, en vez de creerlo
+   *
+   * Mirando `cache_read_tokens` en el panel de Gasto. Si sale cero después de
+   * esto, algo variable se está colando delante del bloque marcado y la caché
+   * no está sirviendo de nada: el prefijo tiene que ser idéntico byte a byte.
+   */
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: [{ type: "text", text: prompt, cache_control: { type: "ephemeral" } }],
+    },
+  ];
 
   let totalInput = 0;
   let totalOutput = 0;
+  // Aparte de la entrada, porque se pagan a otro precio: leer es una décima
+  // parte y escribir, una vez y cuarto. Sumarlos a `totalInput` haría que el
+  // panel no viera nunca el ahorro.
+  let totalCacheRead = 0;
+  let totalCacheWrite = 0;
   let webSearches = 0;
   let accumulated = "";
 
@@ -197,6 +230,8 @@ export async function runResearchDocument(options: {
 
       totalInput += message.usage.input_tokens;
       totalOutput += message.usage.output_tokens;
+      totalCacheRead += message.usage.cache_read_input_tokens ?? 0;
+      totalCacheWrite += message.usage.cache_creation_input_tokens ?? 0;
       webSearches += message.content.filter(
         (block) => block.type === "server_tool_use",
       ).length;
@@ -320,6 +355,8 @@ export async function runResearchDocument(options: {
           error: failure.message,
           inputTokens: totalInput,
           outputTokens: totalOutput,
+          cacheReadTokens: totalCacheRead,
+          cacheWriteTokens: totalCacheWrite,
           webSearches,
         });
 
@@ -357,6 +394,8 @@ export async function runResearchDocument(options: {
         model,
         inputTokens: totalInput,
         outputTokens: totalOutput,
+        cacheReadTokens: totalCacheRead,
+        cacheWriteTokens: totalCacheWrite,
         webSearches,
       });
 

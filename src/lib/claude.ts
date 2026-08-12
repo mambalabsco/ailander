@@ -67,9 +67,42 @@ const PRICES: Record<string, { input: number; output: number }> = {
   "claude-haiku-4-5": { input: 1, output: 5 },
 };
 
-export function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+/**
+ * Lo que cuesta la caché, en múltiplos del precio de entrada.
+ *
+ * Leer de la caché cuesta una décima parte; escribirla, una vez y cuarto. De ahí
+ * sale el punto de equilibrio: **a la segunda lectura ya sale a cuenta**
+ * (1,25 + 0,1 = 1,35 contra 2 sin caché). En una tanda de investigación, donde
+ * el mismo prefijo se reprocesa en cada vuelta de búsqueda, se lee muchas más
+ * veces que dos.
+ */
+const CACHE_READ = 0.1;
+const CACHE_WRITE = 1.25;
+
+/**
+ * El coste estimado, contando la caché.
+ *
+ * Los tokens leídos de la caché **no** vienen dentro de `inputTokens`: la API
+ * los devuelve aparte. Sumarlos al precio entero era el fallo que hacía inútil
+ * medir el ahorro — se activaba la caché, el gasto real bajaba, y el panel
+ * seguía enseñando el mismo número.
+ */
+export function estimateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
+): number {
   const price = PRICES[model] ?? PRICES["claude-opus-5"];
-  return (inputTokens / 1_000_000) * price.input + (outputTokens / 1_000_000) * price.output;
+  const perInputToken = price.input / 1_000_000;
+
+  return (
+    inputTokens * perInputToken +
+    cacheReadTokens * perInputToken * CACHE_READ +
+    cacheWriteTokens * perInputToken * CACHE_WRITE +
+    (outputTokens / 1_000_000) * price.output
+  );
 }
 
 /**
