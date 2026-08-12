@@ -32,12 +32,15 @@ import type { ProductImage } from "@/types/visuals";
  */
 export function LandingViewer({
   productId,
+  mercado,
   page,
   preview,
   html,
   images,
 }: {
   productId: string;
+  /** El mercado en el que se está mirando la ficha, tal cual sale de la URL. */
+  mercado?: string;
   page: LandingPage;
   /** Con las imágenes puestas. Renderizado en el servidor: la plantilla vive allí. */
   preview: string;
@@ -121,7 +124,7 @@ export function LandingViewer({
       <div className="mb-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
         <div className="flex flex-wrap items-center gap-3">
           <GenerateButton
-            action={() => publishLandingAction({ id: page.id, productId, asProduct, asDraft })}
+            action={() => publishLandingAction({ id: page.id, productId, asProduct, asDraft, mercado })}
             label={page.shopifyUrl ? "Actualizar en Shopify" : "Publicar en Shopify"}
             hint={
               page.shopifyUrl

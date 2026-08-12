@@ -20,11 +20,14 @@ import type { ProductImage } from "@/types/visuals";
  */
 export function LandingsTab({
   productId,
+  mercado,
   storeDomain,
   landings,
   experiments,
 }: {
   productId: string;
+  /** El mercado de la URL, para que publicar sepa a qué dominio va. */
+  mercado?: string;
   storeDomain?: string;
   landings: { page: LandingPage; preview: string; html: string; images: ProductImage[] }[];
   experiments: LandingExperiment[];
@@ -79,6 +82,7 @@ export function LandingsTab({
               <LandingViewer
                 key={page.id}
                 productId={productId}
+                mercado={mercado}
                 page={page}
                 preview={preview}
                 html={html}

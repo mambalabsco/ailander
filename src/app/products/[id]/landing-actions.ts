@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canPublish } from "@/lib/market-price";
+import { slugForMarket } from "@/lib/market-slug";
+import { findMarket } from "@/types/store";
 import { marketContextFor } from "@/lib/market-context";
 import { findProductAnywhere } from "@/lib/products";
 import { findStore } from "@/lib/store-registry";
@@ -423,6 +426,38 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
       const store = await findStore(product.storeId);
       if (!store) throw new Error("No se encontró la tienda del producto.");
 
+      /*
+       * Las dos comprobaciones que separan publicar de publicar mal.
+       *
+       * 1. Sin mercado no hay dónde publicar: el dominio y el prefijo de ruta
+       *    salen de él. Desde general siempre hay que elegir uno antes.
+       * 2. Un precio convertido no sale a la calle. «$10.847» se lee como un
+       *    error de la tienda, no como un precio; confirmarlo es un clic en
+       *    Precios y lo vuelve manual.
+       *
+       * Van aquí, antes de subir nada: descubrirlo después de cargar veinte
+       * imágenes cuesta la espera entera y deja medio trabajo hecho.
+       */
+      const marketContext = await marketContextFor(product, readText(raw.mercado) || undefined);
+      const publishMarket =
+        marketContext.selection.kind === "market"
+          ? findMarket(store, marketContext.selection.marketId)
+          : undefined;
+
+      if (!publishMarket) {
+        throw new Error(
+          "Elige un mercado antes de publicar: la página se publica en su dominio, y en general no hay ninguno.",
+        );
+      }
+
+      if (!canPublish(marketContext.price)) {
+        throw new Error(
+          marketContext.price
+            ? "El precio de este mercado es convertido. Confírmalo en la pestaña de Precios antes de publicar: un precio sin redondear se lee como un error de la tienda."
+            : "Este mercado no tiene precio. Ponlo en la pestaña de Precios antes de publicar.",
+        );
+      }
+
       const images = await readProductImages(productId);
 
       /*
@@ -839,7 +874,7 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
       const crear = () =>
         createPage(store, {
           title: page.title,
-          handle: page.slug,
+          handle: slugForMarket(page.slug, publishMarket),
           body: suffix ? "" : html,
           /*
            * Cadena vacía y no `undefined`.

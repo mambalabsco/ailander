@@ -551,6 +551,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       {activeTab === "landings" ? (
         <LandingsTab
           productId={product.id}
+          mercado={mercado}
           storeDomain={store?.domain?.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}
           landings={landingViews}
           experiments={experiments}
