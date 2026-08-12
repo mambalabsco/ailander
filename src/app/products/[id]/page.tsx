@@ -44,6 +44,7 @@ import { marketLabel } from "@/types/store";
 import { MarketSwitcher } from "@/app/products/[id]/market-switcher";
 import { PanelTab } from "@/app/products/[id]/tab-panel";
 import { InfoTab } from "@/app/products/[id]/tab-info";
+import { PricesTab } from "@/app/products/[id]/tab-precios";
 import { DocumentsTab } from "@/app/products/[id]/tab-documents";
 import { HooksTab } from "@/app/products/[id]/tab-hooks";
 import { CompetitorsTab } from "@/app/products/[id]/tab-competitors";
@@ -61,6 +62,7 @@ export const dynamic = "force-dynamic";
 const TABS = [
   { id: "panel", label: "Panel" },
   { id: "info", label: "Información" },
+  { id: "precios", label: "Precios" },
   { id: "oferta", label: "Oferta y notas" },
   { id: "documentos", label: "Documentos" },
   { id: "competidores", label: "Competidores" },
@@ -150,6 +152,14 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   const marketOptions = (productStore?.markets ?? [])
     .filter((market) => marketIds.includes(market.id))
     .map((market) => ({ id: market.id, label: marketLabel(market) }));
+
+  /*
+   * La pestaña de precios solo aparece con más de un mercado.
+   *
+   * Con uno no hay nada que decidir: el precio es el de la ficha y ya se edita
+   * en Editar producto. Una pestaña más para enseñar una sola fila es ruido.
+   */
+  const visibleTabs = TABS.filter((item) => item.id !== "precios" || showSelector(marketIds));
 
   const productAds = ads.filter((ad) => ad.relatedProductId === product.id);
 
@@ -383,13 +393,20 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
 
       {/* Navegación por pestañas en la URL: compartible y sin perder estado. */}
       <nav className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-        {TABS.map((item) => {
+        {visibleTabs.map((item) => {
           const active = item.id === activeTab;
           const count = counts[item.id];
           return (
             <Link
               key={item.id}
-              href={`/products/${product.id}?tab=${item.id}`}
+              /*
+               * El mercado viaja en el enlace.
+               *
+               * Sin esto, cambiar de pestaña devolvía a general sin avisar: se
+               * estaría escribiendo un copy para México y al pasar a Copys la
+               * ficha ya no sabría en qué país está.
+               */
+              href={`/products/${product.id}?tab=${item.id}${mercado ? `&mercado=${mercado}` : ""}`}
               scroll={false}
               aria-current={active ? "page" : undefined}
               className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition ${
@@ -415,6 +432,18 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           research={research}
           stores={stores}
           marketContext={marketContext}
+        />
+      ) : null}
+      {activeTab === "precios" ? (
+        <PricesTab
+          productId={product.id}
+          basePrice={product.price}
+          baseCurrency={money.currency}
+          storeMarkets={productStore?.markets ?? []}
+          prices={productMarkets}
+          // Hoy sale del servidor: en el cliente sería la fecha del navegador, y
+          // con eso una conversión parecería vieja o nueva según quién la mire.
+          today={new Date().toISOString().slice(0, 10)}
         />
       ) : null}
       {activeTab === "info" ? (
