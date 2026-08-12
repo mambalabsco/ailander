@@ -61,6 +61,64 @@ export interface ResearchRunResult {
 /** Cuántas veces se reanuda un `pause_turn` antes de rendirse. */
 const MAX_CONTINUATIONS = 6;
 
+/**
+ * La caché sobre lo que se acumula, que es lo caro de verdad.
+ *
+ * ## Por qué el encargo no bastaba
+ *
+ * Medido el 12 de agosto de 2026: un encargo de investigación son unos 1.500
+ * tokens, y una llamada gasta **328.000 de entrada de media**. O sea que el
+ * encargo es el 0,4% de lo que se manda una vez; el resto son los resultados de
+ * búsqueda, que se acumulan y se reprocesan enteros en cada vuelta. Cachear solo
+ * el encargo ahorraba un dígito porcentual. Lo que hay que cachear es la
+ * conversación entera según crece.
+ *
+ * ## Por qué la marca se mueve en vez de sumarse
+ *
+ * Porque la API admite **cuatro puntos de caché por petición** y aquí hay hasta
+ * seis reanudaciones: marcar cada turno daría siete y la petición se rechaza.
+ * No hace falta: un punto cubre todo lo que va por delante de él, así que basta
+ * con el encargo y los dos últimos turnos. Se guardan dos y no uno por la
+ * ventana de búsqueda hacia atrás —la API mira como mucho veinte bloques—, y un
+ * turno con muchos resultados de búsqueda puede pasarse de veinte él solo.
+ */
+const MARCA = { type: "ephemeral" } as const;
+
+/** Cuántos turnos del asistente conservan su marca, además del encargo. */
+const TURNOS_MARCADOS = 2;
+
+/**
+ * Copia el contenido poniendo la marca en su último bloque de **texto**.
+ *
+ * En el último de texto y no en el último a secas: un turno con búsqueda acaba
+ * a menudo en un bloque de resultado de herramienta, y esos no son de los que
+ * admiten la marca. Como el punto de caché cubre todo lo anterior, marcar el
+ * último texto deja fuera como mucho la cola.
+ */
+function conMarcaDeCache(content: Anthropic.ContentBlock[]): Anthropic.ContentBlockParam[] {
+  const bloques = [...content] as Anthropic.ContentBlockParam[];
+
+  for (let i = bloques.length - 1; i >= 0; i -= 1) {
+    const bloque = bloques[i];
+
+    if (bloque.type === "text") {
+      bloques[i] = { ...bloque, cache_control: MARCA };
+      return bloques;
+    }
+  }
+
+  return bloques;
+}
+
+/** Quita la marca de un turno, para no pasarse del tope de cuatro. */
+function sinMarcaDeCache(message: Anthropic.MessageParam): void {
+  if (typeof message.content === "string") return;
+
+  message.content = message.content.map((bloque) =>
+    "cache_control" in bloque && bloque.cache_control ? { ...bloque, cache_control: null } : bloque,
+  );
+}
+
 /** El texto de la respuesta, ignorando los bloques de herramienta. */
 function textFrom(content: Anthropic.ContentBlock[]): string {
   return content
@@ -274,7 +332,18 @@ export async function runResearchDocument(options: {
        * mensaje de usuario del tipo «continúa»: el servidor lo detecta solo.
        */
       if (message.stop_reason === "pause_turn") {
-        messages.push({ role: "assistant", content: message.content });
+        messages.push({ role: "assistant", content: conMarcaDeCache(message.content) });
+
+        /*
+         * Al añadir el turno nuevo se le quita la marca al de hace dos, para
+         * quedarse siempre en tres puntos —el encargo y los dos últimos— y no
+         * llegar nunca al tope de cuatro. Quitar una marca no borra lo que ya
+         * está cacheado: lo cacheado vive por su tiempo de vida, y el punto
+         * nuevo, que va más adelante, lee igual todo lo anterior.
+         */
+        const viejo = messages.length - 1 - TURNOS_MARCADOS;
+        if (viejo >= 1) sinMarcaDeCache(messages[viejo]);
+
         continue;
       }
 
