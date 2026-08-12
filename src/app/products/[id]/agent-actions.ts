@@ -135,6 +135,7 @@ export async function agentChatAction(input: unknown): Promise<{
               productId,
               format: readText(args.formato) || "feed",
               count: Number(args.cuantas) || 3,
+              focus: readText(args.enfoque),
             });
 
             if (result.ok) did.push(result.message);

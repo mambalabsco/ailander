@@ -6,7 +6,7 @@ import { INSTAGRAM_POSTS_SCHEMA } from "@/lib/generation-schemas";
 import { findProductAnywhere } from "@/lib/products";
 import { readProductResearch } from "@/lib/research-store";
 import { addPosts, deletePost, listPosts, updatePost } from "@/lib/data/instagram";
-import { buildCaption, buildContentPrompt, findFormat } from "@/lib/instagram/content";
+import { buildCaption, buildContentPrompt, buildFocusNote, findFormat } from "@/lib/instagram/content";
 import { countsFor, recentSummary, weekPlan } from "@/lib/instagram/plan";
 import { buildHookGuide, pickArchetypes } from "@/lib/instagram/hooks";
 
@@ -37,6 +37,15 @@ export async function generateInstagramAction(input: unknown): Promise<{
    * más que la perfección— pero tiene que tomarse a propósito, no heredarse.
    */
   const auto = raw.auto === true;
+
+  /*
+   * El enfoque, tal como llegó.
+   *
+   * Se declaraba en la herramienta del agente y se tiraba aquí: el agente
+   * contestaba «he insistido en el sueño» y escribía lo de siempre. Un fallo
+   * que no da error es el que más tarda en encontrarse.
+   */
+  const focus = readText(raw.focus);
 
   if (!productId) return { ok: false, message: "Falta el producto." };
 
@@ -104,6 +113,7 @@ export async function generateInstagramAction(input: unknown): Promise<{
           count,
         }),
         memoria,
+        buildFocusNote(focus),
         /*
          * Una fórmula distinta por pieza, y siguiendo donde se quedó.
          *

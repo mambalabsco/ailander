@@ -159,3 +159,28 @@ export function buildContentPrompt(input: {
     `- Escribe en el español de ${input.country}.`,
   ].join("\n");
 }
+
+/**
+ * En qué insistir esta tanda, con las palabras de quien lo pidió.
+ *
+ * ## Por qué literal y no reformulado
+ *
+ * Porque «insiste en el sueño» y «habla del descanso nocturno» no piden lo
+ * mismo, y quien dijo lo primero no reconoce lo segundo en lo que sale. El
+ * encargo lo repite tal cual y deja que el modelo lo interprete una sola vez,
+ * no dos.
+ */
+export function buildFocusNote(focus: string): string {
+  const limpio = focus.trim();
+
+  if (!limpio) return "";
+
+  return [
+    `## En qué insistir`,
+    ``,
+    `«${limpio}»`,
+    ``,
+    `Vale para **todas** las piezas de esta tanda, no para una. No es el tema de`,
+    `cada publicación: es el ángulo desde el que se mira lo que ya ibas a contar.`,
+  ].join("\n");
+}

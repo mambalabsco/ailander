@@ -7,6 +7,7 @@ import {
   VISIBLE_MAX,
   buildCaption,
   buildContentPrompt,
+  buildFocusNote,
   cleanHashtags,
   findFormat,
   visiblePart,
@@ -76,4 +77,22 @@ test("el encargo dice que la primera línea es lo único que se lee", () => {
   assert.ok(prompt.includes("3 y 90 segundos"), "la duración del formato");
   assert.ok(prompt.includes("no qué se siente"), "la escena, filmable");
   assert.ok(prompt.includes("curar"), "sin promesas médicas");
+});
+
+test("el enfoque entra en el encargo con las palabras de quien lo pidió", () => {
+  /*
+   * Parafrasearlo lo estropea: «insiste en el sueño» y «habla de descanso
+   * nocturno» no piden lo mismo, y quien lo dijo no reconoce lo segundo.
+   */
+  const nota = buildFocusNote("  insiste en el sueño  ");
+
+  assert.ok(nota.includes("insiste en el sueño"), "va literal");
+  assert.ok(!nota.includes("  insiste"), "sin los espacios de sobra");
+  assert.ok(nota.toLowerCase().includes("todas"), "manda para todas las piezas de la tanda");
+});
+
+test("sin enfoque no se añade una sección vacía", () => {
+  // Un «## En qué insistir» sin nada debajo invita a inventarse un tema.
+  assert.equal(buildFocusNote(""), "");
+  assert.equal(buildFocusNote("   "), "");
 });
