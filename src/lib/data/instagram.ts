@@ -184,7 +184,7 @@ export async function claimDuePost(): Promise<Post | null> {
 /** Cierra una publicación: salió o no salió, y con qué identificador. */
 export async function finishPost(
   id: string,
-  outcome: { instagramId?: string; error?: string },
+  outcome: { instagramId?: string; igUserId?: string; error?: string },
 ): Promise<void> {
   const { supabase } = await requireContext();
 
@@ -195,6 +195,10 @@ export async function finishPost(
         ? {
             status: "publicado",
             instagram_id: outcome.instagramId,
+            // Solo si viene: sin esto, una pieza publicada fuera del cron no
+            // cuenta para el tope de la cuenta y el autopiloto cree que le
+            // queda cupo cuando no le queda.
+            ...(outcome.igUserId !== undefined ? { ig_user_id: outcome.igUserId } : {}),
             published_at: new Date().toISOString(),
             error: "",
           }

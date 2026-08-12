@@ -12,10 +12,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * un proceso que no tiene navegador**. Y porque el cliente que usa salta RLS,
  * así que la seguridad deja de ponerla la base de datos.
  *
- * De ahí la regla de este archivo, que se cumple sin excepciones: **toda
- * consulta lleva su `workspace_id`**. Una que no lo lleve devuelve las
- * publicaciones de otro cliente sin dar ningún error, que es la peor forma que
- * tiene un fallo de manifestarse.
+ * De ahí la regla de este archivo: **toda consulta lleva su `workspace_id`**,
+ * con dos excepciones y solo dos: `contarUltimas24h` y `ultimaPublicacion`.
+ * Ambas filtran por `ig_user_id`, no por espacio, porque el tope de 25/24h y
+ * la separación mínima los impone Instagram sobre **la cuenta real**, no sobre
+ * el espacio interno — filtrar por espacio daría un recuento que permite
+ * pasarse del límite que de verdad importa. Las dos devuelven solo agregados
+ * de filas ya públicas (`status = 'publicado'`), nunca contenido. Cualquier
+ * otra consulta sin espacio es un fallo: devuelve las publicaciones de otro
+ * cliente sin dar ningún error, que es la peor forma que tiene un fallo de
+ * manifestarse.
  */
 
 export interface AutopilotRow {
@@ -42,13 +48,17 @@ export interface AutopilotRow {
 export async function listarActivos(): Promise<AutopilotRow[]> {
   const supabase = createAdminClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("instagram_autopilot")
     .select("*")
     .eq("activo", true)
     .eq("pausado_por", "")
     .not("ig_user_id", "is", null)
     .not("workspace_id", "is", null);
+
+  if (error) {
+    throw new Error(`No se pudieron listar los autopilotos activos: ${error.message}`);
+  }
 
   return (data ?? []).map((row) => ({
     productId: row.product_id,
@@ -70,12 +80,18 @@ export async function contarUltimas24h(igUserId: string): Promise<number> {
   const supabase = createAdminClient();
   const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from("instagram_posts")
     .select("id", { count: "exact", head: true })
     .eq("ig_user_id", igUserId)
     .eq("status", "publicado")
     .gte("published_at", desde);
+
+  if (error) {
+    throw new Error(
+      `No se pudo contar las publicaciones de las últimas 24h de ${igUserId}: ${error.message}`,
+    );
+  }
 
   return count ?? 0;
 }
@@ -84,13 +100,21 @@ export async function contarUltimas24h(igUserId: string): Promise<number> {
 export async function ultimaPublicacion(igUserId: string): Promise<string | null> {
   const supabase = createAdminClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("instagram_posts")
     .select("published_at")
     .eq("ig_user_id", igUserId)
     .eq("status", "publicado")
+    // `DESC` en Postgres es `NULLS FIRST` por defecto, y la columna es
+    // nullable: sin este filtro, una fila publicada con fecha nula se
+    // colaría primero y apagaría la separación mínima para siempre.
+    .not("published_at", "is", null)
     .order("published_at", { ascending: false })
     .limit(1);
+
+  if (error) {
+    throw new Error(`No se pudo leer la última publicación de ${igUserId}: ${error.message}`);
+  }
 
   return (data ?? [])[0]?.published_at ?? null;
 }
@@ -109,7 +133,7 @@ export async function listasDe(
 ): Promise<{ id: string; scheduledAt: string }[]> {
   const supabase = createAdminClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("instagram_posts")
     .select("id, scheduled_at")
     .eq("workspace_id", workspaceId)
@@ -118,6 +142,10 @@ export async function listasDe(
     .not("media_url", "is", null)
     .gte("scheduled_at", new Date().toISOString())
     .order("scheduled_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`No se pudo listar la cola de ${productId}: ${error.message}`);
+  }
 
   return (data ?? []).map((row) => ({
     id: row.id,
@@ -135,9 +163,17 @@ export async function listasDe(
  * todas las piezas vencidas y devolver una. Las demás quedan bloqueadas media
  * hora sin que nadie las publique.
  *
- * En dos pasos: se elige el candidato ordenado, y se marca **por su id y solo si
- * sigue aprobado**. Si otra vuelta llegó antes, el `update` no encuentra nada y
- * devuelve vacío — que es exactamente lo que evita la doble publicación.
+ * En dos pasos: se elige el candidato ordenado, y se marca repitiendo **el
+ * mismo predicado completo** con el que se eligió, no el estado que se leyó.
+ *
+ * Repetir el estado leído (`status = candidato.status`) no basta en la rama
+ * de fila colgada: si el candidato ya estaba en `publicando`, dos vueltas
+ * solapadas ejecutan `update ... where status = 'publicando'` y el predicado
+ * sigue siendo cierto después de que la primera haga commit — las dos lo
+ * pasan y las dos publican. Repitiendo el `or` completo, tras el primer
+ * commit `claimed_at` vale `ahora`, que ya no es anterior a `muerta`, así que
+ * la segunda vuelta no encuentra nada que actualizar — que es exactamente lo
+ * que evita la doble publicación.
  */
 export async function reservarVencida(row: AutopilotRow): Promise<{
   id: string;
@@ -150,30 +186,39 @@ export async function reservarVencida(row: AutopilotRow): Promise<{
 
   const ahora = new Date();
   const muerta = new Date(ahora.getTime() - 30 * 60 * 1000).toISOString();
+  const predicado = `status.eq.aprobado,and(status.eq.publicando,claimed_at.lt.${muerta})`;
 
-  const { data: candidatos } = await supabase
+  const { data: candidatos, error: errorCandidatos } = await supabase
     .from("instagram_posts")
-    .select("id, status, claimed_at")
+    .select("id")
     .eq("workspace_id", row.workspaceId)
     .eq("product_id", row.productId)
     .lte("scheduled_at", ahora.toISOString())
     .not("media_url", "is", null)
-    .or(`status.eq.aprobado,and(status.eq.publicando,claimed_at.lt.${muerta})`)
+    .or(predicado)
     .order("scheduled_at", { ascending: true })
     .limit(1);
+
+  if (errorCandidatos) {
+    throw new Error(
+      `No se pudo buscar una pieza vencida de ${row.productId}: ${errorCandidatos.message}`,
+    );
+  }
 
   const candidato = (candidatos ?? [])[0];
   if (!candidato) return null;
 
-  const { data: reservadas } = await supabase
+  const { data: reservadas, error: errorReserva } = await supabase
     .from("instagram_posts")
     .update({ status: "publicando", claimed_at: ahora.toISOString() })
     .eq("id", candidato.id)
     .eq("workspace_id", row.workspaceId)
-    // La condición es la del estado que se leyó: si cambió entre la lectura y
-    // ahora, esta vuelta se queda sin nada y la otra publica.
-    .eq("status", candidato.status)
+    .or(predicado)
     .select("id, caption, media_url, format, media_kind");
+
+  if (errorReserva) {
+    throw new Error(`No se pudo reservar la pieza ${candidato.id}: ${errorReserva.message}`);
+  }
 
   const pieza = (reservadas ?? [])[0];
   if (!pieza) return null;
@@ -195,14 +240,18 @@ export async function cerrarPublicacion(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  await supabase
+  const { error } = await supabase
     .from("instagram_posts")
     .update(
       outcome.instagramId
         ? {
             status: "publicado",
             instagram_id: outcome.instagramId,
-            ig_user_id: outcome.igUserId ?? null,
+            // Solo si viene: escribir `null` aquí borraría la cuenta de una
+            // publicación que sí salió, y esa columna es el único filtro de
+            // `contarUltimas24h` y `ultimaPublicacion` — la dejaría invisible
+            // para el tope y la separación mínima de esa cuenta.
+            ...(outcome.igUserId !== undefined ? { ig_user_id: outcome.igUserId } : {}),
             published_at: new Date().toISOString(),
             error: "",
           }
@@ -219,6 +268,10 @@ export async function cerrarPublicacion(
     )
     .eq("id", id)
     .eq("workspace_id", workspaceId);
+
+  if (error) {
+    throw new Error(`No se pudo cerrar la publicación ${id}: ${error.message}`);
+  }
 }
 
 /**
@@ -235,16 +288,20 @@ export async function anotarFallo(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  const { data } = await supabase
+  const { data, error: errorLectura } = await supabase
     .from("instagram_autopilot")
     .select("fallos_seguidos")
     .eq("product_id", productId)
     .limit(1);
 
+  if (errorLectura) {
+    throw new Error(`No se pudo leer los fallos seguidos de ${productId}: ${errorLectura.message}`);
+  }
+
   const seguidos = ((data ?? [])[0]?.fallos_seguidos ?? 0) + 1;
   const pausar = permanente || seguidos >= 3;
 
-  await supabase
+  const { error: errorEscritura } = await supabase
     .from("instagram_autopilot")
     .update({
       fallos_seguidos: seguidos,
@@ -255,14 +312,29 @@ export async function anotarFallo(
         : "",
     })
     .eq("product_id", productId);
+
+  if (errorEscritura) {
+    throw new Error(`No se pudo anotar el fallo de ${productId}: ${errorEscritura.message}`);
+  }
 }
 
-/** Salió bien: se borra la cuenta de fallos y se anota cuándo. */
+/**
+ * Salió bien: se borra la cuenta de fallos y se anota cuándo.
+ *
+ * No toca `pausado_por`. `listarActivos` ya excluye las filas pausadas, así
+ * que si esta función se llama es porque la fila no estaba pausada al
+ * empezar la vuelta — y si alguien la pausó a mano mientras tanto, borrar el
+ * motivo aquí se llevaría esa pausa por delante sin que nadie lo pidiera.
+ */
 export async function limpiarFallos(productId: string, cuando: string): Promise<void> {
   const supabase = createAdminClient();
 
-  await supabase
+  const { error } = await supabase
     .from("instagram_autopilot")
-    .update({ fallos_seguidos: 0, pausado_por: "", ultima_publicacion_at: cuando })
+    .update({ fallos_seguidos: 0, ultima_publicacion_at: cuando })
     .eq("product_id", productId);
+
+  if (error) {
+    throw new Error(`No se pudo limpiar los fallos de ${productId}: ${error.message}`);
+  }
 }
