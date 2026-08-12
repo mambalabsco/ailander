@@ -2,8 +2,11 @@ import Link from "next/link";
 import { SectionCard } from "@/components/section-card";
 import { InstagramQueue } from "@/components/instagram-queue";
 import { AgentChat } from "@/components/agent-chat";
+import { AutopilotPanel } from "@/components/autopilot-panel";
 import { getCombinedProducts } from "@/lib/products";
 import { listPosts } from "@/lib/data/instagram";
+import { readAutopilot } from "@/lib/data/autopilot";
+import { listPublishableAccounts } from "@/lib/instagram/accounts";
 
 export const metadata = { title: "Instagram" };
 export const dynamic = "force-dynamic";
@@ -19,6 +22,15 @@ export default async function InstagramPage({
   const actual = products.find((one) => one.id === producto) ?? products[0];
 
   const posts = actual ? await listPosts(actual.id).catch(() => []) : [];
+
+  const [autopilot, cuentas] = actual
+    ? await Promise.all([
+        readAutopilot(actual.id).catch(() => null),
+        // Si Meta no contesta, la lista sale vacía y el panel lo dice. Que no
+        // conteste no debería dejar la página en blanco.
+        listPublishableAccounts().catch(() => []),
+      ])
+    : [null, []];
 
   return (
     <div className="space-y-6">
@@ -51,6 +63,24 @@ export default async function InstagramPage({
           </Link>
         ))}
       </div>
+
+      {actual ? (
+        <SectionCard
+          title="Autopiloto"
+          description="Que la cuenta se lleve sola: escribe, genera la imagen, programa y publica."
+        >
+          <AutopilotPanel
+            productId={actual.id}
+            estado={autopilot}
+            cuentas={cuentas}
+            listas={
+              posts.filter(
+                (one) => one.status === "aprobado" && one.mediaUrl && one.scheduledAt,
+              ).length
+            }
+          />
+        </SectionCard>
+      ) : null}
 
       {actual ? (
         <SectionCard
