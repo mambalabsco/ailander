@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { decide, horaProgramada } from "@/lib/instagram/autopilot";
+import { cabenPorDia, decide, horaProgramada, SEPARACION_MINUTOS } from "@/lib/instagram/autopilot";
 import { esPermanente } from "@/lib/instagram/errors";
 import { publishNow } from "@/lib/instagram/publish";
 import {
@@ -277,7 +277,32 @@ async function rellenar(
 
   const base = new Date();
 
-  for (const [index, pieza] of sinMedia.entries()) {
+  /*
+   * Si la ventana no da para las `por_dia` pedidas, se dice.
+   *
+   * El reparto no las apila: estira a más días. Pero callándolo, quien puso
+   * cinco al día en una franja de cuatro horas seguiría creyendo que publica
+   * cinco al día, y la cuenta publicaría tres.
+   */
+  const caben = cabenPorDia(row.horaDesde, row.horaHasta);
+
+  if (caben < row.porDia) {
+    parte.push(
+      `${row.productId}: entre las ${row.horaDesde} y las ${row.horaHasta} solo caben ${caben} al día` +
+        ` con ${SEPARACION_MINUTOS} minutos entre ellas. Las ${row.porDia} pedidas se reparten en más días.`,
+    );
+  }
+
+  /*
+   * El hueco lo lleva la cuenta de las colocadas, no el índice del bucle.
+   *
+   * Con el índice, una pieza cuya imagen falla se llevaría su hueco por
+   * delante: el reparto dejaría un agujero en el calendario y las siguientes
+   * saldrían a destiempo sin que nada lo dijera.
+   */
+  let colocadas = 0;
+
+  for (const pieza of sinMedia) {
     const media = await generatePostMediaAction({ id: pieza.id, productId: row.productId });
 
     if (!media.ok) {
@@ -290,9 +315,17 @@ async function rellenar(
     await programar(
       pieza.id,
       row.workspaceId,
-      horaProgramada(base, yaHay + index + 1, row.horaDesde, row.horaHasta, pieza.id),
+      horaProgramada({
+        base,
+        hueco: yaHay + colocadas,
+        porDia: row.porDia,
+        horaDesde: row.horaDesde,
+        horaHasta: row.horaHasta,
+        semilla: pieza.id,
+      }),
     );
 
+    colocadas += 1;
     parte.push(`${row.productId}: ${pieza.id} lista y programada.`);
   }
 }

@@ -98,6 +98,33 @@ function semillaNumerica(texto: string): number {
 }
 
 /**
+ * Cuántos minutos dura la ventana, contando de `desde:00` a `hasta:59`.
+ *
+ * Se recorta a 24h menos la separación mínima por un caso concreto: con la
+ * ventana abierta de 0 a 23, la última pieza de un día podía caer a las 23:59 y
+ * la primera del siguiente a las 00:00 — dos publicaciones con un minuto de
+ * diferencia sin que ninguna comprobación de dentro del día lo viera, porque
+ * las dos estaban en su sitio.
+ */
+function ventanaMinutos(horaDesde: number, horaHasta: number): number {
+  const desde = Math.min(horaDesde, horaHasta);
+  const hasta = Math.max(horaDesde, horaHasta);
+
+  return Math.min((hasta - desde + 1) * 60, 24 * 60 - SEPARACION_MINUTOS);
+}
+
+/**
+ * Cuántas piezas caben en la ventana con la separación mínima entre ellas.
+ *
+ * La ventana de 18 a 21 son cuatro horas: caben tres (18:00, 19:30, 21:00). Un
+ * `por_dia` de cinco no cabe ahí, y apilarlas es lo que la separación existe
+ * para impedir. Quien llama lo dice en el parte en vez de callárselo.
+ */
+export function cabenPorDia(horaDesde: number, horaHasta: number): number {
+  return Math.floor((ventanaMinutos(horaDesde, horaHasta) - 1) / SEPARACION_MINUTOS) + 1;
+}
+
+/**
  * A qué hora sale una pieza, dentro de la ventana y sin clavar el minuto.
  *
  * Hoy `planWeekAction` pone las 19:00 en punto todos los días. Publicar siete
@@ -105,24 +132,60 @@ function semillaNumerica(texto: string): number {
  * único de la lista del agente ajeno que sí conviene imitar — no para engañar a
  * nadie, sino porque una cuenta que publica a las 19:00:00 clavadas se lee como
  * una máquina.
+ *
+ * ## Por qué el hueco y no el día
+ *
+ * Porque antes esto colocaba **una por día de calendario** mientras `decide`
+ * apuntaba a `colchonDias × porDia` piezas. Con `por_dia: 2` se escribían seis
+ * repartidas en seis días: la cuenta seguía publicando una vez al día y el
+ * colchón parecía lleno para siempre. El panel ofrece de 1 a 5 y cuatro de esos
+ * cinco valores no hacían nada.
+ *
+ * Ahora el hueco es global —0 es el primero libre— y de ahí salen el día y el
+ * puesto dentro del día. Si en la ventana no caben las `porDia` pedidas, se
+ * colocan las que caben y el resto pasa al día siguiente: **no se apilan**.
+ * Estirar el reparto es peor que perderlas —una pieza sin hora no la publica
+ * nadie y nadie la ve— pero se dice en el parte, que es lo que permite corregir
+ * la ventana o el ritmo.
  */
-export function horaProgramada(
-  base: Date,
-  diaIndex: number,
-  horaDesde: number,
-  horaHasta: number,
-  semilla: string,
-): string {
-  const cuando = new Date(base);
-  cuando.setUTCDate(base.getUTCDate() + diaIndex);
+export function horaProgramada(opciones: {
+  base: Date;
+  /** Qué hueco de la cola ocupa esta pieza. 0 es el primero libre. */
+  hueco: number;
+  porDia: number;
+  horaDesde: number;
+  horaHasta: number;
+  /** Para el minuto. Estable por pieza: dos vueltas no le ponen dos horas. */
+  semilla: string;
+}): string {
+  const { base, hueco, porDia, horaDesde, horaHasta, semilla } = opciones;
 
   const desde = Math.min(horaDesde, horaHasta);
-  const hasta = Math.max(horaDesde, horaHasta);
+  const ventana = ventanaMinutos(horaDesde, horaHasta);
+  const caben = Math.max(1, Math.min(Math.round(porDia) || 1, cabenPorDia(horaDesde, horaHasta)));
+
+  /*
+   * El paso es entero y la holgura es lo que sobra sobre la separación.
+   *
+   * Con el paso mínimo garantizado (`caben` sale de dividir la ventana entre la
+   * separación) y el desplazamiento acotado a la holgura, dos piezas seguidas
+   * nunca quedan a menos de 90 minutos aunque a una le toque el máximo y a la
+   * siguiente el mínimo.
+   */
+  const paso = caben > 1 ? Math.floor((ventana - 1) / (caben - 1)) : 0;
+  const holgura = caben > 1 ? paso - SEPARACION_MINUTOS : ventana - 1;
+
+  const dia = Math.floor(Math.max(0, hueco) / caben) + 1;
+  const puesto = Math.max(0, hueco) % caben;
 
   const n = semillaNumerica(semilla);
-  const horas = hasta - desde + 1;
+  // El tope de la ventana manda sobre el desplazamiento: recortar acerca la
+  // pieza a la anterior, y aun así queda a la separación mínima o más.
+  const desplazamiento = Math.min(puesto * paso + (n % (holgura + 1)), ventana - 1);
 
-  cuando.setUTCHours(desde + (n % horas), n % 60, 0, 0);
+  const cuando = new Date(base);
+  cuando.setUTCDate(base.getUTCDate() + dia);
+  cuando.setUTCHours(0, desde * 60 + desplazamiento, 0, 0);
 
   return cuando.toISOString();
 }
