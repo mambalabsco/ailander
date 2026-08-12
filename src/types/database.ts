@@ -723,6 +723,10 @@ type InstagramPostRow = {
   /** Qué se ve, para poder generar la media. */
   scene: string;
   media_url: string | null;
+  /** Si el producto sale en la imagen. Decide si se le pasa su foto de referencia. */
+  shows_product: boolean;
+  /** `imagen` o `video`. */
+  media_kind: string;
   /** `borrador` → `aprobado` → `publicando` → `publicado` | `error`. */
   status: string;
   scheduled_at: string | null;

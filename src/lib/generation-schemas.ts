@@ -588,6 +588,14 @@ export const INSTAGRAM_POSTS_SCHEMA = object({
       first: str,
       body: str,
       scene: str,
+      /*
+       * Si el producto sale en la imagen, y es lo que decide si se le pasa su
+       * foto de referencia. Pasándola siempre, el envase se cuela en todas las
+       * publicaciones y la cuenta entera parece un catálogo.
+       */
+      showsProduct: { type: "boolean" },
+      /** `imagen` o `video`. Una historia contada se ve mejor en movimiento. */
+      media: { type: "string", enum: ["imagen", "video"] },
       hashtags: { type: "array", items: str },
     }),
   },

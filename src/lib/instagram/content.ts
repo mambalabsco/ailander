@@ -138,16 +138,20 @@ export function buildContentPrompt(input: {
     ``,
     `1. **La primera línea**, de menos de ${VISIBLE_MAX} caracteres. Es lo único que se lee sin pulsar «más»: tiene que funcionar sola.`,
     `2. **El cuerpo**, hasta ${CAPTION_MAX} caracteres contando todo.`,
-    `3. **Qué se ve** en la imagen o el vídeo, descrito para poder generarlo: qué hay en el encuadre, no qué se siente.`,
+    `3. **Qué se ve**, descrito para poder generarlo: qué hay en el encuadre, no qué se siente.`,
+    `4. Si el **producto aparece** o no, y si se ve mejor en **imagen o en vídeo**.`,
     ...(input.format.seconds
       ? [
           `   Dura entre ${input.format.seconds[0]} y ${input.format.seconds[1]} segundos, y el primero decide.`,
         ]
       : []),
-    `4. **Etiquetas**: entre cinco y quince, sin almohadilla. Mezcla las de categoría con las del problema que resuelve; las de millones de publicaciones no clasifican nada.`,
+    `5. **Etiquetas**: entre cinco y quince, sin almohadilla. Mezcla las de categoría con las del problema que resuelve; las de millones de publicaciones no clasifican nada.`,
     ``,
     `## Cómo`,
     ``,
+    `- **Cada una distinta a las demás.** Una cuenta donde todas las fotos son el envase sobre una mesa se lee como un catálogo, y un catálogo no se sigue. Reparte entre: alguien usándolo, un momento del problema sin producto a la vista, un detalle macro, una escena de la vida diaria del público, un antes y después, algo del proceso o del ingrediente.`,
+    `- **El producto no tiene por qué salir.** En la mayoría no sale: sale la persona, el momento o el problema. Dilo en «showsProduct».`,
+    `- Lo que es una **historia con principio y final** pídelo en vídeo; lo que es una imagen fija que se entiende de un vistazo, en imagen.`,
     `- Una idea por publicación. Dos ideas en un pie son cero ideas.`,
     `- Sin «link en bio» como única llamada: di qué gana quien haga el gesto que le pides.`,
     `- Sin promesas de curar, revertir o eliminar enfermedades.`,

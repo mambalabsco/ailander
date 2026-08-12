@@ -11,6 +11,9 @@ export interface Post {
   hashtags: string[];
   scene: string;
   mediaUrl: string | null;
+  /** Si el producto sale. Decide si se usa su foto de referencia al generar. */
+  showsProduct: boolean;
+  mediaKind: string;
   status: string;
   scheduledAt: string | null;
   publishedAt: string | null;
@@ -25,6 +28,8 @@ const readRow = (row: {
   hashtags: string[];
   scene: string;
   media_url: string | null;
+  shows_product: boolean;
+  media_kind: string;
   status: string;
   scheduled_at: string | null;
   published_at: string | null;
@@ -37,6 +42,8 @@ const readRow = (row: {
   hashtags: row.hashtags ?? [],
   scene: row.scene,
   mediaUrl: row.media_url,
+  showsProduct: row.shows_product,
+  mediaKind: row.media_kind,
   status: row.status,
   scheduledAt: row.scheduled_at,
   publishedAt: row.published_at,
@@ -64,7 +71,14 @@ export async function listPosts(productId: string): Promise<Post[]> {
 
 export async function addPosts(
   productId: string,
-  posts: { format: string; caption: string; hashtags: string[]; scene: string }[],
+  posts: {
+    format: string;
+    caption: string;
+    hashtags: string[];
+    scene: string;
+    showsProduct: boolean;
+    mediaKind: string;
+  }[],
 ): Promise<number> {
   const { supabase, userId } = await requireContext();
 
@@ -80,6 +94,8 @@ export async function addPosts(
         caption: one.caption,
         hashtags: one.hashtags,
         scene: one.scene,
+        shows_product: one.showsProduct,
+        media_kind: one.mediaKind,
         // Nacen en borrador, siempre. Nada sale a la cuenta de la marca sin que
         // alguien lo haya leído.
         status: "borrador",

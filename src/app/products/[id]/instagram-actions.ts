@@ -46,7 +46,14 @@ export async function generateInstagramAction(input: unknown): Promise<{
       .slice(0, 4_000);
 
     const written = await generateStructured<{
-      posts: { first: string; body: string; scene: string; hashtags: string[] }[];
+      posts: {
+        first: string;
+        body: string;
+        scene: string;
+        showsProduct: boolean;
+        media: string;
+        hashtags: string[];
+      }[];
     }>({
       /*
        * El contexto va por el camino de la caché.
@@ -78,6 +85,8 @@ export async function generateInstagramAction(input: unknown): Promise<{
         }),
         hashtags: one.hashtags ?? [],
         scene: one.scene ?? "",
+        showsProduct: one.showsProduct === true,
+        mediaKind: one.media === "video" ? "video" : "imagen",
       }))
       .filter((one) => one.caption.trim());
 
@@ -178,13 +187,17 @@ export async function generatePostMediaAction(input: unknown): Promise<{
     }
 
     /*
-     * La foto del producto va de referencia, si la hay.
+     * La foto del producto **solo si el producto sale**.
      *
-     * Sin ella se genera igual —una escena sin producto es válida en
-     * Instagram—, pero se avisa: es la diferencia entre una foto de la marca y
-     * una foto de archivo con un envase inventado.
+     * Pasándola siempre, el envase se cuela en todas las publicaciones y la
+     * cuenta entera parece un catálogo. En la mayoría de las piezas lo que sale
+     * es la persona, el momento o el problema — y ahí la foto del bote no
+     * ayuda: estorba.
+     *
+     * Cuando sí sale, es imprescindible: sin ella el modelo se inventa el
+     * envase, y quien lo vea y luego reciba el producto verá que no es el mismo.
      */
-    const primary = await readPrimaryImage(productId).catch(() => null);
+    const primary = post.showsProduct ? await readPrimaryImage(productId).catch(() => null) : null;
     const references: { filename: string; bytes: Uint8Array }[] = [];
 
     if (primary?.url) {
@@ -211,7 +224,12 @@ export async function generatePostMediaAction(input: unknown): Promise<{
 
     return {
       ok: true,
-      message: references.length > 0 ? "Imagen lista." : "Imagen lista, pero sin la foto del producto: revisa el envase.",
+      message:
+        !post.showsProduct
+          ? "Imagen lista. En esta pieza el producto no sale, y es a propósito."
+          : references.length > 0
+            ? "Imagen lista, con la foto del producto de referencia."
+            : "Imagen lista, pero sin la foto del producto: revisa que el envase se parezca.",
     };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo." };
