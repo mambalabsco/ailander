@@ -116,18 +116,31 @@ create policy "audit_log: quien manda lee el de su espacio" on public.audit_log
 -- no se descubre.
 -- ---------------------------------------------------------------------------
 
+-- El mensaje nombra las políticas que quedan, y no solo cuántas.
+--
+-- Porque este `raise` aborta el despliegue entero: `db-apply.mjs` sale con
+-- código 1 al primer fallo y `actualizar.sh` corre con `set -e`, así que las
+-- migraciones que vengan detrás —que pueden ser de otra persona— no se
+-- aplican. Si eso pasa, quien lo lea tiene que poder arreglarlo sin ponerse a
+-- buscar: un recuento obliga a abrir el panel de Supabase a mano.
+--
+-- En condiciones normales esto no salta: las tres políticas que preguntaban
+-- por el papel global las elimina esta misma migración por su nombre. Salta si
+-- hay una hecha a mano en el panel, que es justo lo que se quiere descubrir.
 do $$
 declare
-  restantes integer;
+  restantes text;
 begin
-  select count(*) into restantes
+  select string_agg(format('%s en %s', policyname, tablename), '; ')
+    into restantes
   from pg_policies
   where schemaname = 'public'
     and tablename in ('profiles', 'audit_log')
     and coalesce(qual, '') || coalesce(with_check, '') like '%current_role_name%';
 
-  if restantes > 0 then
-    raise exception 'Quedan % políticas preguntando por el papel global', restantes;
+  if restantes is not null then
+    raise exception 'Quedan políticas preguntando por el papel global: %', restantes
+      using hint = 'Bórralas o reescríbelas con mando_sobre/comparte_espacio y vuelve a lanzar el despliegue.';
   end if;
 end;
 $$;
