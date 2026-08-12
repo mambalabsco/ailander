@@ -20,16 +20,51 @@ grande: toca las políticas de todas las tablas.
 
 ## 2. Ahorro
 
-Hechas las dos piezas de medir: el panel de Gasto y el «suele costar» en los
-botones caros. Faltan las palancas:
+**«Mirar antes el panel» era el consejo correcto y la sospecha era falsa.**
+Medido el 12 de agosto sobre las 122 llamadas registradas:
 
-- **Caché de prompts.** No es un ajuste: hoy cada petición manda un único bloque
-  con el contexto y los datos pegados. Cachear exige separar el trozo estable del
-  variable en `buildTextPrompt`, `buildTemplateCopyPrompt` y `buildClonePrompt`,
-  que son los tres que hacen tandas. Mirar antes el panel: quizá no son esos.
-- **Modelo más barato donde no decide nada** —leer una imagen, escribir ganchos,
-  adaptar textos ya escritos—. Nunca donde se decide estructura o se escribe el
-  copy largo: ahí un ahorro de céntimos cuesta ventas.
+| qué | USD | % |
+|---|---|---|
+| investigación | 73,02 | 80% |
+| copy | 18,17 | 20% |
+| extracción | 0,09 | — |
+
+Los tres prompts que este documento señalaba son de la ruta de copy, que es el
+20%. Y dentro de la investigación, dos tercios son **tokens de entrada**: 15,4
+millones contra 1,07 de salida. Eso no es un prompt gigante —un encargo son
+1.500 tokens— sino el bucle de búsqueda, que reprocesa todo lo acumulado en cada
+vuelta, hasta doce por documento y hasta siete peticiones por reanudación.
+
+**Hecho:**
+
+- **Caché en la investigación**, con el punto de corte moviéndose al último
+  bloque de cada reanudación. Es lo que ataca ese 91% de entrada acumulada;
+  cachear solo el encargo habría ahorrado un dígito porcentual.
+- **Caché en los ganchos**: hasta doce tandas seguidas con el mismo contexto
+  delante, que antes se pagaba entero doce veces.
+- **La contabilidad, que era lo que faltaba para poder verlo.** El motor de
+  caché existía desde el 11 de agosto y nueve llamadas ya lo usaban, pero
+  `cacheReadTokens` no llegaba al registro desde ningún sitio: se devolvía y se
+  tiraba. La caché podía estar ahorrando y el panel habría enseñado lo mismo.
+
+**Cómo se comprueba, y no vale darlo por bueno sin esto:** `cache_read_tokens`
+en el panel de Gasto tiene que dejar de ser 0. Si sigue en 0, algo variable se
+cuela delante del bloque marcado y la caché no sirve — y no da ningún error.
+
+**Lo que queda, y por qué no lo he tocado:**
+
+- **`max_uses: 12` y `effort: "high"` en la investigación.** Son las dos
+  palancas grandes que quedan: el coste crece con el **cuadrado** de las
+  búsquedas, porque cada vuelta reprocesa lo acumulado. Bajar a 8 quita más de
+  la mitad. Las dos compran lo mismo —menos evidencia por informe— y eso es una
+  decisión de negocio.
+- **Modelo más barato donde no decide nada.** La extracción es el candidato
+  obvio y no se puede sin más: `effort` **da error en Haiku 4.5** y
+  `extractStructured` lo manda. Está escrito en `provider-config.ts`. Y lo que
+  hay en juego son 0,09 dólares.
+- **Añadir caché a las llamadas de una sola vez sería perder dinero**: escribir
+  la caché cuesta un 25% más y sin una segunda lectura no se recupera. Solo
+  compensa donde hay tanda.
 
 ## 3. El logo de sculptchile
 

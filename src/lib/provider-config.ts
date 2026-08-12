@@ -24,15 +24,18 @@ export const defaultProviderConfig: ProviderConfig = {
   // Redacción: copys y publirreportajes.
   claudeCopyModel: "claude-sonnet-5",
   /*
-   * Sonnet 5, no Haiku, y a propósito.
+   * Sonnet 5, y ya no por la duda que decía antes.
    *
-   * La extracción usa `output_config.format`, que obliga a la respuesta a
-   * cumplir el esquema. Sonnet 5 lo admite con seguridad; de Haiku 4.5 no me
-   * consta. Elegir el más barato sin comprobarlo cambiaría un gasto conocido
-   * por un fallo en cada documento, que sale mucho más caro.
+   * La duda era si Haiku 4.5 admitía `output_config.format`. **Sí lo admite**:
+   * está en la lista de modelos con salidas estructuradas junto a Opus 5 y
+   * Sonnet 5. Lo que impide bajarlo es otra cosa que se descubrió al ir a
+   * hacerlo: **`effort` da error en Haiku 4.5**, y `extractStructured` manda
+   * `effort: "low"`. Cambiar el modelo sin quitar antes ese parámetro rompe la
+   * extracción de todos los documentos.
    *
-   * Aun así ahorra: $3/$15 por millón frente a $5/$25 de Opus. Se puede bajar
-   * a Haiku desde Configuración si lo pruebas y funciona.
+   * Bajarlo se puede, entonces, pero cuesta tocar la llamada, y lo que hay en
+   * juego son céntimos: la extracción lleva 0,09 dólares gastados en total
+   * frente a los 73 de la investigación. No es ahí donde está el dinero.
    */
   claudeExtractionModel: "claude-sonnet-5",
   chatgptModel: "gpt-4.1",
