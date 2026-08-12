@@ -60,7 +60,19 @@ export interface Product {
   researchInputs?: ProductResearchInputs;
   /** Tienda y mercado en los que vive. Opcional por compatibilidad. */
   storeId?: string;
+  /**
+   * El mercado **base**: el del precio de `price`. Los demás mercados en los que
+   * vive el producto, y su precio en cada uno, están en `product_markets`.
+   */
   marketId?: string;
+  /**
+   * Si la investigación vale para todos sus mercados.
+   *
+   * Apagado significa por mercado, y es el valor inicial: el público de Chile y
+   * el de México no son el mismo, y ese era el motivo original de duplicar
+   * productos en vez de tener uno solo.
+   */
+  researchShared: boolean;
   /** Handle de la ficha en la tienda, para construir la URL del mercado. */
   handle?: string;
   /** Si viene de duplicar otro producto, de cuál. */

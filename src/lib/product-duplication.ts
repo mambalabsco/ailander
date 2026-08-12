@@ -3,6 +3,7 @@ import type { Store, StoreMarket } from "@/types/store";
 import { productUrlFor } from "@/types/store";
 import { buildProductId } from "@/lib/products";
 import { saveProduct } from "@/lib/store";
+import { addProductMarket } from "@/lib/data/product-markets";
 import { readAngles, saveAngles } from "@/lib/copy-store";
 import { readProductImages, addProductImage } from "@/lib/image-store";
 import { readProductResearch, saveProductResearch } from "@/lib/research-store";
@@ -90,6 +91,10 @@ export async function duplicateProductToMarket(options: {
   };
 
   await saveProduct(duplicate);
+
+  // El duplicado también nace en su mercado: si no, quedaría con precio base y
+  // sin ningún mercado al que ese precio pertenezca.
+  await addProductMarket(duplicate.id, market.id);
 
   /* Investigación: se hereda el deseo, se vacía lo dependiente del país. */
   const sourceResearch = await readProductResearch(source.id);

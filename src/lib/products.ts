@@ -61,6 +61,7 @@ export function buildProductId(name: string) {
 export async function createProduct(input: ProductDraftInput): Promise<Product> {
   const product: Product = {
     id: buildProductId(input.name),
+    researchShared: false,
     name: input.name,
     brand: input.brand || input.name,
     category: input.category,

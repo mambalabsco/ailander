@@ -3,6 +3,7 @@ import type { AdCampaign, AnalysisResult, BrandSettings, Product } from "@/types
 export const ownProducts: Product[] = [
   {
     id: "own-1",
+    researchShared: false,
     name: "Revital Serum",
     brand: "Lumen Lab",
     category: "Skincare",
@@ -25,6 +26,7 @@ export const ownProducts: Product[] = [
   },
   {
     id: "own-2",
+    researchShared: false,
     name: "Glow Latte",
     brand: "Lumen Lab",
     category: "Bebida funcional",
@@ -50,6 +52,7 @@ export const ownProducts: Product[] = [
 export const competitorProducts: Product[] = [
   {
     id: "comp-1",
+    researchShared: false,
     name: "Hydra Boost",
     brand: "Natura Glow",
     category: "Skincare",
@@ -72,6 +75,7 @@ export const competitorProducts: Product[] = [
   },
   {
     id: "comp-2",
+    researchShared: false,
     name: "Focus Fuel",
     brand: "Everday",
     category: "Bebida funcional",

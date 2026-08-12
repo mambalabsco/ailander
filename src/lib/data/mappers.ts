@@ -54,6 +54,7 @@ export function toProduct(row: Tables<"products">): Product {
     },
     storeId: row.store_id ?? undefined,
     marketId: row.market_id ?? undefined,
+    researchShared: row.research_shared,
     handle: row.handle || undefined,
     duplicatedFromId: row.duplicated_from_id ?? undefined,
   };
@@ -95,6 +96,7 @@ export function fromProduct(product: Partial<Product>): TablesUpdate<"products">
   assign("tone", product.tone);
   assign("status", product.status);
   assign("owner", product.owner);
+  assign("research_shared", product.researchShared);
   /*
    * Estos cuatro se miran con `in`, no con `??`.
    *

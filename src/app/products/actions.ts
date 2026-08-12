@@ -6,6 +6,7 @@ import { deleteProduct, findProduct, saveProduct, updateProduct } from "@/lib/st
 import { importFromProductUrl } from "@/lib/shopify-import";
 import { findStore, listStores, primaryMarket } from "@/lib/store-registry";
 import { duplicateProductToMarket } from "@/lib/product-duplication";
+import { addProductMarket } from "@/lib/data/product-markets";
 import { findMarket, productUrlFor } from "@/types/store";
 import type { Product, ProductStatus } from "@/types";
 
@@ -103,6 +104,16 @@ export async function createProductFromForm(input: unknown) {
 
   const product = await createProduct(draft);
 
+  /*
+   * El mercado base tiene que estar entre los mercados del producto.
+   *
+   * Es la invariante de la que cuelga todo lo demás. Sin esto, los productos
+   * creados a partir de ahora nacen sin ninguna fila en `product_markets`: el
+   * selector no aparecería nunca y la pestaña de precios saldría vacía para
+   * siempre. La migración metió a los que ya existían; esto es para los nuevos.
+   */
+  if (product.marketId) await addProductMarket(product.id, product.marketId);
+
   revalidatePath("/products");
   revalidatePath("/");
 
@@ -175,6 +186,11 @@ export async function updateProductFromForm(id: string, patch: unknown) {
     throw new Error("No se encontró el producto que intentas actualizar.");
   }
 
+  // Cambiar el mercado base lo mete entre los mercados del producto si no
+  // estaba. Sin esto, mover un producto a otro país lo dejaría con un precio
+  // base que no pertenece a ningún mercado suyo.
+  if (updated.marketId) await addProductMarket(updated.id, updated.marketId);
+
   revalidatePath("/products");
   revalidatePath("/competitors");
   revalidatePath(`/products/${productId}`);
@@ -203,6 +219,7 @@ export async function createCompetitorProduct(input: unknown) {
 
   const competitor: Product = {
     id: `comp-${Date.now().toString(36)}`,
+    researchShared: false,
     name: draft.name,
     brand: draft.brand,
     category: draft.category,
