@@ -7,6 +7,7 @@ import {
   LANGUAGES,
   currencyMatchesCountry,
   findCountry,
+  findLanguage,
   fold,
   search,
 } from "./locales.ts";
@@ -117,4 +118,30 @@ test("los códigos de país son de dos letras y los de moneda de tres", () => {
     assert.match(country.code, /^[A-Z]{2}$/, `${country.name} tiene un código raro`);
     assert.match(country.currency, /^[A-Z]{3}$/, `${country.name} tiene una moneda rara`);
   }
+});
+
+/* --------------------------- El idioma por su nombre --------------------------- */
+
+/*
+ * De aquí salía el fallo de «añadir mercado».
+ *
+ * El formulario recoge el **nombre** del idioma y no tiene campo para su código,
+ * así que el código llegaba vacío a una columna con `check (char_length between
+ * 2 and 5)` y Postgres rechazaba la fila entera. En producción eso no se ve: sale
+ * un error genérico de render y el mercado no se añade.
+ */
+
+test("el idioma se encuentra por su nombre, que es lo que recoge el formulario", () => {
+  assert.equal(findLanguage("Español")?.code, "es");
+});
+
+test("se encuentra también por su código, y sin depender de tildes ni mayúsculas", () => {
+  assert.equal(findLanguage("es")?.code, "es");
+  assert.equal(findLanguage("  ESPAÑOL ")?.code, "es");
+  assert.equal(findLanguage("espanol")?.code, "es");
+});
+
+test("un idioma que no está no se inventa", () => {
+  assert.equal(findLanguage("klingon"), undefined);
+  assert.equal(findLanguage(""), undefined);
 });

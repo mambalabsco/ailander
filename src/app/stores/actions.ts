@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { addMarket, deleteStore, findStore, removeMarket, saveStore } from "@/lib/store-registry";
 import type { Store, StoreMarket, StorePlatform } from "@/types/store";
+import { findCountry, findLanguage } from "@/lib/locales";
 
 /** Las Server Actions son endpoints públicos: todo lo que llega se valida. */
 
@@ -118,8 +119,50 @@ export async function addMarketAction(storeId: string, input: unknown) {
   const store = await findStore(id);
   if (!store) throw new Error("No se encontró la tienda.");
 
-  const countryCode = readText(raw.countryCode, "ES").toUpperCase().slice(0, 2);
-  const languageCode = readText(raw.languageCode, "es").toLowerCase().slice(0, 5);
+  /*
+   * Los códigos, deducidos del nombre cuando no vienen.
+   *
+   * **Aquí estaba el fallo que impedía añadir mercados.** El formulario recoge
+   * el nombre del idioma —«Español»— y no tiene campo para su código, así que
+   * llegaba `""`. Y `readText` solo aplica su valor por defecto cuando lo que
+   * recibe **no es una cadena**: una cadena vacía sí lo es, así que el `"es"` de
+   * reserva no entraba nunca y se intentaba insertar un código vacío en una
+   * columna con `check (char_length(language_code) between 2 and 5)`.
+   *
+   * Postgres rechazaba la fila y en producción eso sale como un error genérico
+   * de render: el mercado no se añadía y no había forma de saber por qué.
+   *
+   * Se deduce del nombre en vez de caer a un idioma fijo porque «Português» con
+   * un `es` de reserva daría un mercado que dice hablar español, y eso no falla:
+   * se queda ahí, y los copys salen en el idioma equivocado.
+   */
+  const countryCode = (
+    readText(raw.countryCode) ||
+    findCountry(countryName)?.code ||
+    ""
+  )
+    .toUpperCase()
+    .slice(0, 2);
+
+  const languageCode = (
+    readText(raw.languageCode) ||
+    findLanguage(languageName)?.code ||
+    ""
+  )
+    .toLowerCase()
+    .slice(0, 5);
+
+  if (countryCode.length < 2) {
+    throw new Error(
+      `No reconozco el país «${countryName}». Escribe su código de dos letras, por ejemplo MX.`,
+    );
+  }
+
+  if (languageCode.length < 2) {
+    throw new Error(
+      `No reconozco el idioma «${languageName}». Elígelo de la lista, por ejemplo Español.`,
+    );
+  }
 
   const duplicate = store.markets.some(
     (market) => market.countryCode === countryCode && market.languageCode === languageCode,

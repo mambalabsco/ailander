@@ -202,6 +202,20 @@ export function findCountry(value: string): Country | undefined {
   return COUNTRIES.find((item) => fold(item.name) === needle || fold(item.code) === needle);
 }
 
+/**
+ * El idioma por su nombre o su código.
+ *
+ * Existe porque el formulario de mercados recoge el **nombre** —«Español»— y la
+ * base de datos guarda el código, con un `check` que exige entre dos y cinco
+ * caracteres. Sin esta traducción el código llegaba vacío y Postgres rechazaba
+ * la fila: añadir un mercado fallaba siempre, y en producción sin decir por qué.
+ */
+export function findLanguage(value: string): Language | undefined {
+  const needle = fold(value);
+  if (!needle) return undefined;
+  return LANGUAGES.find((item) => fold(item.name) === needle || fold(item.code) === needle);
+}
+
 export function languageName(code: string): string {
   return LANGUAGES.find((item) => item.code === code)?.name ?? code;
 }

@@ -13,6 +13,7 @@ import {
   LANGUAGES,
   currencyMatchesCountry,
   findCountry,
+  findLanguage,
   languageName,
 } from "@/lib/locales";
 import {
@@ -232,7 +233,21 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                   value={newStore.languageName}
                   options={LANGUAGE_OPTIONS}
                   placeholder="Español"
-                  onChange={(value) => setNewStore({ ...newStore, languageName: value })}
+                  /*
+                   * El código va con el nombre, igual que en el de mercados.
+                   *
+                   * Aquí no reventaba porque el borrador nace con `es` puesto, y
+                   * eso es peor de lo que parece: elegir «Português» dejaba el
+                   * código en `es` y quedaba guardado un mercado que dice hablar
+                   * español. No falla, y los copys salen en el idioma equivocado.
+                   */
+                  onChange={(value) =>
+                    setNewStore({
+                      ...newStore,
+                      languageName: value,
+                      languageCode: findLanguage(value)?.code ?? newStore.languageCode,
+                    })
+                  }
                 />
               </Field>
               <Field label="Moneda">
@@ -587,7 +602,20 @@ export function StoresManager({ stores, productsByMarket }: StoresManagerProps) 
                             value={draft.languageName}
                             options={LANGUAGE_OPTIONS}
                             placeholder="Español"
-                            onChange={(value) => updateDraft(store.id, { languageName: value })}
+                            /*
+                             * El nombre y el código, a la vez.
+                             *
+                             * Este campo solo guardaba el nombre y no hay ningún
+                             * hueco para el código, así que se mandaba vacío y la
+                             * base rechazaba la fila entera: añadir un mercado
+                             * fallaba siempre y en producción sin decir por qué.
+                             */
+                            onChange={(value) =>
+                              updateDraft(store.id, {
+                                languageName: value,
+                                languageCode: findLanguage(value)?.code ?? "",
+                              })
+                            }
                           />
                         </Field>
                         <Field label="Moneda">
