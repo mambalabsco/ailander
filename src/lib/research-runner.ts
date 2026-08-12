@@ -62,6 +62,41 @@ export interface ResearchRunResult {
 const MAX_CONTINUATIONS = 6;
 
 /**
+ * Cuántas búsquedas web puede hacer un documento.
+ *
+ * ## Por qué bajó de 12 a 8
+ *
+ * Porque el coste de buscar **no crece en línea recta, crece con el cuadrado**:
+ * cada vuelta reprocesa todo lo acumulado hasta ese momento —el encargo, los
+ * resultados anteriores y lo escrito— más lo que traiga la nueva. La búsqueda
+ * número doce no cuesta como la primera: cuesta como todo lo que hay delante.
+ *
+ * Medido el 12 de agosto: 15,4 millones de tokens de entrada en 47 llamadas,
+ * dos tercios del gasto de la plataforma entera. Pasar de 12 a 8 quita en torno
+ * a la mitad de esa cifra.
+ *
+ * ## Qué se compra con ello, dicho claro
+ *
+ * Menos evidencia por informe. Es un cambio de calidad, no un ajuste técnico, y
+ * por eso está aquí con nombre en vez de escondido en la llamada: si los
+ * informes salen peor, se sube este número y se acabó.
+ */
+const MAX_BUSQUEDAS = 8;
+
+/**
+ * Cuánto esfuerzo pone el modelo.
+ *
+ * `high` es lo que hace que busque más y razone más, así que es la otra mitad
+ * de la misma palanca que `MAX_BUSQUEDAS`. En `medium` sigue investigando en
+ * serio y gasta bastante menos.
+ *
+ * Se baja **junto con** las búsquedas y no antes: son la misma decisión tomada
+ * dos veces, y moverlas por separado hace imposible saber cuál de las dos
+ * cambió el resultado.
+ */
+const ESFUERZO = "medium" as const;
+
+/**
  * La caché sobre lo que se acumula, que es lo caro de verdad.
  *
  * ## Por qué el encargo no bastaba
@@ -276,11 +311,11 @@ export async function runResearchDocument(options: {
          */
         max_tokens: 96_000,
         thinking: { type: "adaptive" },
-        output_config: { effort: "high" },
+        output_config: { effort: ESFUERZO },
         // La investigación **es** búsqueda: los prompts piden evidencia de
         // Reddit, Statista, Amazon y foros. Sin esto el modelo respondería de
         // memoria, que es justo lo que no queremos.
-        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 12 }],
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: MAX_BUSQUEDAS }],
         messages,
       });
 
