@@ -3,6 +3,33 @@
 Escrito el 11 de agosto de 2026, al final de una sesión larga. Ordenado por lo
 que desbloquea, no por lo que cuesta.
 
+## 0 bis. Un producto en varios mercados: escrito entero, sin probar nada
+
+Las doce tareas del plan (`superpowers/plans/2026-08-12-producto-multimercado.md`)
+están en `origin/main`. **Ninguna se ha visto funcionar**, y hay que decirlo así:
+`SUPABASE_DB_URL` en `.env.local` está truncada —termina justo después de la
+arroba, sin el host—, así que `db:push` no conecta y las dos migraciones
+(`20260812000500` y `20260812000600`) siguen sin aplicar. Se arregla pegando otra
+vez la cadena entera desde **Connect** en el panel de Supabase.
+
+Lo comprobado es solo lo que se puede comprobar sin base: 1527 tests, `tsc`,
+`eslint` y `npm run build`.
+
+Al aplicar las migraciones, mirar en este orden:
+
+1. Que el traspaso no dejó a nadie fuera —las dos consultas están en el plan—.
+2. Un producto de **un solo** mercado: la ficha tiene que verse exactamente igual
+   que antes, sin selector y con su precio. Si algo cambia ahí, es un fallo.
+3. Un producto con dos: el selector, el precio oculto en general, y el encargo de
+   un copy general **sin** la línea del precio.
+4. `cache_read_tokens` en el panel de Gasto. Los textos del mercado entran en los
+   prefijos cacheados; si la caché dejara de acertar, el culpable es esto.
+
+Lo que quedó fuera a propósito, además de lo que ya decía la spec: el sello de
+mercado está puesto en ángulos, ganchos, copys y documentos —faltan landings,
+vídeos, imágenes, campañas y prelandings—, y la insignia de mercado solo está en
+la pestaña de Copys.
+
 ## 0. Desplegar
 
 **35 commits sin aplicar.** Todo lo de estos dos días vive solo en `origin/main`.
