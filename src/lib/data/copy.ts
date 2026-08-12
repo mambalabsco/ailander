@@ -22,6 +22,7 @@ function toAngle(row: Tables<"angles">): MarketingAngle {
   return {
     id: row.id,
     productId: row.product_id,
+    marketId: row.market_id ?? undefined,
     desire: row.desire,
     name: row.name,
     targetAudience: row.target_audience,
@@ -112,6 +113,7 @@ function toCopy(row: Tables<"copies">): GeneratedCopy {
   return {
     id: row.id,
     productId: row.product_id,
+    marketId: row.market_id ?? undefined,
     format: row.format,
     methodId: row.method_id,
     driver: row.driver,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { MarketBadge } from "@/app/products/[id]/market-badge";
 import { SectionCard } from "@/components/section-card";
 import { Button, EmptyState, SelectField, Tag } from "@/components/ui";
 import { AWARENESS_LABELS, AWARENESS_LEVELS } from "@/types/research";
@@ -57,6 +58,10 @@ interface CopysTabProps {
    * obligaría a borrar la primera para poder probar una segunda.
    */
   landingCopyIds: Set<string>;
+  /** Solo con varios mercados: con uno, la insignia sería siempre la misma. */
+  showMarketBadges: boolean;
+  /** Cómo se llama cada mercado, para no enseñar un uuid en la insignia. */
+  marketNames: Record<string, string>;
 }
 
 /**
@@ -84,6 +89,8 @@ export function CopysTab({
   performance,
   hasHiggsfieldKey,
   landingCopyIds,
+  showMarketBadges,
+  marketNames,
 }: CopysTabProps) {
   const [format, setFormat] = useState<CopyFormat>("long-copy");
   const [methodId, setMethodId] = useState<string>("long-copy-discovery");
@@ -641,6 +648,20 @@ export function CopysTab({
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {/*
+                        De qué mercado es. Con varios países, publicar el copy de
+                        Chile en México es un clic de distancia y esto es lo
+                        único que lo separa.
+                      */}
+                      {showMarketBadges ? (
+                        <MarketBadge
+                          table="copies"
+                          id={copy.id}
+                          productId={productId}
+                          marketId={copy.marketId}
+                          marketLabel={marketNames[copy.marketId ?? ""]}
+                        />
+                      ) : null}
                       <Tag>{COPY_FORMAT_LABELS[copy.format]}</Tag>
                       <Tag>{AWARENESS_LABELS[copy.awarenessLevel]}</Tag>
                       <Tag>{copy.wordCount} palabras</Tag>

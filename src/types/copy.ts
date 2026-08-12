@@ -24,6 +24,8 @@ import type { Intensity, StoryBeat } from "@/lib/story-beats";
 export interface MarketingAngle {
   id: string;
   productId: string;
+  /** Para qué mercado se escribió. **Indefinido es general**: vale en todos. */
+  marketId?: string;
   /** Deseo masivo del documento 6 del que sale este ángulo. */
   desire: string;
   name: string;
@@ -80,6 +82,13 @@ export type GeneratedCopyStatus = "draft" | "approved" | "used";
 export interface GeneratedCopy {
   id: string;
   productId: string;
+  /**
+   * Para qué mercado se escribió. **Indefinido es general**: vale en todos.
+   *
+   * Un copy general no lleva precio ni acento local, así que no puede publicarse
+   * tal cual en un país sin pasar por una adaptación.
+   */
+  marketId?: string;
   format: CopyFormat;
   /** Marco usado, de `COPY_METHODS`. */
   methodId: string;

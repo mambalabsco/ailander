@@ -165,6 +165,11 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
    */
   const visibleTabs = TABS.filter((item) => item.id !== "precios" || showSelector(marketIds));
 
+  // Cómo se llama cada mercado, para que las insignias no enseñen un uuid.
+  const marketNames = Object.fromEntries(
+    (productStore?.markets ?? []).map((market) => [market.id, marketLabel(market)]),
+  );
+
   const productAds = ads.filter((ad) => ad.relatedProductId === product.id);
 
   const plan = buildHookPlan(research.awareness, research.desireValidation);
@@ -510,6 +515,8 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       ) : null}
       {activeTab === "copys" ? (
         <CopysTab
+          showMarketBadges={showSelector(marketIds)}
+          marketNames={marketNames}
           copies={copies}
           angles={angles}
           hooks={hooks}
