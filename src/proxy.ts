@@ -39,6 +39,12 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
  * llega ahí trae una sesión temporal del enlace del correo, y si no la trae,
  * Supabase rechaza el cambio con un mensaje que lo explica. Guardarla solo
  * añadiría un rebote antes de ese mensaje.
+ *
+ * `/api/cron` también: quien llama es un cron externo, no un navegador, así
+ * que nunca trae cookie de sesión. Sin esta excepción cada vuelta rebotaría a
+ * `/auth/login` antes de que la ruta llegara a comprobar `CRON_SECRET` — que es
+ * la protección real, igual que RLS lo es para los datos. Este redirect es solo
+ * optimista, como dice el comentario de arriba.
  */
 const PUBLIC_PATHS = [
   "/auth/login",
@@ -47,6 +53,7 @@ const PUBLIC_PATHS = [
   "/auth/error",
   "/auth/recuperar",
   "/auth/nueva-clave",
+  "/api/cron",
 ];
 
 function isPublic(pathname: string) {

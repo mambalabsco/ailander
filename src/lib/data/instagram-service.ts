@@ -274,6 +274,82 @@ export async function cerrarPublicacion(
   }
 }
 
+/** Las recién escritas que aún no tienen media ni hora. */
+export async function listasSinMedia(row: {
+  productId: string;
+  workspaceId: string;
+}): Promise<{ id: string; mediaKind: string }[]> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("instagram_posts")
+    .select("id, media_kind")
+    .eq("workspace_id", row.workspaceId)
+    .eq("product_id", row.productId)
+    .eq("status", "aprobado")
+    .is("media_url", null)
+    .is("scheduled_at", null)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `No se pudo listar lo pendiente de media de ${row.productId}: ${error.message}`,
+    );
+  }
+
+  return (data ?? []).map((one) => ({ id: one.id, mediaKind: one.media_kind }));
+}
+
+/** Le pone la hora, ya con imagen. */
+export async function programar(id: string, workspaceId: string, cuando: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("instagram_posts")
+    .update({ scheduled_at: cuando })
+    .eq("id", id)
+    .eq("workspace_id", workspaceId);
+
+  if (error) {
+    throw new Error(`No se pudo programar la publicación ${id}: ${error.message}`);
+  }
+}
+
+/**
+ * El token con el que se publica.
+ *
+ * Se elige el acceso de Meta que **tenga el permiso de publicar**, no el
+ * primero: la conexión de anuncios nació con `ads_read` a secas y con ella el
+ * contenedor falla con un error que no dice que faltaba un permiso.
+ */
+export async function tokenDePublicacion(userId: string): Promise<string> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("meta_logins")
+    .select("access_token, scopes, token_expires_at")
+    .eq("user_id", userId)
+    .order("is_default", { ascending: false });
+
+  if (error) {
+    throw new Error(`No se pudieron leer las conexiones de Meta de ${userId}: ${error.message}`);
+  }
+
+  const valido = (data ?? []).find(
+    (one) =>
+      (one.scopes ?? []).includes("instagram_content_publish") &&
+      (!one.token_expires_at || new Date(one.token_expires_at) > new Date()),
+  );
+
+  if (!valido) {
+    throw new Error(
+      "Ninguna conexión de Meta tiene permiso para publicar en Instagram. Reautoriza con instagram_content_publish.",
+    );
+  }
+
+  return valido.access_token;
+}
+
 /**
  * Anota el fallo y pausa si toca.
  *
