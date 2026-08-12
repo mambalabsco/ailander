@@ -1281,7 +1281,7 @@ export type Database = {
         HookRow,
         Insertable<
           HookRow,
-          "desire" | "used" | "used_at" | "title" | "angle" | "format" | "batch_id"
+          "market_id" | "desire" | "used" | "used_at" | "title" | "angle" | "format" | "batch_id"
         >
       >;
       angles: Table<
@@ -1290,9 +1290,9 @@ export type Database = {
       >;
       campaigns: Table<
         CampaignRow,
-        Insertable<CampaignRow, "stage" | "country_code" | "theme" | "focus">
+        Insertable<CampaignRow, "market_id" | "stage" | "country_code" | "theme" | "focus">
       >;
-      prelandings: Table<PrelandingRow, Insertable<PrelandingRow, "url" | "description">>;
+      prelandings: Table<PrelandingRow, Insertable<PrelandingRow, "market_id" | "url" | "description">>;
       adsets: Table<
         AdsetRow,
         Insertable<
@@ -1315,7 +1315,7 @@ export type Database = {
         ShortAdRow,
         Insertable<
           ShortAdRow,
-          "format" | "primary_text" | "headline" | "description" | "image_prompt"
+          "market_id" | "format" | "primary_text" | "headline" | "description" | "image_prompt"
         >,
         [Belongs<"adset_id", "adsets">]
       >;
@@ -1323,6 +1323,7 @@ export type Database = {
         CopyRow,
         Insertable<
           CopyRow,
+          | "market_id"
           | "angle_id"
           | "hook_id"
           | "adset_id"
@@ -1342,6 +1343,7 @@ export type Database = {
         ProductImageRow,
         Insertable<
           ProductImageRow,
+          | "market_id"
           | "pattern"
           | "storage_bucket"
           | "mime_type"
@@ -1368,7 +1370,7 @@ export type Database = {
       >;
       performance_records: Table<
         PerformanceRecordRow,
-        Insertable<PerformanceRecordRow, "rating" | "note" | "roas" | "spend" | "ctr" | "cpa">
+        Insertable<PerformanceRecordRow, "market_id" | "rating" | "note" | "roas" | "spend" | "ctr" | "cpa">
       >;
       analyses: Table<
         AnalysisRow,
