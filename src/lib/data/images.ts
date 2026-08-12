@@ -25,12 +25,38 @@ const SIGNED_URL_SECONDS = 3600;
  * la que de verdad no se puede saltar. Esta existe para dar un mensaje de error
  * útil antes de gastar el ancho de banda de la subida.
  */
-export const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/avif"];
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/*
+ * También lo que se mueve.
+ *
+ * Un hueco de una landing puede llevar un bucle corto en vez de una foto, y en
+ * las páginas que venden eso retiene más. `webm` va el primero porque pesa una
+ * fracción de un GIF con la misma calidad, y en una landing el peso es tiempo de
+ * carga sobre alguien que está decidiendo si se queda.
+ *
+ * El GIF entra porque es lo que sale de la mitad de las herramientas, y el mp4
+ * porque es lo que devuelven los generadores de vídeo.
+ */
+export const ALLOWED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+  "video/webm",
+  "video/mp4",
+];
+/*
+ * Veinte megas, no diez.
+ *
+ * Un bucle de tres segundos en webm cabe de sobra; en GIF, no siempre — y el GIF
+ * se admite porque es lo que sale de muchas herramientas, no porque sea buena
+ * idea. Rechazarlo por tamaño obligaría a convertirlo antes de subirlo.
+ */
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export function validateImageFile(file: File): string | null {
   if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    return `«${file.name}»: formato no admitido. Usa PNG, JPG, WebP o AVIF.`;
+    return `«${file.name}»: formato no admitido. Usa PNG, JPG, WebP, AVIF, GIF, WEBM o MP4.`;
   }
   if (file.size > MAX_IMAGE_BYTES) {
     return `«${file.name}»: pesa ${(file.size / 1024 / 1024).toFixed(1)} MB y el máximo son 10 MB.`;
