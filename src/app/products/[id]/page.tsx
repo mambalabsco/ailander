@@ -37,6 +37,10 @@ import { RESEARCH_DOCUMENT_IDS } from "@/types/research";
 import type { ResearchDocumentId } from "@/types/research";
 import { PRODUCT_IMAGE_PATTERNS } from "@/types/visuals";
 import type { AdVisualPrompt } from "@/types/visuals";
+import { listProductMarkets } from "@/lib/data/product-markets";
+import { parseSelection, showSelector } from "@/lib/market-selection";
+import { marketLabel } from "@/types/store";
+import { MarketSwitcher } from "@/app/products/[id]/market-switcher";
 import { PanelTab } from "@/app/products/[id]/tab-panel";
 import { InfoTab } from "@/app/products/[id]/tab-info";
 import { DocumentsTab } from "@/app/products/[id]/tab-documents";
@@ -76,11 +80,11 @@ function resolveTab(value: string | undefined): TabId {
 
 interface ProductDetailPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; mercado?: string }>;
 }
 
 export default async function ProductDetailPage({ params, searchParams }: ProductDetailPageProps) {
-  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
+  const [{ id }, { tab, mercado }] = await Promise.all([params, searchParams]);
   const activeTab = resolveTab(tab);
 
   const [product, research, hooks, angles, copies, images, ads, hasApiKey, hasHiggsfieldKey] =
@@ -126,6 +130,24 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   if (!product) {
     notFound();
   }
+
+  /*
+   * En qué mercado se está mirando la ficha.
+   *
+   * Con un solo mercado no hay selector y `parseSelection` devuelve ese mercado
+   * siempre: la ficha se comporta exactamente como antes de todo esto. El modo
+   * general solo existe cuando el producto tiene de verdad más de un país.
+   */
+  const productMarkets = await listProductMarkets(product.id);
+  const marketIds = productMarkets.map((item) => item.marketId);
+  const selection = parseSelection(mercado, marketIds);
+
+  const productStore = product.storeId
+    ? stores.find((item) => item.id === product.storeId)
+    : undefined;
+  const marketOptions = (productStore?.markets ?? [])
+    .filter((market) => marketIds.includes(market.id))
+    .map((market) => ({ id: market.id, label: marketLabel(market) }));
 
   const productAds = ads.filter((ad) => ad.relatedProductId === product.id);
 
@@ -319,6 +341,12 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           ← Volver
         </Link>
         <div className="flex items-center gap-3">
+          {showSelector(marketIds) ? (
+            <MarketSwitcher
+              markets={marketOptions}
+              current={selection.kind === "general" ? "general" : selection.marketId}
+            />
+          ) : null}
           <StatusPill status={product.status} />
           <Link
             href={`/products/${product.id}/edit`}
