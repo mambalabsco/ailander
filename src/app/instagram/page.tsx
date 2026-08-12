@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SectionCard } from "@/components/section-card";
 import { InstagramQueue } from "@/components/instagram-queue";
+import { AgentChat } from "@/components/agent-chat";
 import { getCombinedProducts } from "@/lib/products";
 import { listPosts } from "@/lib/data/instagram";
 
@@ -50,6 +51,15 @@ export default async function InstagramPage({
           </Link>
         ))}
       </div>
+
+      {actual ? (
+        <SectionCard
+          title="Hablar con el agente"
+          description="Dile qué quieres en tus palabras. Mira la cola antes de escribir, y deja todo en borrador."
+        >
+          <AgentChat productId={actual.id} />
+        </SectionCard>
+      ) : null}
 
       {actual ? (
         <SectionCard
