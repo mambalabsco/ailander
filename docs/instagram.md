@@ -2,25 +2,44 @@
 
 Pedido: crear imagen, texto y vídeo a partir del producto y publicarlo solo.
 
-Estado: **el texto y la cola, hechos. La media y la publicación, no.**
+Estado: **el ciclo entero está construido; falta una sola cosa para que
+publique de verdad.**
 
 Hecho: el motor de las piezas con los límites reales dentro
 (`src/lib/instagram/content.ts`), la tabla `instagram_posts` con su
-`claimed_at`, la acción que escribe y encola en borrador, y la pantalla
-`/instagram` con la cola, la edición, la aprobación y la hora.
+`claimed_at`, la acción que escribe y encola en borrador, la generación de la
+media, la pantalla `/instagram` con la cola, la edición, la aprobación, la hora
+y —por producto— el panel para encender el piloto (cuenta de Instagram, piezas
+al día, colchón en días, ventana horaria, y el motivo si está pausado con su
+botón de reanudar), y el cron que dispara cada vuelta.
 
 Falta:
 
-1. **Generar la media.** Cada pieza guarda `scene` —qué se ve— y la proporción
-   sale del formato. Es enchufarlo al generador que ya existe y guardar la
-   dirección en `media_url`. **Ojo al enlazarlo de vuelta**: la imagen tiene que
-   quedar atada a *esa* publicación, no suelta en la galería, o al programar no
-   se sabe cuál va con cuál.
-2. **El cron.** Lee lo aprobado con hora pasada, marca `claimed_at` **antes** de
-   llamar, crea el contenedor, espera el procesado y publica. Sin lo primero,
-   dos vueltas del cron publican dos veces.
+1. ~~Generar la media.~~ Hecho: cada pieza guarda `scene` —qué se ve—, la
+   proporción sale del formato, y la imagen queda atada a *esa* publicación en
+   `media_url`, no suelta en la galería.
+2. ~~El cron.~~ Hecho: `GET /api/cron/instagram`
+   (`src/app/api/cron/instagram/route.ts`), protegida con `Authorization:
+   Bearer $CRON_SECRET` —sin ese secreto configurado responde 500, con uno
+   incorrecto responde 401 sin decir qué falta—. Cada vuelta, por cada producto
+   con el piloto activo: marca `claimed_at` **antes** de llamar, publica una
+   pieza vencida y después intenta rellenar el colchón. Los topes —25 al día de
+   la API, el `por_dia` de cada producto, y 90 minutos de separación— se
+   calculan por **cuenta de Instagram**, no por producto. Cómo se programa la
+   llamada, en [DEPLOY.md](../DEPLOY.md).
+
+   Ojo con una pieza: **la mitad del relleno todavía no funciona desde el
+   cron.** Rellenar el colchón —generar piezas nuevas para que no se vacíe la
+   cola— llama a acciones de servidor que pasan por `requireContext()` y
+   necesitan sesión de navegador, que un proceso de cron no tiene. Hoy el cron
+   publica lo que ya está en la cola, aprobado y con su hora; no la rellena
+   solo. Queda pendiente de una tarea aparte que escriba las versiones de esas
+   acciones sin sesión.
+
 3. **La conexión con Meta**, que depende de reautorizar la app con los cuatro
-   permisos.
+   permisos de abajo. **Es lo único que queda** entre esto y que se publique
+   algo: con el cron ya disparando y la media ya generándose, sin el token
+   correcto no hay pieza que salga, por aprobada y a tiempo que esté.
 
 ## Lo que la API no deja, y cambia el diseño
 

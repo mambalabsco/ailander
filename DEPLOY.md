@@ -271,6 +271,28 @@ Y añade `https://tu-dominio.com/auth/callback` a `additional_redirect_urls` en
 `supabase/config.toml` antes de subirlo. Sin eso, el enlace de confirmación de
 los correos no vuelve a la aplicación.
 
+## 9. El cron del autopiloto de Instagram
+
+El autopiloto no tiene proceso propio: cada vuelta la dispara una llamada HTTP a
+`/api/cron/instagram`. Sin algo que la haga, el piloto se puede encender desde
+`/instagram` y no publica nunca. En el `crontab` del usuario `plataforma`:
+
+```
+*/5 * * * * curl -sS -H "Authorization: Bearer $CRON_SECRET" https://<dominio>/api/cron/instagram >> /var/log/ig-autopilot.log 2>&1
+```
+
+Cinco minutos son 288 vueltas al día, doce veces el tope diario de la API de
+Instagram. No es un descuido: el ritmo de publicación lo marcan los
+guardarraíles de dentro (el tope de la API, el `por_dia` de cada producto, los
+90 minutos de separación), no la frecuencia del cron. Llamar más seguido no
+publica más rápido, solo hace que la mayoría de las vueltas no tengan nada que
+hacer.
+
+`CRON_SECRET` tiene que estar puesto **en el entorno donde corre el cron**, no
+solo en el `.env.local` de la aplicación: son procesos distintos y uno no hereda
+las variables del otro. Es el fallo típico —la ruta responde 500 porque no
+encuentra el secreto que sí está, pero en el archivo equivocado—.
+
 ## Actualizar después
 
 Un solo comando:
@@ -313,3 +335,4 @@ del último commit— y recompila solo.
   «Perdido» pasada media hora. Conviene reiniciar cuando no haya nada corriendo.
 - **`npm run logs`** funciona igual en el servidor y es la forma rápida de ver
   qué falló.
+e
