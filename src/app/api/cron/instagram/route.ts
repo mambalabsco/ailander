@@ -74,7 +74,23 @@ export async function GET(request: Request): Promise<Response> {
 
   const parte: string[] = [];
 
-  const token = await tomarVuelta();
+  let token: string | null;
+
+  try {
+    token = await tomarVuelta();
+  } catch (error) {
+    // Con parte y no con un 500 pelado: lo que se lee del cron es el registro,
+    // y «Internal Server Error» a secas no dice qué se rompió.
+    return NextResponse.json(
+      {
+        ok: false,
+        parte: [
+          `No se pudo tomar el turno: ${error instanceof Error ? error.message : "sin motivo"}.`,
+        ],
+      },
+      { status: 500 },
+    );
+  }
 
   if (!token) {
     /*
@@ -90,8 +106,10 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
+  let fallos = 0;
+
   try {
-    await darLaVuelta(parte);
+    fallos = await darLaVuelta(parte);
   } finally {
     try {
       await soltarVuelta(token);
@@ -101,15 +119,46 @@ export async function GET(request: Request): Promise<Response> {
       parte.push(
         `No se pudo soltar el arriendo: ${error instanceof Error ? error.message : "sin motivo"}.`,
       );
+      fallos += 1;
     }
   }
 
-  return NextResponse.json({ ok: true, parte });
+  /*
+   * El `ok` dice si la vuelta hizo su trabajo, no si la ruta contestó.
+   *
+   * Devolvía `true` aunque hubieran fallado todos los productos, y lo único
+   * que se mira de una vuelta del cron —288 al día— es ese campo. Un piloto
+   * roto se veía exactamente igual que uno que no tenía nada que hacer.
+   */
+  return NextResponse.json({ ok: fallos === 0, parte });
 }
 
-/** El trabajo de la vuelta, ya con el turno tomado. */
-async function darLaVuelta(parte: string[]): Promise<void> {
-  for (const row of await listarActivos()) {
+/**
+ * El trabajo de la vuelta, ya con el turno tomado.
+ *
+ * Devuelve cuántas cosas se quedaron sin hacer. Que un producto no tenga nada
+ * que publicar no es una de ellas: lo son los tropiezos.
+ */
+async function darLaVuelta(parte: string[]): Promise<number> {
+  let fallos = 0;
+  let activos: AutopilotRow[];
+
+  try {
+    activos = await listarActivos();
+  } catch (error) {
+    /*
+     * Esto vivía fuera de todo `try`: un tropiezo de la base devolvía un 500
+     * pelado, sin parte, indistinguible de un secreto mal puesto o de un fallo
+     * de la propia ruta.
+     */
+    const motivo = error instanceof Error ? error.message : "falló sin motivo";
+
+    parte.push(`No se pudo listar los autopilotos activos: ${motivo}`);
+
+    return 1;
+  }
+
+  for (const row of activos) {
     try {
       const [publicadas, ultima, listas] = await Promise.all([
         contarUltimas24h(row.igUserId),
@@ -129,7 +178,7 @@ async function darLaVuelta(parte: string[]): Promise<void> {
       });
 
       if (decision.publicar) {
-        await publicarUna(row, parte);
+        fallos += await publicarUna(row, parte);
       } else if (decision.motivo) {
         parte.push(`${row.productId}: ${decision.motivo}`);
       }
@@ -140,10 +189,26 @@ async function darLaVuelta(parte: string[]): Promise<void> {
     } catch (error) {
       const motivo = error instanceof Error ? error.message : "falló sin motivo";
 
-      await anotarFallo(row, motivo, esPermanente(error));
+      fallos += 1;
       parte.push(`${row.productId}: ${motivo}`);
+
+      try {
+        await anotarFallo(row, motivo, esPermanente(error));
+      } catch (otro) {
+        /*
+         * Anotar el fallo también puede fallar, y lanzando aquí se llevaba por
+         * delante a todos los productos que quedaban detrás — lo contrario
+         * exacto de lo que este `try` por producto dice que hace.
+         */
+        parte.push(
+          `${row.productId}: y tampoco se pudo anotar el fallo —` +
+            ` ${otro instanceof Error ? otro.message : "sin motivo"}.`,
+        );
+      }
     }
   }
+
+  return fallos;
 }
 
 /**
@@ -162,11 +227,14 @@ async function darLaVuelta(parte: string[]): Promise<void> {
  * volvía a poner la pieza en «aprobado» con `claimed_at: null` — una pieza ya
  * publicada, con su `instagram_id` y su `scheduled_at` vencido intactos, lista
  * para que la vuelta siguiente la reservara y la publicara **otra vez**.
+ *
+ * Devuelve 1 si la publicación no salió, para que el `ok` de la vuelta lo
+ * refleje: no tener nada que publicar es normal, intentarlo y fallar no.
  */
-async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
+async function publicarUna(row: AutopilotRow, parte: string[]): Promise<number> {
   const pieza = await reservarVencida(row);
 
-  if (!pieza) return;
+  if (!pieza) return 0;
 
   let instagramId: string;
 
@@ -191,7 +259,8 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
     await anotarFallo(row, motivo, esPermanente(error));
 
     parte.push(`${row.productId}: no salió — ${motivo}`);
-    return;
+
+    return 1;
   }
 
   try {
@@ -199,6 +268,8 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
     await limpiarFallos(row, new Date().toISOString());
 
     parte.push(`${row.productId}: publicada ${instagramId}.`);
+
+    return 0;
   } catch (error) {
     const motivo = error instanceof Error ? error.message : "falló sin motivo";
 
@@ -214,6 +285,8 @@ async function publicarUna(row: AutopilotRow, parte: string[]): Promise<void> {
      * más alcance del que pide este arreglo.
      */
     parte.push(`${row.productId}: publicada ${instagramId} pero no se pudo cerrar — ${motivo}`);
+
+    return 1;
   }
 }
 

@@ -17,19 +17,32 @@ import { requireContext } from "@/lib/supabase/session";
  * Porque la API no da «tus cuentas de Instagram»: da tus Páginas de Facebook, y
  * de cada una, la cuenta profesional vinculada si la hay. Una cuenta personal no
  * aparece por ningún lado — que es exactamente lo que hay que poder decir.
+ *
+ * ## Y por qué no devuelve una lista a secas
+ *
+ * Porque «no hay ninguna» y «no se ha podido preguntar» son cosas distintas y
+ * salían las dos como lista vacía. Con un fallo de Meta, el panel le decía a un
+ * piloto bien configurado que ninguna conexión puede publicar y le escondía el
+ * selector — un diagnóstico falso que además invita a reautorizar sin motivo.
  */
-export async function listPublishableAccounts(): Promise<
-  { id: string; username: string }[]
-> {
+export type CuentasPublicables =
+  | { ok: true; cuentas: { id: string; username: string }[] }
+  | { ok: false; motivo: string };
+
+export async function listPublishableAccounts(): Promise<CuentasPublicables> {
   const { supabase } = await requireContext();
 
   // Sin filtrar por usuario: las sesiones son del espacio de trabajo, y RLS ya
   // acota a las suyas. Filtrar aquí no falla — devuelve una lista vacía y el
   // panel diría que hay que reconectar aunque alguien del equipo ya lo hizo.
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("meta_logins")
     .select("access_token, scopes, token_expires_at")
     .order("is_default", { ascending: false });
+
+  if (error) {
+    return { ok: false, motivo: `no se pudieron leer las conexiones de Meta (${error.message})` };
+  }
 
   const valido = (data ?? []).find(
     (one) =>
@@ -37,7 +50,9 @@ export async function listPublishableAccounts(): Promise<
       (!one.token_expires_at || new Date(one.token_expires_at) > new Date()),
   );
 
-  if (!valido) return [];
+  // Esto sí es «no hay ninguna»: se leyó bien y ninguna conexión tiene el
+  // permiso de publicar.
+  if (!valido) return { ok: true, cuentas: [] };
 
   const url = new URL("https://graph.facebook.com/v26.0/me/accounts");
   url.searchParams.set("fields", "instagram_business_account{id,username}");
@@ -48,14 +63,22 @@ export async function listPublishableAccounts(): Promise<
     signal: AbortSignal.timeout(15_000),
   }).catch(() => null);
 
-  if (!response?.ok) return [];
+  if (!response?.ok) {
+    return {
+      ok: false,
+      motivo: response ? `Meta contestó ${response.status}` : "Meta no contestó",
+    };
+  }
 
   const body = (await response.json().catch(() => ({}))) as {
     data?: { instagram_business_account?: { id?: string; username?: string } }[];
   };
 
-  return (body.data ?? [])
-    .map((page) => page.instagram_business_account)
-    .filter((one): one is { id: string; username?: string } => Boolean(one?.id))
-    .map((one) => ({ id: one.id, username: one.username ?? one.id }));
+  return {
+    ok: true,
+    cuentas: (body.data ?? [])
+      .map((page) => page.instagram_business_account)
+      .filter((one): one is { id: string; username?: string } => Boolean(one?.id))
+      .map((one) => ({ id: one.id, username: one.username ?? one.id })),
+  };
 }

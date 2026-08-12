@@ -345,6 +345,12 @@ export async function generatePostMediaAction(input: unknown): Promise<{
      *
      * Si no se puede medir la imagen se deja pasar: quedarse sin publicar por no
      * haber podido descargarla es peor que arriesgarse a que Meta la rechace.
+     *
+     * «No se puede medir» son las dos cosas, no solo la descarga: si `sharp`
+     * lanza al leer los bytes —un formato que no conoce, un archivo a medias—
+     * antes se rechazaba la pieza, que es lo contrario del principio escrito. Y
+     * con el tope de intentos, una pieza así se quedaba sin imagen para siempre
+     * por un fallo del medidor, no de la imagen.
      */
     const { checkAspect } = await import("@/lib/instagram/aspect");
     const sharp = (await import("sharp")).default;
@@ -353,9 +359,14 @@ export async function generatePostMediaAction(input: unknown): Promise<{
       .then((response) => (response.ok ? response.arrayBuffer() : null))
       .catch(() => null);
 
-    if (bytes) {
-      const { width, height } = await sharp(Buffer.from(bytes)).metadata();
-      const proporcion = checkAspect(width ?? 0, height ?? 0, post.format);
+    const medida = bytes
+      ? await sharp(Buffer.from(bytes))
+          .metadata()
+          .catch(() => null)
+      : null;
+
+    if (medida?.width && medida.height) {
+      const proporcion = checkAspect(medida.width, medida.height, post.format);
 
       if (!proporcion.ok) {
         return {

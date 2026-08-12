@@ -93,8 +93,10 @@ export async function saveAutopilotAction(input: unknown): Promise<{
 
     return {
       ok: true,
+      // Y se dice que la pausa se levanta: guardar sin decirlo dejaría a quien
+      // lo pausó a mano creyendo que sigue parado.
       message: activo
-        ? "Encendido. Publicará solo, y lo que salga no lo va a leer nadie."
+        ? "Encendido, y sin pausa. Publicará solo, y lo que salga no lo va a leer nadie."
         : "Guardado. Está apagado: no publicará nada solo.",
     };
   } catch (error) {

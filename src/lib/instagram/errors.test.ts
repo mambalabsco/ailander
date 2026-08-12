@@ -17,6 +17,23 @@ test("la cuenta que no es profesional es permanente", () => {
   assert.equal(esPermanente(new InstagramError("The user is not an Instagram Business", 10, 2207018)), true);
 });
 
+test("el 100 con subcódigo 33 es permanente: el objeto no existe o no se alcanza", () => {
+  /*
+   * La rama más frágil del módulo, y la única con dos condiciones. Normalmente
+   * es la cuenta de Instagram equivocada: reintentarla cada cinco minutos no la
+   * convierte en la buena.
+   */
+  assert.equal(esPermanente(new InstagramError("Unsupported get request", 100, 33)), true);
+});
+
+test("el mismo 100 con otro subcódigo es transitorio", () => {
+  // Y esta es la mitad que se cae si alguien simplifica la condición a
+  // `code === 100`: un parámetro mal puesto en una llamada concreta no es
+  // motivo para pausar la cuenta entera.
+  assert.equal(esPermanente(new InstagramError("Invalid parameter", 100, 2207032)), false);
+  assert.equal(esPermanente(new InstagramError("Invalid parameter", 100, 0)), false);
+});
+
 test("el límite de peticiones es transitorio: mañana sí", () => {
   assert.equal(esPermanente(new InstagramError("Application request limit reached", 4, 0)), false);
 });

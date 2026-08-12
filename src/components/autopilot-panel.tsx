@@ -46,11 +46,14 @@ export function AutopilotPanel({
   productId,
   estado,
   cuentas,
+  sinPoderPreguntar,
   listas,
 }: {
   productId: string;
   estado: Autopilot | null;
   cuentas: { id: string; username: string }[];
+  /** Vacío si se pudo preguntar a Meta. Con texto, por qué no se pudo. */
+  sinPoderPreguntar: string;
   /** Cuántas hay listas por delante. Es lo que dice si el colchón se sostiene. */
   listas: number;
 }) {
@@ -99,7 +102,21 @@ export function AutopilotPanel({
         </div>
       ) : null}
 
-      {cuentas.length === 0 ? (
+      {sinPoderPreguntar ? (
+        /*
+         * Esto no es «no hay ninguna»: es «no se ha podido preguntar».
+         *
+         * Decir lo primero cuando pasa lo segundo manda a reautorizar una
+         * conexión que está bien, y esconde el selector de un piloto que ya
+         * tenía su cuenta elegida. La cuenta guardada sigue puesta y se puede
+         * guardar igual.
+         */
+        <p className="text-sm text-amber-700 dark:text-amber-500">
+          No se ha podido preguntar a Meta qué cuentas pueden publicar: {sinPoderPreguntar}. No
+          quiere decir que no haya ninguna.{" "}
+          {igUserId ? `Sigue elegida la ${igUserId}.` : "Ninguna elegida todavía."}
+        </p>
+      ) : cuentas.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Ninguna conexión de Meta puede publicar todavía: la que hay nació solo con permiso de
           lectura de anuncios.{" "}

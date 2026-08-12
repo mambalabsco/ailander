@@ -23,14 +23,23 @@ export default async function InstagramPage({
 
   const posts = actual ? await listPosts(actual.id).catch(() => []) : [];
 
+  /*
+   * «No hay ninguna» y «no se pudo preguntar» son cosas distintas.
+   *
+   * Antes las dos salían como lista vacía, y con un fallo de Meta el panel le
+   * decía a un piloto bien configurado que ninguna conexión puede publicar y le
+   * escondía el selector: un diagnóstico falso que invita a reautorizar sin que
+   * haya nada que reautorizar. Sigue sin dejar la página en blanco.
+   */
   const [autopilot, cuentas] = actual
     ? await Promise.all([
         readAutopilot(actual.id).catch(() => null),
-        // Si Meta no contesta, la lista sale vacía y el panel lo dice. Que no
-        // conteste no debería dejar la página en blanco.
-        listPublishableAccounts().catch(() => []),
+        listPublishableAccounts().catch((error: unknown) => ({
+          ok: false as const,
+          motivo: error instanceof Error ? error.message : "no se pudo preguntar",
+        })),
       ])
-    : [null, []];
+    : [null, { ok: true as const, cuentas: [] }];
 
   return (
     <div className="space-y-6">
@@ -72,7 +81,8 @@ export default async function InstagramPage({
           <AutopilotPanel
             productId={actual.id}
             estado={autopilot}
-            cuentas={cuentas}
+            cuentas={cuentas.ok ? cuentas.cuentas : []}
+            sinPoderPreguntar={cuentas.ok ? "" : cuentas.motivo}
             listas={
               posts.filter(
                 (one) => one.status === "aprobado" && one.mediaUrl && one.scheduledAt,
