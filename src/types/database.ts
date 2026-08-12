@@ -955,6 +955,14 @@ type AuditLogRow = {
   created_at: string;
 };
 
+/** El correo que un administrador propuso y la persona todavía no ha confirmado. */
+type PendingEmailChangeRow = {
+  user_id: string;
+  nuevo_email: string;
+  pedido_por: string;
+  created_at: string;
+};
+
 type StudioProjectRow = {
   id: string;
   user_id: string;
@@ -1421,6 +1429,7 @@ export type Database = {
       >;
 
       audit_log: Table<AuditLogRow, Insertable<AuditLogRow, Exclude<keyof AuditLogRow, "user_id" | "action">>>;
+      pending_email_changes: Table<PendingEmailChangeRow, Insertable<PendingEmailChangeRow>>;
       studio_projects: Table<
         StudioProjectRow,
         Insertable<StudioProjectRow, Exclude<keyof StudioProjectRow, "user_id">>
@@ -1504,7 +1513,16 @@ export type Database = {
       >;
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      /*
+       * `mando_sobre` se llama desde el código además de usarse en las
+       * políticas, porque hay un sitio donde no hay RLS que ampare —la capa de
+       * servicio— y allí esta pregunta es la única comprobación que queda en
+       * pie. Es la misma función, así que no puede haber dos respuestas
+       * distintas a la misma pregunta.
+       */
+      mando_sobre: { Args: { persona: string }; Returns: boolean };
+    };
     Enums: {
       product_status: DbProductStatus;
       product_owner: DbProductOwner;

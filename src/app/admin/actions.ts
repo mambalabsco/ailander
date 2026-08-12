@@ -1,9 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { canAssign, canDisable, isRole, type Role } from "@/lib/roles";
+import { canAssign, canDisable, canManageAccount, isRole, type Role } from "@/lib/roles";
 import { record, requireCapability, requireProfile } from "@/lib/permissions";
-import { findProfile, updateProfile } from "@/lib/data/profiles";
+import { findProfile, updateProfile, type Profile } from "@/lib/data/profiles";
+import { emailProblem, passwordProblem } from "@/lib/account-rules";
+import { mandoSobre, proposeEmailChange } from "@/lib/data/email-changes";
+import { setPassword } from "@/lib/data/people-admin";
+import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/site-url";
 
 /**
  * Gestionar personas.
@@ -116,6 +121,158 @@ export async function setDisabledAction(
     return { ok: true, message: off ? "Cuenta desactivada." : "Cuenta reactivada." };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo cambiar." };
+  }
+}
+
+/* ------------------------- La cuenta de otra persona ------------------------ */
+
+/**
+ * Lo que hay que comprobar antes de tocar la cuenta de alguien, en un sitio.
+ *
+ * Son dos preguntas distintas y las dos hacen falta: `canManageAccount` dice si
+ * el papel de quien pide alcanza, y `mandoSobre` si además esa persona está en
+ * alguno de sus espacios. Sin la segunda, un administrador podría fijarle la
+ * contraseña a alguien de otro equipo — que es el agujero que este trabajo
+ * cierra.
+ */
+async function autorizar(
+  id: string,
+): Promise<{ ok: true; target: Profile } | { ok: false; message: string }> {
+  const actor = await requireCapability("personas");
+  const target = await findProfile(id);
+
+  if (!target) return { ok: false, message: "Esa persona ya no existe." };
+
+  const allowed = canManageAccount(actor, target);
+  if (!allowed.ok) return { ok: false, message: allowed.reason };
+
+  if (!(await mandoSobre(id))) {
+    return { ok: false, message: "Esa persona no está en ninguno de tus espacios." };
+  }
+
+  return { ok: true, target };
+}
+
+/**
+ * Mandarle el enlace para que se ponga la contraseña ella.
+ *
+ * Es el botón por defecto y no necesita la clave de servicio: es el mismo camino
+ * que `/auth/recuperar`, así que quien lo pulsa no llega a saber ninguna
+ * contraseña y por tanto no puede entrar como esa persona.
+ */
+export async function sendRecoveryAction(
+  userId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(userId);
+  if (!id) return { ok: false, message: "Falta la persona." };
+
+  try {
+    const permiso = await autorizar(id);
+    if (!permiso.ok) return { ok: false, message: permiso.message };
+
+    const target = permiso.target;
+    const supabase = await createClient();
+
+    await supabase.auth.resetPasswordForEmail(target.email, {
+      redirectTo: `${await siteOrigin()}/auth/callback?next=/auth/nueva-clave`,
+    });
+
+    await record("cuenta.recuperacion", target.email || id, {});
+
+    revalidatePath("/admin");
+    return { ok: true, message: `Enlace enviado a ${target.email}. Caduca en una hora.` };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo enviar." };
+  }
+}
+
+/**
+ * Fijarle la contraseña a mano.
+ *
+ * Es la única llamada de toda la administración de cuentas que usa la clave de
+ * servicio, y la única que deja a quien la pulsa **pudiendo entrar en esa
+ * cuenta**. Existe para cuando la persona ya no tiene acceso a su buzón, que es
+ * cuando el enlace de recuperación no sirve de nada.
+ */
+export async function setPasswordAction(
+  userId: unknown,
+  password: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(userId);
+  if (!id) return { ok: false, message: "Falta la persona." };
+
+  const clave = typeof password === "string" ? password : "";
+  const problema = passwordProblem(clave);
+  if (problema) return { ok: false, message: problema };
+
+  try {
+    const permiso = await autorizar(id);
+    if (!permiso.ok) return { ok: false, message: permiso.message };
+
+    await setPassword(id, clave.trim());
+
+    // Se anota que se cambió, quién y a quién. La contraseña, nunca.
+    await record("cuenta.clave", permiso.target.email || id, {});
+
+    revalidatePath("/admin");
+    return { ok: true, message: "Contraseña cambiada. Dísela por un canal que no sea el correo." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo cambiar." };
+  }
+}
+
+/**
+ * Proponerle un correo nuevo, que confirma ella.
+ *
+ * Aquí no cambia nada todavía: la propuesta espera a que la persona entre y la
+ * acepte, y es entonces cuando Supabase manda sus dos correos. La vía de
+ * administración cambiaría el correo al instante —comprobado— y un correo mal
+ * tecleado deja la cuenta apuntando a un buzón ajeno.
+ */
+export async function proposeEmailAction(
+  userId: unknown,
+  email: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(userId);
+  if (!id) return { ok: false, message: "Falta la persona." };
+
+  try {
+    const permiso = await autorizar(id);
+    if (!permiso.ok) return { ok: false, message: permiso.message };
+
+    const target = permiso.target;
+    const nuevo = readText(email).toLowerCase();
+
+    const problema = emailProblem(nuevo, target.email);
+    if (problema) return { ok: false, message: problema };
+
+    /*
+     * Se mira si ya hay alguien con ese correo entre los que se ven.
+     *
+     * No alcanza a las cuentas de otros espacios —RLS no las deja ver, y está
+     * bien que no las deje—, así que este aviso caza el caso corriente y el
+     * resto lo caza Supabase al confirmar. Vale la pena igual: es la diferencia
+     * entre enterarse ahora y que se entere la otra persona cuando pulse.
+     */
+    const supabase = await createClient();
+    const { data: ocupado } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", nuevo)
+      .maybeSingle();
+
+    if (ocupado) return { ok: false, message: "Ya hay una cuenta con ese correo." };
+
+    await proposeEmailChange(id, nuevo);
+    await record("cuenta.correo.propuesto", target.email || id, { a: nuevo });
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+      message: `Propuesto. ${target.email} lo verá al entrar y tendrá que confirmarlo desde su correo.`,
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo proponer." };
   }
 }
 

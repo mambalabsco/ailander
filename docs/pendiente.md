@@ -84,18 +84,38 @@ el catálogo se descarta— y se marcan en `/equipo`, botón «Accesos», con vu
 atrás. Y ya se aplican de verdad: `requireCapability` y el menú
 resuelven contra la pertenencia, no contra el papel a secas.
 
-La otra mitad **no lo es**, y va escrito aquí para que nadie lo aborde de
-pasada: cambiar la contraseña o el correo de otra persona no se hace con la
-sesión del navegador. Exige la clave de servicio de Supabase, desde el servidor,
-y una pantalla que la use mal no es un fallo de interfaz — es una escalada de
-privilegios. Requisitos mínimos antes de escribir la primera línea:
+**La otra mitad también, desde el 12 de agosto de 2026.** En `/admin`, por
+persona: mandarle el enlace de recuperación, proponerle un correo nuevo, y
+fijarle la contraseña a mano detrás de su aviso. Diseño y plan en
+`docs/superpowers/specs/2026-08-12-administracion-cuentas-design.md`.
 
-- La clave de servicio **nunca** viaja al navegador ni entra en un componente de
-  cliente. Solo en acciones de servidor.
-- Cada acción comprueba que quien la lanza manda en el espacio de esa persona,
-  con `manda_en`. No basta con esconder el botón.
-- Nadie puede subirse a sí mismo de papel ni quitarse su propia comprobación.
-- Todo cambio sobre otra cuenta se anota en `audit_log`: quién, a quién y qué.
+Lo que hay que saber de cómo quedó:
+
+- **El correo lo confirma la persona, no el admin.** Comprobado contra la API:
+  `updateUserById({ email })` lo cambia al instante y se salta el doble
+  confirmado de `config.toml`. Así que el admin *propone* y quien llama a
+  `updateUser` es ella desde su sesión, que es lo que hace que Supabase mande
+  sus dos correos. Se ve al entrar, en `/cuenta`.
+- **La clave de servicio se usa en una sola llamada de todo esto**: fijar la
+  contraseña, en `src/lib/data/people-admin.ts`. El enlace de recuperación va
+  por `resetPasswordForEmail`, que es el camino que ya existía.
+- **Cada acción comprueba dos cosas**: `canManageAccount` —el papel alcanza— y
+  `mando_sobre` —esa persona está en alguno de sus espacios—. La segunda es una
+  función `security definer`, la misma que usan las políticas.
+- Y de paso, `profiles` y `audit_log` dejaron de ser globales: ver
+  `equipo-compartido.md`.
+
+**Lo que sigue sin poderse hacer, y por qué:**
+
+- **Cerrar las sesiones de otra persona.** `admin.signOut` pide el JWT de esa
+  persona, que no tenemos. No hay forma con esta API.
+- **Borrar una cuenta.** Comprobado el 12 de agosto contra el proyecto real:
+  falla siempre con `workspaces_created_by_fkey`, porque al registrarse se le
+  crea un espacio y esa clave foránea no tiene cascada. Y el error llega a
+  supabase-js como `{}`, sin mensaje: quien lo intente verá «no se pudo» sin
+  tener por dónde empezar. Arreglarlo es decidir antes qué pasa con el espacio
+  de quien se va —se borra con lo que hay dentro, o se traspasa—, y eso es de
+  negocio, no de migración.
 
 ## 7. Suelto
 

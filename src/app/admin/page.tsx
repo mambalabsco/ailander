@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { listProfiles, spentThisMonth, currentProfile } from "@/lib/data/profiles";
 import { listAuditLog } from "@/lib/data/audit";
+import { pendingEmailChanges } from "@/lib/data/email-changes";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { can } from "@/lib/roles";
 import { AdminPeople } from "@/components/admin-people";
@@ -24,6 +25,15 @@ export default async function AdminPage() {
 
   const people = await listProfiles();
 
+  /*
+   * Las propuestas de correo se leen de una vez y se reparten por persona. Una
+   * consulta por fila multiplicaría por el número de personas algo que cabe en
+   * una sola.
+   */
+  const propuestas = new Map(
+    (await pendingEmailChanges().catch(() => [])).map((one) => [one.userId, one.nuevoEmail]),
+  );
+
   const withSpend = await Promise.all(
     people.map(async (person) => ({
       id: person.id,
@@ -34,6 +44,7 @@ export default async function AdminPage() {
       disabled: person.disabled,
       spentThisMonth: await spentThisMonth(person.id).catch(() => 0),
       isMe: person.id === me.id,
+      pendingEmail: propuestas.get(person.id) ?? null,
     })),
   );
 

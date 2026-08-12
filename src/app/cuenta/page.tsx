@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { currentProfile, spentThisMonth } from "@/lib/data/profiles";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, capabilitiesOf, CAPABILITY_LABELS, CAPABILITIES, can } from "@/lib/roles";
+import { myPendingEmailChange } from "@/lib/data/email-changes";
 import { AccountPanel } from "@/components/account-panel";
+import { PendingEmailNotice } from "@/components/pending-email-notice";
 import { SectionCard } from "@/components/section-card";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +17,12 @@ export default async function CuentaPage() {
 
   const spent = await spentThisMonth(me.id).catch(() => 0);
 
+  /*
+   * Si la consulta falla, la pantalla de la cuenta tiene que seguir abriéndose:
+   * un aviso que no se puede leer no vale una página en blanco.
+   */
+  const propuesta = await myPendingEmailChange().catch(() => null);
+
   return (
     <div className="space-y-6">
       <header>
@@ -23,6 +31,8 @@ export default async function CuentaPage() {
           Qué puedes hacer y cuánto llevas gastado este mes.
         </p>
       </header>
+
+      {propuesta ? <PendingEmailNotice nuevoEmail={propuesta.nuevoEmail} /> : null}
 
       <AccountPanel name={me.name} email={me.email} />
 

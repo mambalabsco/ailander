@@ -102,6 +102,26 @@ dentro, eso no se arregla sacándole después: ya lo vio.
 - **Qué pasa cuando alguien sale de un equipo**: sus datos ya son del espacio, así
   que se quedan. Conviene decirlo en la pantalla antes de sacar a nadie.
 
+## Las dos tablas que se quedaron fuera, y ya no
+
+`profiles` y `audit_log` no se migraron con las demás: sus políticas seguían
+preguntando por el papel a secas —`current_role_name() in ('dueño','admin')`— en
+vez de por la pertenencia. Un administrador del espacio A podía leer y editar el
+perfil de alguien del espacio B, y leerse su registro entero.
+
+Arreglado el 12 de agosto de 2026 en `20260812000300_personas_por_espacio.sql`,
+con dos funciones `security definer` nuevas:
+
+- **`comparte_espacio(persona)`** — «¿está esta persona en alguno de mis
+  espacios?». Es la que deja ver perfiles.
+- **`mando_sobre(persona)`** — «¿soy dueño o admin en alguno de los espacios
+  donde está?». Es la que deja escribirlos, y la que comprueba el código antes
+  de tocar la cuenta de alguien.
+
+Y con ellas hubo que cambiar el disparador `protect_profile_fields`, que
+preguntaba lo mismo: dejarlo como estaba habría hecho inútil la política nueva,
+porque un admin de otro espacio seguía pasando por ahí.
+
 ## Riesgos, dichos antes
 
 - Una política mal escrita **enseña datos ajenos**, y no da ningún error. Por eso

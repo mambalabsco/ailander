@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button, SelectField } from "@/components/ui";
 import { setDisabledAction, setLimitAction, setRoleAction } from "@/app/admin/actions";
+import { PersonAccess } from "@/components/person-access";
 import { ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, capabilitiesOf, CAPABILITY_LABELS } from "@/lib/roles";
 import type { Role } from "@/lib/roles";
 
@@ -29,6 +30,8 @@ export interface PersonView {
   disabled: boolean;
   spentThisMonth: number;
   isMe: boolean;
+  /** El correo que se le propuso y todavía no ha contestado. */
+  pendingEmail: string | null;
 }
 
 const money = (value: number) => `$${value.toFixed(2)}`;
@@ -164,6 +167,21 @@ export function AdminPeople({ people }: { people: PersonView[] }) {
                   </span>
                 ) : null}
               </p>
+
+              {/*
+                Sobre uno mismo no se dibuja. La acción lo rechazaría igual
+                —`canManageAccount` no deja—, pero un botón que siempre falla es
+                peor que ninguno: hace dudar de si el fallo es el permiso o la
+                pantalla.
+              */}
+              {person.isMe || person.role === "dueño" ? null : (
+                <PersonAccess
+                  personId={person.id}
+                  email={person.email}
+                  pendingEmail={person.pendingEmail}
+                  onMessage={setMessage}
+                />
+              )}
             </li>
           );
         })}

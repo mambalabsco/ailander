@@ -61,6 +61,18 @@ export async function readAutopilot(productId: string): Promise<Autopilot | null
  * `upsert` y no `insert` más `update`: el panel no distingue entre configurar
  * por primera vez y cambiar algo, y hacer que lo distinga solo sirve para tener
  * dos caminos donde uno basta.
+ *
+ * ## Por qué Guardar también quita la pausa
+ *
+ * Porque antes no la tocaba y el mensaje decía «Encendido. Publicará solo…»
+ * con el piloto parado: se arreglaba la causa —elegir la cuenta buena, mover la
+ * ventana—, se pulsaba Guardar, y la cuenta seguía muda sin que nada lo dijera.
+ * Entre las dos salidas posibles —no quitarla y que el mensaje no prometa, o
+ * quitarla— se elige quitarla: quien acaba de cambiar los ajustes está diciendo
+ * «prueba otra vez con esto», y si el motivo sigue ahí la vuelta siguiente lo
+ * vuelve a pausar con el motivo escrito, que es exactamente donde estábamos.
+ * Los fallos seguidos se ponen a cero por lo mismo que en `resumeAutopilot`:
+ * con la cuenta a dos, el primer tropiezo pausaría otra vez al instante.
  */
 export async function saveAutopilot(
   productId: string,
@@ -79,6 +91,8 @@ export async function saveAutopilot(
       hora_desde: patch.horaDesde,
       hora_hasta: patch.horaHasta,
       zona_horaria: patch.zonaHoraria,
+      pausado_por: "",
+      fallos_seguidos: 0,
     },
     { onConflict: "product_id" },
   );
