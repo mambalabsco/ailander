@@ -115,6 +115,7 @@ const STATUS_LABELS: Record<ResearchDocumentStatus, string> = {
 };
 
 export function DocumentsTab({
+  researchUnavailable,
   research,
   hasApiKey,
   missingInputs,
@@ -138,6 +139,8 @@ export function DocumentsTab({
   blocked: Record<ResearchDocumentId, ResearchDocumentId[]>;
   /** Coste aproximado por documento, para avisar antes de gastar. */
   costRange: { min: number; max: number };
+  /** En general y con investigación por mercado no hay ninguna que usar. */
+  researchUnavailable: boolean;
 }) {
   const router = useRouter();
   const [showPlan, setShowPlan] = useState(false);
@@ -188,6 +191,24 @@ export function DocumentsTab({
   const generatingCount = ordered.filter(
     (id) => research.documents[id].status === "generating",
   ).length;
+
+  /*
+   * En general, con la investigación por mercado, no hay nada que generar.
+   *
+   * Se dice antes en vez de dejar un botón que falla al pulsarlo: un botón que
+   * falla cuesta una espera y una explicación; decirlo antes no cuesta nada.
+   */
+  if (researchUnavailable) {
+    return (
+      <div className="space-y-6">
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          Este producto tiene una investigación <strong>por mercado</strong>, así que en general no
+          hay ninguna que usar. Elige un mercado arriba, o marca «la investigación vale para todos
+          los mercados» en Editar producto.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

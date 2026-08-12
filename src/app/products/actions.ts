@@ -180,6 +180,9 @@ export async function updateProductFromForm(id: string, patch: unknown) {
      */
     ...(raw.storeId === undefined ? {} : { storeId: readText(raw.storeId) || undefined }),
     ...(raw.marketId === undefined ? {} : { marketId: readText(raw.marketId) || undefined }),
+    // Igual que los dos de arriba: solo se toca si el formulario lo trae, para
+    // que una actualización parcial no apague el interruptor sin querer.
+    ...(typeof raw.researchShared === "boolean" ? { researchShared: raw.researchShared } : {}),
   });
 
   if (!updated) {

@@ -4,6 +4,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { createClaudeClient, researchModel, extractionModel } from "@/lib/claude";
 import { buildResearchPrompt, type ResearchExtras } from "@/lib/research-prompts";
 import { saveResearchDocument } from "@/lib/data/research";
+import { stampFor, type MarketContext } from "@/lib/market-selection";
 import { readProductResearch } from "@/lib/research-store";
 import { describeApiError } from "@/lib/api-errors";
 import { recordRun } from "@/lib/data/runs";
@@ -117,6 +118,25 @@ const ESFUERZO = "medium" as const;
  * ventana de búsqueda hacia atrás —la API mira como mucho veinte bloques—, y un
  * turno con muchos resultados de búsqueda puede pasarse de veinte él solo.
  */
+/**
+ * Con qué mercado se guarda un documento de investigación.
+ *
+ * Con el interruptor encendido, con **ninguno**: los seis documentos son del
+ * producto y valen para todos sus mercados. Sellarlos con un país haría que el
+ * mismo informe se regenerara —y se pagara— una vez por mercado, que es
+ * exactamente lo que encender el interruptor quiere evitar.
+ *
+ * Apagado, con el mercado en el que se está: el público de Chile y el de México
+ * no son el mismo, y un informe de uno presentado como del otro es plausible y
+ * falso.
+ */
+function selloDeMercado(
+  product: { researchShared: boolean },
+  marketContext: MarketContext,
+): string | null {
+  return product.researchShared ? null : stampFor(marketContext.selection);
+}
+
 const MARCA = { type: "ephemeral" } as const;
 
 /** Cuántos turnos del asistente conservan su marca, además del encargo. */
@@ -252,6 +272,7 @@ export async function runResearchDocument(options: {
   await saveResearchDocument({
     productId: product.id,
     documentId,
+    marketId: selloDeMercado(product, extras.marketContext),
     status: "generating",
     markdown: "",
     data: null,
@@ -339,6 +360,7 @@ export async function runResearchDocument(options: {
         await saveResearchDocument({
           productId: product.id,
           documentId,
+          marketId: selloDeMercado(product, extras.marketContext),
           status: "error",
           markdown: accumulated,
           data: null,
@@ -386,6 +408,7 @@ export async function runResearchDocument(options: {
         await saveResearchDocument({
           productId: product.id,
           documentId,
+          marketId: selloDeMercado(product, extras.marketContext),
           status: "error",
           markdown: accumulated,
           data: null,
@@ -438,6 +461,7 @@ export async function runResearchDocument(options: {
         await saveResearchDocument({
           productId: product.id,
           documentId,
+          marketId: selloDeMercado(product, extras.marketContext),
           status: "error",
           markdown: accumulated,
           data: null,

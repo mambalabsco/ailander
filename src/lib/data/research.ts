@@ -44,13 +44,17 @@ const DATA_KEY: Record<ResearchDocumentId, keyof ProductResearch> = {
   "desire-validation": "desireValidation",
 };
 
-export async function readProductResearch(productId: string): Promise<ProductResearch> {
+export async function readProductResearch(
+  productId: string,
+  selection?: Selection,
+): Promise<ProductResearch> {
   const { supabase } = await requireContext();
 
   const { data, error } = await supabase
     .from("research_documents")
     .select("*")
-    .eq("product_id", productId);
+    .eq("product_id", productId)
+    .or(marketFilter(selection));
 
   if (error) throw new Error(`No se pudo leer la investigación: ${error.message}`);
 
@@ -120,6 +124,14 @@ export async function saveResearchDocument(input: {
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  /*
+   * De qué mercado es el documento. Nulo es general.
+   *
+   * Con la investigación compartida se guarda nulo: los seis documentos son del
+   * producto y sellarlos con un país haría que el mismo informe se regenerara
+   * —y se pagara— una vez por mercado.
+   */
+  marketId?: string | null;
 }): Promise<void> {
   const { supabase, userId } = await requireContext();
 
@@ -136,8 +148,11 @@ export async function saveResearchDocument(input: {
       model: input.model ?? "",
       input_tokens: input.inputTokens ?? null,
       output_tokens: input.outputTokens ?? null,
+      market_id: input.marketId ?? null,
     },
-    { onConflict: "product_id,document_id", defaultToNull: false },
+    // El conflicto lleva el mercado dentro: sin él, generar el documento 1 de
+    // México machacaría el de Chile en vez de crear el suyo.
+    { onConflict: "product_id,document_id,market_id", defaultToNull: false },
   );
 
   if (error) throw new Error(`No se pudo guardar el documento: ${error.message}`);

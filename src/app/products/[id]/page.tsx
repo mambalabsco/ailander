@@ -113,7 +113,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
 
   const [research, hooks, angles, copies, images, ads, hasApiKey, hasHiggsfieldKey] =
     await Promise.all([
-      readProductResearch(id),
+      readProductResearch(id, product.researchShared ? undefined : selection),
       readProductHooks(id, selection),
       readAngles(id, selection),
       readCopies(id, selection),
@@ -470,6 +470,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       ) : null}
       {activeTab === "documentos" ? (
         <DocumentsTab
+          researchUnavailable={selection.kind === "general" && !product.researchShared && showSelector(marketIds)}
           research={research}
           hasApiKey={hasApiKey}
           missingInputs={missingResearchInputs(product)}

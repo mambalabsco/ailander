@@ -49,6 +49,7 @@ export function EditProductForm({ product, currency, stores }: EditProductFormPr
     targetGenders: product.researchInputs?.targetGenders ?? [],
     storeId: product.storeId ?? "",
     marketId: product.marketId ?? "",
+    researchShared: product.researchShared,
   });
 
   const selectedStore = stores.find((item) => item.id === form.storeId);
@@ -160,6 +161,28 @@ export function EditProductForm({ product, currency, stores }: EditProductFormPr
           </SelectField>
         </Field>
       </div>
+
+      {/*
+        El interruptor de la investigación.
+        Apagado —el valor inicial— cada mercado tiene la suya: el público de
+        Chile y el de México no son el mismo, y ese era el motivo original de
+        duplicar productos en vez de tener uno solo.
+      */}
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={form.researchShared}
+          onChange={(event) => update("researchShared", event.target.checked)}
+          className="mt-1 size-4 accent-violet-600"
+        />
+        <span className="text-sm">
+          <span className="font-medium">La investigación vale para todos los mercados</span>
+          <span className="block text-slate-500 dark:text-slate-400">
+            Apagado, cada mercado tiene la suya y hay que generarla país por país. Encendido, se
+            escribe una vez y el modo general también puede usarla.
+          </span>
+        </span>
+      </label>
 
       {form.storeId && !form.marketId ? (
         <p className="text-sm text-amber-700 dark:text-amber-400">

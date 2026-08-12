@@ -38,8 +38,11 @@ export function isDemoResearchProduct(productId: string) {
   return DEMO_RESEARCH_PRODUCT_IDS.includes(productId);
 }
 
-export async function readProductResearch(productId: string): Promise<ProductResearch> {
-  if (isSupabaseConfigured()) return db.readProductResearch(productId);
+export async function readProductResearch(
+  productId: string,
+  selection?: Selection,
+): Promise<ProductResearch> {
+  if (isSupabaseConfigured()) return db.readProductResearch(productId, selection);
 
   const stored = await readJson<Record<string, ProductResearch>>(researchPath, {});
   if (stored[productId]) return stored[productId];
