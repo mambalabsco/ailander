@@ -5,8 +5,9 @@ import { generateStructured } from "@/lib/generators";
 import { INSTAGRAM_POSTS_SCHEMA } from "@/lib/generation-schemas";
 import { findProductAnywhere } from "@/lib/products";
 import { readProductResearch } from "@/lib/research-store";
-import { addPosts, deletePost, updatePost } from "@/lib/data/instagram";
+import { addPosts, deletePost, listPosts, updatePost } from "@/lib/data/instagram";
 import { buildCaption, buildContentPrompt, findFormat } from "@/lib/instagram/content";
+import { recentSummary } from "@/lib/instagram/plan";
 
 const readText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -45,6 +46,28 @@ export async function generateInstagramAction(input: unknown): Promise<{
       .join("\n")
       .slice(0, 4_000);
 
+    /*
+     * Lo que ya se publicó entra en el encargo.
+     *
+     * Es lo que separa un generador de un community manager: sin esto, cada
+     * tanda empieza de cero y a la tercera ha escrito tres veces la misma
+     * publicación con otras palabras. Va en el **prompt** y no en el contexto
+     * cacheado a propósito: cambia en cada tanda, y metido en el prefijo
+     * rompería la caché de todas.
+     */
+    const anteriores = await listPosts(productId).catch(() => []);
+
+    const memoria = recentSummary(
+      anteriores.map((one) => ({
+        format: one.format,
+        scene: one.scene,
+        // El pie completo no: lo que hay que no repetir es el gancho, y es lo
+        // primero que se lee de él.
+        first: one.caption.split("\n")[0] ?? "",
+        showsProduct: one.showsProduct,
+      })),
+    );
+
     const written = await generateStructured<{
       posts: {
         first: string;
@@ -62,13 +85,18 @@ export async function generateInstagramAction(input: unknown): Promise<{
        * distintos son tres llamadas con el mismo principio.
        */
       context: context || undefined,
-      prompt: buildContentPrompt({
-        format,
-        productName: product.name,
-        audience: product.targetAudience || "el público objetivo",
-        country: product.country || "México",
-        count,
-      }),
+      prompt: [
+        buildContentPrompt({
+          format,
+          productName: product.name,
+          audience: product.targetAudience || "el público objetivo",
+          country: product.country || "México",
+          count,
+        }),
+        memoria,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
       schema: INSTAGRAM_POSTS_SCHEMA,
       role: "copy",
       maxTokens: 8_000,
