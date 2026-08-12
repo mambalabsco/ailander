@@ -336,9 +336,18 @@ export async function generateHooksAction(
    * por longitud después de haberlos pagado. Además, así una combinación que
    * falle no se lleva por delante las demás.
    */
-  const buildPrompt = (batch: (typeof batches)[number]) => `${productContext}
-
-## Tarea
+  /*
+   * Solo el encargo: el contexto del producto va aparte, por la caché.
+   *
+   * Son hasta doce tandas seguidas con el mismo contexto delante y solo el
+   * nivel de conciencia y el deseo cambiando. Pegándolo dentro del encargo, ese
+   * contexto se pagaba entero doce veces; pasándolo como `context`, se paga una
+   * y las once siguientes lo leen a una décima parte.
+   *
+   * Lo que va aquí **no puede** colarse en el contexto: en cuanto una tanda
+   * cambia un byte del prefijo, no hay caché. Y no falla — se paga y ya.
+   */
+  const buildTask = (batch: (typeof batches)[number]) => `## Tarea
 
 Escribe **10 ganchos** para anuncios de Facebook dirigidos a personas en el nivel de conciencia **${AWARENESS_LABELS[batch.awarenessLevel]}**, sobre este deseo masivo:
 
@@ -365,6 +374,8 @@ Cada gancho es la primera frase de un anuncio: lo que hace parar el scroll. Requ
 
       let inputTokens = 0;
       let outputTokens = 0;
+      let cacheReadTokens = 0;
+      let cacheWriteTokens = 0;
       let created = 0;
       const failures: string[] = [];
 
@@ -379,10 +390,17 @@ Cada gancho es la primera frase de un anuncio: lo que hace parar el scroll. Requ
         try {
           const result = await generateStructured<{
             hooks: { title: string; body: string; angle: string; format: string }[];
-          }>({ prompt: buildPrompt(batch), schema: HOOKS_SCHEMA, role: "copy" });
+          }>({
+            prompt: buildTask(batch),
+            context: productContext,
+            schema: HOOKS_SCHEMA,
+            role: "copy",
+          });
 
           inputTokens += result.inputTokens;
           outputTokens += result.outputTokens;
+          cacheReadTokens += result.cacheReadTokens;
+          cacheWriteTokens += result.cacheWriteTokens;
 
           const hooks: ProductHook[] = result.data.hooks.map((hook) => ({
             id: "",
@@ -418,7 +436,7 @@ Cada gancho es la primera frase de un anuncio: lo que hace parar el scroll. Requ
         "ganchos",
         ctx,
         `${created} ganchos en ${batches.length - failures.length} combinación(es).${detail}`,
-        { inputTokens, outputTokens },
+        { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
     },
   });
@@ -736,7 +754,7 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
         "anuncios",
         ctx,
         `${totalAds} anuncios en ${created.length} conjunto(s) de «${savedCampaign.name}».`,
-        { inputTokens, outputTokens },
+        { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
     },
   });
@@ -777,7 +795,7 @@ export async function searchCompetitorsAction(productId: unknown): Promise<Launc
         "competidores",
         ctx,
         `${data.competitors.length} candidatos. Revísalos y añade los que valgan al producto.`,
-        { inputTokens, outputTokens },
+        { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
 
       /*
@@ -904,7 +922,7 @@ export async function generateIdeasAction(
         "ideas",
         ctx,
         `${data.ideas.length} ideas nuevas.`,
-        { inputTokens, outputTokens },
+        { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
 
       /*
@@ -986,7 +1004,7 @@ export async function analyzeProductSheetAction(
         `${data.ingredients.length} ingredientes (${found} de la web${
           inferred > 0 ? `, ${inferred} deducidos` : ""
         }). Revísalos antes de guardar.`,
-        { inputTokens, outputTokens },
+        { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
 
       // Va en `result` porque lo confirmas tú: nada se escribe en la ficha
@@ -1118,7 +1136,7 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
         "copys",
         ctx,
         `${data.note}. Está en borrador, en la lista del producto.`,
-        { inputTokens, outputTokens },
+        { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
     },
   });
