@@ -4,6 +4,7 @@ import {
   cabenPorDia,
   decide,
   horaProgramada,
+  repartoAutopiloto,
   SEPARACION_MINUTOS,
   TOPE_INTENTOS_MEDIA,
 } from "@/lib/instagram/autopilot";
@@ -242,16 +243,20 @@ async function rellenar(
   );
 
   /*
-   * El reparto de formatos, con el que ya existe.
+   * El reparto del autopiloto, que no es el de la pantalla.
    *
-   * Pidiendo siempre «feed» la cuenta publicaría la misma forma todos los días
-   * y no saldría un solo reel — que es lo único que alcanza a quien no te sigue.
-   * `weekPlan` ya sabe repartir y continuar donde se quedó: reescribirlo aquí
-   * sería tener dos repartos que se separan a la primera corrección.
+   * Antes reutilizaba `weekPlan`, cuyo ciclo son cuatro formatos. Dos de ellos
+   * el autopiloto no los sabe terminar: el reel se queda esperando un vídeo que
+   * no se genera solo —una fila aprobada y sin media por ciclo, que nadie
+   * limpia— y el carrusel, fuera del alcance del diseño, salía como una imagen
+   * suelta con un pie escrito para deslizar.
+   *
+   * Se acota aquí y no en `weekPlan`: esa la usa la pantalla, y allí los cuatro
+   * son correctos porque hay una persona detrás.
    */
-  const { countsFor, weekPlan } = await import("@/lib/instagram/plan");
+  const { countsFor } = await import("@/lib/instagram/plan");
 
-  for (const { format, count } of countsFor(weekPlan(cuantas, yaHay))) {
+  for (const { format, count } of countsFor(repartoAutopiloto(cuantas, yaHay))) {
     const escrito = await generateInstagramAction({
       productId: row.productId,
       format,

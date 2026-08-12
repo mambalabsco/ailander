@@ -34,6 +34,42 @@ export const SEPARACION_MINUTOS = 90;
  */
 export const TOPE_INTENTOS_MEDIA = 5;
 
+/**
+ * Los formatos que el autopiloto sabe terminar él solo.
+ *
+ * `weekPlan` reparte cuatro —reel, feed, carrusel, historia— y está bien para
+ * la pantalla, donde hay una persona detrás que graba el vídeo y monta el
+ * carrusel. Sin nadie, esos dos no llegan a ninguna parte:
+ *
+ * - **El reel** se queda esperando un vídeo que hoy no se genera solo. Cada
+ *   ciclo dejaba una fila aprobada, de tipo vídeo y sin media, que nadie limpia
+ *   y nadie publica.
+ * - **El carrusel** está explícitamente fuera del alcance del diseño. Salía
+ *   como una imagen suelta con un pie escrito para deslizar entre varias, que
+ *   es peor que no publicar: se nota que no lo miró nadie.
+ *
+ * Vuelven los dos en cuanto haya vídeo automático y carrusel de verdad; ese día
+ * esta lista pasa a tener cuatro y el reparto no cambia de forma.
+ */
+export const FORMATOS_AUTOPILOTO = ["feed", "historia"];
+
+/**
+ * Qué formato le toca a cada pieza que el autopiloto va a escribir.
+ *
+ * Alterna y continúa donde se quedó —igual que `weekPlan`, que no se toca
+ * porque la pantalla sí quiere los cuatro—: empezando siempre por el mismo, dos
+ * tandas seguidas arrancan igual y el patrón se nota a la tercera.
+ */
+export function repartoAutopiloto(cuantas: number, desde = 0): string[] {
+  const plan: string[] = [];
+
+  for (let i = 0; i < Math.max(0, cuantas); i += 1) {
+    plan.push(FORMATOS_AUTOPILOTO[(Math.max(0, desde) + i) % FORMATOS_AUTOPILOTO.length]);
+  }
+
+  return plan;
+}
+
 export interface AutopilotState {
   /** ISO. Se pasa en vez de leer el reloj para poder probarlo. */
   ahora: string;

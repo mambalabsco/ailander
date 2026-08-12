@@ -6,6 +6,7 @@ import {
   decide,
   horaProgramada,
   mismaHoraEnUTC,
+  repartoAutopiloto,
   SEPARACION_MINUTOS,
   TOPE_API,
 } from "./autopilot.ts";
@@ -282,6 +283,25 @@ test("el panel puede decir a qué hora UTC equivale la ventana", () => {
   assert.equal(mismaHoraEnUTC(18, "Asia/Kolkata", cuando), "12:30");
   // Agosto en Madrid es CEST, +2.
   assert.equal(mismaHoraEnUTC(18, "Europe/Madrid", cuando), "16:00");
+});
+
+test("el autopiloto solo reparte lo que sabe terminar", () => {
+  /*
+   * Reusando `weekPlan` salían reels —que se quedan esperando un vídeo que no
+   * se genera solo, una fila huérfana por ciclo— y carruseles, que están fuera
+   * del alcance del diseño y salían como una imagen suelta con un pie escrito
+   * para deslizar.
+   */
+  const plan = repartoAutopiloto(8);
+
+  assert.deepEqual(new Set(plan), new Set(["feed", "historia"]));
+});
+
+test("el reparto alterna y continúa donde se quedó", () => {
+  assert.deepEqual(repartoAutopiloto(4), ["feed", "historia", "feed", "historia"]);
+  // Con tres ya escritas, la siguiente tanda no vuelve a empezar por «feed».
+  assert.deepEqual(repartoAutopiloto(2, 3), ["historia", "feed"]);
+  assert.deepEqual(repartoAutopiloto(0), []);
 });
 
 test("la separación mínima es la que dice la constante", () => {
