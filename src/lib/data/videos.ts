@@ -191,6 +191,8 @@ export async function readVideo(id: string): Promise<Video | null> {
 }
 
 export async function createVideo(input: {
+  /** De qué mercado es el vídeo. Nulo es general: vale en todos. */
+  marketId?: string | null;
   productId: string;
   copyId?: string;
   videoModel?: string;
@@ -207,6 +209,7 @@ export async function createVideo(input: {
     .insert({
       user_id: userId,
       product_id: input.productId,
+      market_id: input.marketId ?? null,
       copy_id: input.copyId ?? null,
       video_model: input.videoModel ?? "grok",
       title: input.title,

@@ -1,4 +1,5 @@
 import "server-only";
+import { PRODUCT_IMAGE_PATTERN_META, type ProductImagePattern } from "@/types/visuals";
 
 import { requireContext } from "@/lib/supabase/session";
 import { toProductImage } from "@/lib/data/mappers";
@@ -206,7 +207,29 @@ export async function uploadProductImages(input: {
  * galería dependiera de que ese archivo siga vivo. Al copiarla, la imagen pasa
  * a ser tuya y se sirve con URL firmada como todas las demás.
  */
+/**
+ * Con qué mercado se sella una imagen generada.
+ *
+ * Con texto dentro, con el suyo: está en un idioma y no vale en otro país. Sin
+ * texto, general — un packshot es el mismo en todas partes, y marcarlo lo
+ * escondería de los demás mercados sin ninguna razón.
+ */
+function imageMarket(pattern: string, marketId: string | null | undefined): string | null {
+  const meta = PRODUCT_IMAGE_PATTERN_META[pattern as ProductImagePattern];
+  // Sin metadatos conocidos se asume que lleva texto, que es el lado seguro:
+  // esconderla de más se corrige con un clic; publicarla en el idioma
+  // equivocado, no.
+  return (meta?.hasText ?? true) ? (marketId ?? null) : null;
+}
+
 export async function uploadGeneratedImage(input: {
+  /**
+   * El mercado en el que se generó. Nulo es general.
+   *
+   * Solo se usa cuando la imagen lleva texto: las que no, valen en todos los
+   * mercados y sellarlas con un país las escondería del resto sin motivo.
+   */
+  marketId?: string | null;
   productId: string;
   sourceUrl: string;
   name: string;
@@ -270,6 +293,7 @@ export async function uploadGeneratedImage(input: {
     .insert({
       user_id: userId,
       product_id: input.productId,
+      market_id: imageMarket(input.pattern, input.marketId),
       pattern: input.pattern,
       name: input.name,
       storage_path: path,

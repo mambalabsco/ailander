@@ -1,6 +1,7 @@
 "use server";
 
 import { runInBackground } from "@/lib/background";
+import { stampFor } from "@/lib/market-selection";
 import { marketContextFor } from "@/lib/market-context";
 import { recordRun } from "@/lib/data/runs";
 import type { LaunchResult } from "@/types/jobs";
@@ -244,6 +245,9 @@ export async function generateProductImagesAction(input: unknown): Promise<Launc
 
       await uploadGeneratedImage({
         productId,
+        // Solo cuenta si el patrón lleva texto: un packshot vale en todos los
+        // mercados y sellarlo lo escondería del resto sin motivo.
+        marketId: stampFor(marketContext.selection),
         sourceUrl: outcome.url,
         name,
         pattern,
@@ -380,6 +384,8 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
   const product = await findProductAnywhere(productId);
   if (!product) throw new Error("No se encontró el producto.");
 
+  const marketContext = await marketContextFor(product);
+
   return runInBackground({
     productId,
     kind: "imagenes",
@@ -430,6 +436,9 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
 
       await uploadGeneratedImage({
         productId,
+        // Solo cuenta si el patrón lleva texto: un packshot vale en todos los
+        // mercados y sellarlo lo escondería del resto sin motivo.
+        marketId: stampFor(marketContext.selection),
         sourceUrl: outcome.url,
         /*
          * El nombre lleva el concepto y el gancho.

@@ -70,6 +70,8 @@ function toLanding(row: {
 
 export async function saveLanding(input: {
   productId: string;
+  /** De qué mercado es la página. Nulo es general: vale en todos. */
+  marketId?: string | null;
   copyId?: string;
   title: string;
   slug: string;
@@ -89,6 +91,7 @@ export async function saveLanding(input: {
     .insert({
       user_id: userId,
       product_id: input.productId,
+      market_id: input.marketId ?? null,
       copy_id: input.copyId ?? null,
       title: input.title,
       slug: input.slug,

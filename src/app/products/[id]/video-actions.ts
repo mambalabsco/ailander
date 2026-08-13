@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { stampFor } from "@/lib/market-selection";
+import { marketContextFor } from "@/lib/market-context";
 import { runInBackground, runStep, type StepContext } from "@/lib/background";
 import { generateStructured } from "@/lib/generators";
 import { LONG_COPY_SCHEMA, SCRIPT_SCHEMA, STYLE_SCHEMA } from "@/lib/generation-schemas";
@@ -133,6 +135,8 @@ export async function createVideoFromCopyAction(
   const copy = copies.find((item) => item.id === copyId);
   if (!copy) throw new Error("Ese copy ya no existe.");
 
+  const marketContext = await marketContextFor(product);
+
   const shots = Math.min(Math.max(Number(raw.shots) || 6, 3), 12);
   const seconds = Math.min(Math.max(Number(raw.seconds) || 60, 15), 180);
 
@@ -232,6 +236,9 @@ export async function createVideoFromCopyAction(
 
       const videoId = await createVideo({
         productId,
+        // El guion, la voz y los subtítulos están en un idioma: el vídeo es del
+        // mercado en el que se pidió, no de todos.
+        marketId: stampFor(marketContext.selection),
         copyId,
         videoModel: findVideoModel(readText(raw.videoModel)).id,
         title: script.data.title || copy.driverLabel,

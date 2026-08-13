@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { stampFor } from "@/lib/market-selection";
 import { parseReferenceId } from "@/lib/reference-id";
 import { canPublish } from "@/lib/market-price";
 import { slugForMarket } from "@/lib/market-slug";
@@ -237,6 +238,7 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
 
       const page = await saveLanding({
         productId,
+        marketId: stampFor(marketContext.selection),
         theme,
         shapeId,
         copyId: copyId || undefined,
@@ -1228,7 +1230,8 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
   const research = await readProductResearch(productId);
   const store = product.storeId ? await findStore(product.storeId) : null;
   const { buildProductContext } = await import("@/lib/copy-prompts");
-  const context = buildProductContext(product, research, store, await marketContextFor(product));
+  const marketContext = await marketContextFor(product);
+  const context = buildProductContext(product, research, store, marketContext);
 
   return runInBackground({
     productId,
@@ -1504,6 +1507,7 @@ export async function copyLandingAction(input: unknown): Promise<LaunchResult> {
 
       const saved = await saveLanding({
         productId,
+        marketId: stampFor(marketContext.selection),
         title: `Copia de ${new URL(url).hostname}`,
         slug: `copia-${new URL(url).hostname.replace(/[^a-z0-9]+/gi, "-")}-${Date.now()}`,
         shapeId: "copia",
@@ -1784,6 +1788,10 @@ export async function cloneLandingAction(input: unknown): Promise<LaunchResult> 
   const destino = await findProductAnywhere(productId);
   if (!destino) throw new Error("Ese producto ya no existe.");
 
+  // La portada se sella con el mercado del producto **de destino**, que es donde
+  // va a vivir: el de origen puede ser de otro país y no pinta nada aquí.
+  const marketContext = await marketContextFor(destino);
+
   const anterior = await findProductAnywhere(origen.productId);
 
   return runInBackground({
@@ -1935,6 +1943,7 @@ export async function cloneLandingAction(input: unknown): Promise<LaunchResult> 
 
       const saved = await saveLanding({
         productId,
+        marketId: stampFor(marketContext.selection),
         title: `${origen.title} · ${destino.name}`,
         slug: `${destino.name.toLowerCase().replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}`,
         shapeId: origen.shapeId,
