@@ -23,6 +23,8 @@ function toAngle(row: Tables<"angles">): MarketingAngle {
     id: row.id,
     productId: row.product_id,
     marketId: row.market_id ?? undefined,
+    sourceAnalysisId: row.source_analysis_id ?? undefined,
+    promiseToValidate: row.promise_to_validate || undefined,
     desire: row.desire,
     name: row.name,
     targetAudience: row.target_audience,
@@ -64,6 +66,8 @@ export async function addAngles(
   productId: string,
   angles: Omit<MarketingAngle, "id" | "productId" | "createdAt">[],
   marketId?: string | null,
+  /** La anatomía de la que salieron, cuando no salen de la investigación. */
+  sourceAnalysisId?: string | null,
 ): Promise<MarketingAngle[]> {
   if (angles.length === 0) return [];
 
@@ -86,6 +90,9 @@ export async function addAngles(
         problem_mechanism: angle.problemMechanism,
         solution_mechanism: angle.solutionMechanism,
         emotional_moment: angle.emotionalMoment,
+        source_analysis_id: sourceAnalysisId ?? null,
+        // Vacío es lo normal: solo lo llevan los que piden más de lo comprobado.
+        promise_to_validate: angle.promiseToValidate ?? "",
       })),
       { defaultToNull: false },
     )

@@ -8,9 +8,17 @@ import { readProductResearch } from "@/lib/research-store";
 import { generateStructured } from "@/lib/generators";
 import { marketContextFor } from "@/lib/market-context";
 import { listVideoReferences } from "@/lib/data/video-references";
-import { ANATOMIA_SCHEMA, buildAnatomiaPrompt, describeVideoAnalyses } from "@/lib/anatomia";
-import { saveAnatomia } from "@/lib/data/anatomias";
-import type { Anatomia } from "@/lib/anatomia";
+import {
+  ANATOMIA_SCHEMA,
+  ANGULOS_SCHEMA,
+  buildAnatomiaPrompt,
+  buildAngulosPrompt,
+  describeVideoAnalyses,
+} from "@/lib/anatomia";
+import { matchByPosition } from "@/lib/angulos-vuelta";
+import { stampFor } from "@/lib/market-selection";
+import { readAnatomia, saveAnatomia } from "@/lib/data/anatomias";
+import type { Anatomia, AnguloDevuelto } from "@/lib/anatomia";
 import type { LaunchResult } from "@/types/jobs";
 
 /**
@@ -144,4 +152,97 @@ export async function saveAnatomiaAction(
   revalidatePath(`/products/${product}`);
 
   return { ok: true, message: "Guardada. Los ángulos saldrán con lo corregido." };
+}
+
+/**
+ * Saca ángulos de una anatomía ya escrita —y corregida, si hizo falta—.
+ *
+ * Se guarda lo que **se casó**, y el resumen dice eso y no lo que devolvió el
+ * modelo. Un trabajo que acaba bien sin haber guardado nada es indistinguible de
+ * uno que no arrancó, y eso ya costó una noche.
+ */
+export async function generateAnglesFromMaterialAction(input: {
+  anatomiaId: unknown;
+  productId: unknown;
+  cuantos?: unknown;
+}): Promise<LaunchResult> {
+  const anatomiaId = readText(input.anatomiaId);
+  const productId = readText(input.productId);
+  const cuantos = Math.min(Math.max(Number(input.cuantos) || 4, 3), 5);
+
+  if (!anatomiaId || !productId) throw new Error("Falta la anatomía o el producto.");
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  const anatomia = await readAnatomia(anatomiaId);
+  if (!anatomia) throw new Error("Esa anatomía ya no existe.");
+
+  return runInBackground({
+    productId,
+    kind: "angulos",
+    label: `${cuantos} ángulos desde la anatomía`,
+    work: async (report) => {
+      await report("Escribiendo los ángulos");
+
+      const store = product.storeId ? await findStore(product.storeId) : null;
+      const research = await readProductResearch(productId);
+      const marketContext = await marketContextFor(product);
+      const { buildProductContext } = await import("@/lib/copy-prompts");
+
+      const outcome = await generateStructured<{ angulos: AnguloDevuelto[] }>({
+        // El mismo contexto que usó la anatomía: prefijo idéntico, caché que
+        // acierta.
+        context: buildProductContext(product, research, store, marketContext),
+        prompt: buildAngulosPrompt({ anatomia, cuantos }),
+        schema: ANGULOS_SCHEMA,
+        role: "copy",
+        maxTokens: 16_000,
+      });
+
+      const vuelta = outcome.data.angulos ?? [];
+      const { casados, sobran } = matchByPosition(Array.from({ length: cuantos }), vuelta);
+
+      if (casados === 0) {
+        throw new Error(
+          "El modelo no devolvió ningún ángulo. Vuelve a intentarlo: no se ha guardado nada.",
+        );
+      }
+
+      const { addAngles } = await import("@/lib/data/copy");
+
+      const guardados = await addAngles(
+        productId,
+        vuelta.slice(0, casados).map((item) => ({
+          // Si el modelo no nombra el deseo, se hereda el de la anatomía: es el
+          // que ancla el ángulo, y sin él la lista sale con huecos.
+          desire: item.deseo || anatomia.deseo,
+          name: item.nombre,
+          targetAudience: item.publico,
+          storyArc: {
+            start: item.arco.inicio,
+            crisis: item.arco.crisis,
+            discovery: item.arco.descubrimiento,
+            resolution: item.arco.resolucion,
+          },
+          problemMechanism: item.mecanismoProblema,
+          solutionMechanism: item.mecanismoSolucion,
+          emotionalMoment: item.momentoEmocional,
+          promiseToValidate: item.promesaPorValidar || undefined,
+        })),
+        stampFor(marketContext.selection),
+        anatomiaId,
+      );
+
+      revalidatePath(`/products/${productId}`);
+
+      const porValidar = guardados.filter((angle) => angle.promiseToValidate).length;
+
+      return {
+        summary: `${guardados.length} ángulos guardados${sobran > 0 ? ` (faltaron ${sobran} de los ${cuantos} pedidos)` : ""}${porValidar > 0 ? `, ${porValidar} con una promesa por comprobar` : ""}. Ya se pueden usar en copys y en vídeos.`,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
+      };
+    },
+  });
 }

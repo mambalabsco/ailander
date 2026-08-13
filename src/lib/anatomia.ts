@@ -152,3 +152,114 @@ Si te doy imágenes, míralas: forman parte del anuncio tanto como el texto.
 En \`porQueFunciona\`, di algo que se pueda discutir —un mecanismo concreto—, no
 un elogio. «Conecta con el público» no es una respuesta.`;
 }
+
+/* ---------------------------- De la anatomía a ángulos ------------------------- */
+
+export interface AnguloDevuelto {
+  nombre: string;
+  deseo: string;
+  publico: string;
+  arco: { inicio: string; crisis: string; descubrimiento: string; resolucion: string };
+  mecanismoProblema: string;
+  mecanismoSolucion: string;
+  momentoEmocional: string;
+  /** Vacío cuando el ángulo se sostiene con lo que hay investigado. */
+  promesaPorValidar: string;
+}
+
+export const ANGULOS_SCHEMA = {
+  type: "object",
+  properties: {
+    angulos: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          nombre: { type: "string" },
+          deseo: { type: "string" },
+          publico: { type: "string" },
+          arco: {
+            type: "object",
+            properties: {
+              inicio: { type: "string" },
+              crisis: { type: "string" },
+              descubrimiento: { type: "string" },
+              resolucion: { type: "string" },
+            },
+            required: ["inicio", "crisis", "descubrimiento", "resolucion"],
+            additionalProperties: false,
+          },
+          mecanismoProblema: { type: "string" },
+          mecanismoSolucion: { type: "string" },
+          momentoEmocional: { type: "string" },
+          promesaPorValidar: { type: "string" },
+        },
+        required: [
+          "nombre",
+          "deseo",
+          "publico",
+          "arco",
+          "mecanismoProblema",
+          "mecanismoSolucion",
+          "momentoEmocional",
+          "promesaPorValidar",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["angulos"],
+  additionalProperties: false,
+} as const;
+
+/**
+ * El encargo de los ángulos.
+ *
+ * Pide entradas **distintas entre sí** y no la misma idea reformulada: un
+ * anuncio que funciona suele tener dentro más de una puerta —el miedo, el
+ * atajo, la identidad— y sacar cinco variantes de la misma no da cinco ángulos,
+ * da uno escrito cinco veces.
+ *
+ * **No se acota por lo que el producto pueda prometer hoy.** Eso es lo pedido:
+ * lo que se busca es el enfoque, y un mecanismo que funciona es reutilizable
+ * aunque el producto de origen prometiera otra cosa. La acotación sigue viva
+ * donde siempre estuvo —el encargo del copy, que no puede afirmar lo que el
+ * producto no hace—, y un ángulo que pida más sale **marcado, no censurado**:
+ * un ángulo silenciado es uno que no se puede discutir.
+ */
+export function buildAngulosPrompt(input: { anatomia: Anatomia; cuantos: number }): string {
+  const { anatomia, cuantos } = input;
+
+  return `## La anatomía del anuncio que funcionó
+
+- Cómo entra: ${anatomia.entrada}
+- Qué promete: ${anatomia.promesa}
+- A quién le habla: ${anatomia.publico}
+- El deseo que explota: ${anatomia.deseo}
+- Ritmo y tono: ${anatomia.ritmo}
+- Qué enseña: ${anatomia.queEnsena}
+- Cómo cierra: ${anatomia.cierre}
+- Por qué funciona: ${anatomia.porQueFunciona}
+
+Cómo está construido:
+${anatomia.estructura.map((item) => `- ${item.parte}: ${item.papel}`).join("\n")}
+
+Objeciones que toca:
+${anatomia.objeciones.map((item) => `- ${item.objecion} → ${item.comoLaResuelve}`).join("\n")}
+
+## Qué tienes que hacer
+
+Escribe **${cuantos} ángulos distintos** para nuestro producto, tomando de aquí el
+mecanismo y extendiéndolo.
+
+Distintos de verdad: cada uno tiene que entrar por una puerta diferente —un
+miedo, un atajo, una identidad, una comparación—, no ser el mismo ángulo con
+otras palabras. Si dos se parecen, sobra uno.
+
+Devuélvelos en una lista, ${cuantos} en total y en ese orden.
+
+**No te limites por lo que el producto pueda prometer hoy**: lo que se busca es
+el enfoque. Si un ángulo necesita una promesa que la investigación no sostiene,
+escríbelo igual y dilo en \`promesaPorValidar\`. Si se sostiene con lo que hay,
+deja ese campo vacío.`;
+}

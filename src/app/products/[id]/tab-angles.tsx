@@ -388,6 +388,20 @@ export function AnglesTab({
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                       {angle.targetAudience}
                     </p>
+
+                    {/*
+                      Se avisa, no se esconde. Un ángulo silenciado es un ángulo
+                      que no se puede discutir, y estos existen precisamente para
+                      poder discutirlos: la idea puede ir lejos, la frase que se
+                      publica no.
+                    */}
+                    {angle.promiseToValidate ? (
+                      <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        Pide una promesa que la investigación no sostiene:{" "}
+                        <strong>{angle.promiseToValidate}</strong>. Compruébala antes de escribir el
+                        copy — el encargo no la va a afirmar por su cuenta.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {performanceById.get(angle.id)?.tested ? (

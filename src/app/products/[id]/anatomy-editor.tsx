@@ -2,8 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Field, TextAreaField, TextField } from "@/components/ui";
-import { saveAnatomiaAction } from "@/app/products/[id]/material-actions";
+import { Button, Field, SelectField, TextAreaField, TextField } from "@/components/ui";
+import { GenerateButton } from "@/components/generate-button";
+import {
+  generateAnglesFromMaterialAction,
+  saveAnatomiaAction,
+} from "@/app/products/[id]/material-actions";
 import type { Anatomia } from "@/lib/anatomia";
 
 /**
@@ -28,6 +32,7 @@ export function AnatomyEditor({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [data, setData] = useState(inicial);
+  const [cuantos, setCuantos] = useState(4);
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -184,6 +189,29 @@ export function AnatomyEditor({
         Corrige aquí lo que el análisis haya entendido mal. Hacerlo ahora cuesta un minuto;
         descubrirlo en cinco ángulos ya escritos cuesta cinco, y lo que se pagó por escribirlos.
       </p>
+
+      <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+        <label className="mb-2 flex items-center gap-2 text-sm">
+          <span>Cuántos ángulos</span>
+          <SelectField
+            className="w-auto"
+            value={String(cuantos)}
+            onChange={(event) => setCuantos(Number(event.target.value))}
+          >
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </SelectField>
+        </label>
+
+        <GenerateButton
+          action={() =>
+            generateAnglesFromMaterialAction({ anatomiaId, productId, cuantos })
+          }
+          label="Sacar ángulos de esta anatomía"
+          hint="Cada uno entra por una puerta distinta. Se guardan como ángulos normales: los copys largos y los vídeos ya los usan."
+        />
+      </div>
     </div>
   );
 }

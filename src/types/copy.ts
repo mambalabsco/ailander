@@ -24,6 +24,16 @@ import type { Intensity, StoryBeat } from "@/lib/story-beats";
 export interface MarketingAngle {
   id: string;
   productId: string;
+  /** La anatomía de la que salió, si no salió de la investigación. */
+  sourceAnalysisId?: string;
+  /**
+   * Lo que el ángulo pide y la investigación no sostiene.
+   *
+   * Se guarda, no se censura: un ángulo silenciado es un ángulo que no se puede
+   * discutir, y estos existen precisamente para poder discutirlos. Vacío es lo
+   * normal.
+   */
+  promiseToValidate?: string;
   /** Para qué mercado se escribió. **Indefinido es general**: vale en todos. */
   marketId?: string;
   /** Deseo masivo del documento 6 del que sale este ángulo. */

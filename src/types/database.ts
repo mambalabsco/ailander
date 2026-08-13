@@ -252,6 +252,10 @@ type AngleRow = {
   id: string;
   user_id: string;
   product_id: string;
+  /** La anatomía de la que salió, si salió de una. */
+  source_analysis_id: string | null;
+  /** Lo que pide y la investigación no sostiene. Vacío = se sostiene. */
+  promise_to_validate: string;
   /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
   market_id: string | null;
   desire: string;
