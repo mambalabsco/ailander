@@ -427,30 +427,30 @@ export async function publishLandingAction(input: unknown): Promise<LaunchResult
       if (!store) throw new Error("No se encontró la tienda del producto.");
 
       /*
-       * Las dos comprobaciones que separan publicar de publicar mal.
+       * En general **sí se publica**, y es un caso de uso real: una página que
+       * vale para todos los mercados, sin precio dentro.
        *
-       * 1. Sin mercado no hay dónde publicar: el dominio y el prefijo de ruta
-       *    salen de él. Desde general siempre hay que elegir uno antes.
-       * 2. Un precio convertido no sale a la calle. «$10.847» se lee como un
-       *    error de la tienda, no como un precio; confirmarlo es un clic en
-       *    Precios y lo vuelve manual.
+       * La primera versión de esto exigía mercado siempre, con el argumento de
+       * que el dominio sale de él. Es falso a medias: sin mercado la página va
+       * al dominio de la tienda, que es exactamente lo que se quiere para una
+       * página común. Exigirlo obligaba a salir del modo en el que se estaba
+       * trabajando para publicar lo que se acababa de escribir ahí.
        *
-       * Van aquí, antes de subir nada: descubrirlo después de cargar veinte
+       * Lo que sí se mantiene es la comprobación del precio, **y solo cuando hay
+       * mercado**: un precio convertido no sale a la calle porque «$10.847» se
+       * lee como un error de la tienda. En general no hay precio que comprobar,
+       * porque en general no hay precio: por eso el modo existe.
+       *
+       * Va aquí, antes de subir nada: descubrirlo después de cargar veinte
        * imágenes cuesta la espera entera y deja medio trabajo hecho.
        */
       const marketContext = await marketContextFor(product, readText(raw.mercado) || undefined);
       const publishMarket =
         marketContext.selection.kind === "market"
-          ? findMarket(store, marketContext.selection.marketId)
-          : undefined;
+          ? findMarket(store, marketContext.selection.marketId) ?? null
+          : null;
 
-      if (!publishMarket) {
-        throw new Error(
-          "Elige un mercado antes de publicar: la página se publica en su dominio, y en general no hay ninguno.",
-        );
-      }
-
-      if (!canPublish(marketContext.price)) {
+      if (publishMarket && !canPublish(marketContext.price)) {
         throw new Error(
           marketContext.price
             ? "El precio de este mercado es convertido. Confírmalo en la pestaña de Precios antes de publicar: un precio sin redondear se lee como un error de la tienda."

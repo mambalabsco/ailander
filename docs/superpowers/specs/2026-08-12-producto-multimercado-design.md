@@ -38,15 +38,17 @@ Comprobado en el código, no recordado:
 2. **Lo generado recuerda su mercado**, y el selector filtra.
 3. **El precio se resuelve en cascada** y sólo un precio escrito a mano se
    publica.
-4. **Una landing publicada es una por mercado.** El modo general escribe, el de
-   país publica.
+4. **Una landing publicada es una por mercado**, cuando va a un mercado. Una
+   página general —sin precio, válida en todos— también se publica, en el
+   dominio de la tienda. Corregido el 12 de agosto, después de chocar con el
+   caso real.
 
 ## Alcance
 
 **Dentro:** varios mercados por producto, el selector, ocultar el precio en
 general, los precios por mercado con su conversión congelada, la etiqueta de
 mercado en las piezas con su filtro y su migración, y la publicación por
-mercado con sus tres comprobaciones.
+mercado con sus comprobaciones.
 
 **Fuera, a propósito:**
 
@@ -242,14 +244,24 @@ dentro, y publicar en un mercado sólo puede escribir sobre la página de ese
 mercado: una comprobación de una línea que convierte un desastre silencioso en un
 error.
 
-**El modo general escribe, el modo mercado publica.** En general se redactan
-estructura y argumentos sin precio; al publicar desde general se pide el
-mercado. La publicación exige tres cosas:
+**En general también se publica.** Esto **corrige** lo que decía este documento
+al escribirlo: «el modo general escribe, el de país publica», con el argumento
+de que el dominio sale del mercado. Es falso a medias — sin mercado la página va
+al dominio de la tienda, que es justo lo que se quiere para **una página común a
+todos los mercados**, sin precio dentro, que es lo que el modo general
+garantiza—. Ese caso existe y es normal; exigir un mercado obligaba a salir del
+modo en el que se acababa de escribir la página para poder publicarla.
 
-1. Mercado elegido. Sin él no hay dominio ni prefijo al que publicar.
-2. **Precio `manual`** en ese mercado.
-3. Las piezas que se publican son las de ese mercado o las generales, nunca las
+Lo que la publicación sí exige:
+
+1. **Precio `manual`, y solo cuando hay mercado.** En general no hay precio que
+   comprobar, porque en general no hay precio: para eso está el modo.
+2. Las piezas que se publican son las de ese mercado o las generales, nunca las
    de otro.
+
+El slug lleva el mercado dentro **solo cuando hay mercado**. Una página general
+se publica con su slug tal cual, en el dominio de la tienda, y convive con las de
+cada país sin pisarlas.
 
 Los anuncios no necesitan nada nuevo: `campaigns` ya lleva la etiqueta y las
 cuentas publicitarias tienen su moneda, que ya se convierte con `fx_rates`.
