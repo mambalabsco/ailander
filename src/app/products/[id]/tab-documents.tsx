@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ObjectionsEditor } from "@/app/products/[id]/objections-editor";
 import { useRouter } from "next/navigation";
 import { SectionCard } from "@/components/section-card";
 import { Button, Tag } from "@/components/ui";
@@ -116,6 +117,7 @@ const STATUS_LABELS: Record<ResearchDocumentStatus, string> = {
 
 export function DocumentsTab({
   researchUnavailable,
+  masterObjections,
   research,
   hasApiKey,
   missingInputs,
@@ -141,6 +143,8 @@ export function DocumentsTab({
   costRange: { min: number; max: number };
   /** En general y con investigación por mercado no hay ninguna que usar. */
   researchUnavailable: boolean;
+  /** Las del documento 4, para poder corregirlas. Nulo si no está generado. */
+  masterObjections: { objection: string; howToAddress: string }[] | null;
 }) {
   const router = useRouter();
   const [showPlan, setShowPlan] = useState(false);
@@ -454,6 +458,22 @@ export function DocumentsTab({
                       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
                         Generado el {new Date(state.generatedAt ?? "").toLocaleDateString("es-ES")}
                       </p>
+
+                      {/*
+                        Las objeciones del documento 4, editables.
+                        Van arriba del informe y no al final: son lo que de
+                        verdad entra en los encargos de copy, y enterrarlas bajo
+                        cuarenta mil caracteres de informe es tenerlas y no.
+                      */}
+                      {id === "master" && masterObjections ? (
+                        <div className="mb-5 rounded-2xl border border-violet-200 bg-violet-50/50 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+                          <p className="mb-3 text-sm font-medium">
+                            Objeciones que entran en los copys
+                          </p>
+                          <ObjectionsEditor productId={productId} objections={masterObjections} />
+                        </div>
+                      ) : null}
+
                       <div className="whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300">
                         {state.markdown}
                       </div>

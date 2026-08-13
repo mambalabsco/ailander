@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { marketContextFor } from "@/lib/market-context";
+import { stampFor } from "@/lib/market-selection";
 import { after } from "next/server";
 import { createJob, finishJob } from "@/lib/data/jobs";
 import { runInBackground } from "@/lib/background";
@@ -306,4 +307,67 @@ export async function retryResearchExtractionAction(input: unknown) {
       };
     },
   });
+}
+
+/**
+ * Corrige a mano las objeciones del documento 4.
+ *
+ * La investigación las saca del mercado y a veces las saca mal: una objeción que
+ * nadie pone, o una respuesta que promete algo que el producto no hace. Hasta
+ * ahora no había forma de tocarlas —el documento se regeneraba entero, pagando
+ * otra vez— y son de lo que más pesa en el copy: van al prompt con su «cómo se
+ * resuelve» y el modelo las trata como comprobadas.
+ *
+ * Se corrige **el dato, no el informe**: el Markdown se deja intacto. Reescribirlo
+ * para que cuadre con el JSON sería inventarse un párrafo que nadie ha revisado.
+ */
+export async function saveMasterObjectionsAction(
+  productId: unknown,
+  objections: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = readText(productId);
+  if (!id) return { ok: false, message: "Falta el producto." };
+
+  if (!Array.isArray(objections)) {
+    return { ok: false, message: "No reconozco esa lista de objeciones." };
+  }
+
+  const clean = objections
+    .map((item) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      return { objection: readText(row.objection), howToAddress: readText(row.howToAddress) };
+    })
+    // Una objeción sin texto no es una objeción. La respuesta sí puede faltar:
+    // es justo lo que se está escribiendo cuando se corrige.
+    .filter((item) => item.objection.length > 0);
+
+  const product = await findProductAnywhere(id);
+  if (!product) return { ok: false, message: "No se encontró el producto." };
+
+  /*
+   * El mismo mercado con el que se guardó, o el `upsert` crearía un documento
+   * nuevo en vez de corregir el que estás mirando: la clave es
+   * (producto, documento, mercado).
+   */
+  const marketContext = await marketContextFor(product);
+  const marketId = product.researchShared ? null : stampFor(marketContext.selection);
+
+  const research = await readProductResearch(id, marketContext.selection);
+  const master = research.master;
+  if (!master) {
+    return { ok: false, message: "Este producto todavía no tiene el documento 4 generado." };
+  }
+
+  await saveResearchDocument({
+    productId: id,
+    documentId: "master",
+    status: research.documents.master.status,
+    markdown: research.documents.master.markdown,
+    data: { ...master, objections: clean },
+    marketId,
+  });
+
+  revalidatePath(`/products/${id}`);
+
+  return { ok: true, message: `Guardadas ${clean.length} objeción(es).` };
 }

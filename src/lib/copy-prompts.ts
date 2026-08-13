@@ -141,6 +141,27 @@ export function buildProductContext(
   }
 
   /*
+   * Las objeciones que escribe el equipo en la ficha.
+   *
+   * **No llegaban al prompt.** Se editaban en «Editar producto» y no las leía
+   * nadie más que el analizador de anuncios, así que quien las escribía veía que
+   * los copys seguían sin rebatir lo que él sabe que preguntan los clientes — y
+   * no había forma de saber que ese campo no iba a ninguna parte.
+   *
+   * Van separadas de las del documento 4 y dichas como lo que son: sabidas, sin
+   * respuesta escrita. Mezclarlas con las de la investigación, que sí traen su
+   * «cómo se resuelve», haría que el modelo se inventara la respuesta y la diera
+   * con la misma seguridad que las comprobadas.
+   */
+  if (product.objections.length > 0) {
+    lines.push(
+      "",
+      "Objeciones que conocemos de nuestros clientes (sin respuesta escrita: resuélvelas tú con lo que sepas del producto):",
+      ...product.objections.map((item) => `- ${item}`),
+    );
+  }
+
+  /*
    * La oferta va aquí arriba, con la ficha, y no al final.
    *
    * Un anuncio de fondo de embudo vende el pack de tres con su ahorro y su

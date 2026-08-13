@@ -481,6 +481,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       ) : null}
       {activeTab === "documentos" ? (
         <DocumentsTab
+          masterObjections={research.master?.objections ?? null}
           researchUnavailable={selection.kind === "general" && !product.researchShared && showSelector(marketIds)}
           research={research}
           hasApiKey={hasApiKey}
