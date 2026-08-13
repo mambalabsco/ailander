@@ -1182,6 +1182,23 @@ export async function themesForApplyAction(
  * enlaces. Eso lo garantiza `theme-texts.ts`, que solo escribe donde ya había un
  * texto y filtra por lo que cada ajuste es.
  */
+const TEXTOS_SCHEMA = {
+  type: "object",
+  properties: {
+    textos: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { path: { type: "string" }, text: { type: "string" } },
+        required: ["path", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["textos"],
+  additionalProperties: false,
+} as const;
+
 export async function adaptPageTextsAction(form: FormData): Promise<LaunchResult> {
   const storeId = readText(form.get("storeId"));
   const themeId = readText(form.get("themeId"));
@@ -1228,8 +1245,6 @@ export async function adaptPageTextsAction(form: FormData): Promise<LaunchResult
         );
       }
 
-      await report(`${textos.length} textos; escribiendo los nuevos`);
-
       const [research, angles] = await Promise.all([
         readProductResearch(productId),
         readAngles(productId),
@@ -1239,7 +1254,7 @@ export async function adaptPageTextsAction(form: FormData): Promise<LaunchResult
 
       const { buildProductContext } = await import("@/lib/copy-prompts");
 
-      const prompt = `${buildProductContext(product, research, store, marketContext)}
+      const contexto = `${buildProductContext(product, research, store, marketContext)}
 
 ## Qué hay que hacer
 
@@ -1254,41 +1269,62 @@ Reglas:
 - Devuelve **exactamente** las mismas rutas que te doy, sin inventar ninguna.
 - Respeta la longitud aproximada de cada texto: un titular de cuatro palabras no
   puede volver con veinte, o la sección se rompe visualmente.
-- Nada de precios ni de promesas que la investigación no sostenga.
+- Nada de precios ni de promesas que la investigación no sostenga.`;
 
-## Los textos, con su ruta
+      /*
+       * Por tandas, no todo de una vez.
+       *
+       * Una portada larga tiene más textos de los que caben en una respuesta, y
+       * el modelo la corta por longitud: «La respuesta se cortó por longitud».
+       * No falla a medias — devuelve JSON incompleto y se pierde la vuelta
+       * entera, pagada.
+       *
+       * Se reutiliza `batchTexts`, que es el mismo troceado que usa el clonador
+       * de portadas, en vez de inventar otro con topes distintos.
+       */
+      const { batchTexts } = await import("@/lib/landing-copy-html");
 
-${textos.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`;
+      const tandas: { path: string; value: string }[][] = [];
+      let cursor = 0;
+      for (const grupo of batchTexts(textos.map((item) => item.value))) {
+        tandas.push(textos.slice(cursor, cursor + grupo.length));
+        cursor += grupo.length;
+      }
 
-      const outcome = await generateStructured<{ textos: { path: string; text: string }[] }>({
-        prompt,
-        schema: {
-          type: "object",
-          properties: {
-            textos: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: { path: { type: "string" }, text: { type: "string" } },
-                required: ["path", "text"],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ["textos"],
-          additionalProperties: false,
-        },
-        role: "copy",
-        maxTokens: 16_000,
-      });
+      const escritos: { path: string; value: string }[] = [];
+      let inputTokens = 0;
+      let outputTokens = 0;
 
-      const next = applyTemplateTexts(
-        file.body,
-        (outcome.data.textos ?? []).map((item: { path: string; text: string }) => ({
-          path: item.path,
-          value: item.text,
-        })),
-      );
+      for (const [index, tanda] of tandas.entries()) {
+        await report(`Textos ${index + 1} de ${tandas.length}`);
+
+        const outcome = await generateStructured<{ textos: { path: string; text: string }[] }>({
+          /*
+           * El contexto va aparte y **es idéntico en todas las tandas**: es el
+           * prefijo que la caché reaprovecha. Pegarlo dentro del prompt haría
+           * que cada tanda pagara la ficha y la investigación enteras otra vez.
+           */
+          context: contexto,
+          prompt: `## Los textos, con su ruta
+
+${tanda.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`,
+          schema: TEXTOS_SCHEMA,
+          role: "copy",
+          maxTokens: 16_000,
+        });
+
+        inputTokens += outcome.inputTokens;
+        outputTokens += outcome.outputTokens;
+
+        escritos.push(
+          ...(outcome.data.textos ?? []).map((item: { path: string; text: string }) => ({
+            path: item.path,
+            value: item.text,
+          })),
+        );
+      }
+
+      const next = applyTemplateTexts(file.body, escritos);
 
       // Si no cambió nada no se escribe: cada escritura queda en el historial del
       // tema y una sin cambios solo añade ruido.
@@ -1300,9 +1336,9 @@ ${textos.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`;
       await writeThemeFiles(store, themeId, [{ filename: templateName, content: next }]);
 
       return {
-        summary: `${textos.length} textos reescritos en ${templateName}. Míralo en la vista previa antes de publicar.`,
-        inputTokens: outcome.inputTokens,
-        outputTokens: outcome.outputTokens,
+        summary: `${escritos.length} de ${textos.length} textos reescritos en ${templateName}, en ${tandas.length} tanda(s). Míralo en la vista previa antes de publicar.`,
+        inputTokens,
+        outputTokens,
       };
     },
   });
