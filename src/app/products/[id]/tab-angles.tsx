@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AnatomyEditor } from "@/app/products/[id]/anatomy-editor";
+import type { Anatomia } from "@/lib/anatomia";
 import { MaterialForm } from "@/app/products/[id]/material-form";
 import { SectionCard } from "@/components/section-card";
 import { useJobResult } from "@/components/use-job-result";
@@ -23,6 +25,8 @@ interface AnglesTabProps {
   hasResearch: boolean;
   /** Vídeos ya analizados, para poder adjuntarlos a un material. */
   videoReferences: { id: string; name: string }[];
+  /** Las anatomías ya escritas de este producto. */
+  anatomias: { id: string; title: string; summary: string; anatomia: Anatomia }[];
 }
 
 /**
@@ -33,6 +37,7 @@ interface AnglesTabProps {
 export function AnglesTab({
   productId,
   videoReferences,
+  anatomias,
   angles,
   desires,
   performance,
@@ -96,6 +101,16 @@ export function AnglesTab({
           hasApiKey={hasApiKey}
         />
       </SectionCard>
+
+      {anatomias.map((item) => (
+        <SectionCard
+          key={item.id}
+          title={item.title}
+          description={`Lo que promete: ${item.summary}`}
+        >
+          <AnatomyEditor productId={productId} anatomiaId={item.id} inicial={item.anatomia} />
+        </SectionCard>
+      ))}
 
       <SectionCard
         title="Generar ángulos"

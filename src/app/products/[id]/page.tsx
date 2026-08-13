@@ -38,6 +38,7 @@ import type { ResearchDocumentId } from "@/types/research";
 import { PRODUCT_IMAGE_PATTERNS } from "@/types/visuals";
 import type { AdVisualPrompt } from "@/types/visuals";
 import { listProductMarkets } from "@/lib/data/product-markets";
+import { listAnatomias } from "@/lib/data/anatomias";
 import { landingReferenceId } from "@/lib/reference-id";
 import { marketContextFor } from "@/lib/market-context";
 import { parseSelection, showSelector } from "@/lib/market-selection";
@@ -316,6 +317,16 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
     title: page.title,
   }));
 
+  /*
+   * Las anatomías del producto, para poder corregirlas antes de sacar ángulos.
+   *
+   * Sin tumbar la página si fallan: son un añadido y la ficha tiene que
+   * aparecer igual, como el resto de lo que se lee aquí.
+   */
+  const anatomias = isSupabaseConfigured()
+    ? await listAnatomias(product.id).catch(() => [])
+    : [];
+
   let experiments: Awaited<ReturnType<typeof listExperiments>> = [];
   if (isSupabaseConfigured()) {
     experiments = await listExperiments(product.id).catch(() => []);
@@ -525,6 +536,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       ) : null}
       {activeTab === "angulos" ? (
         <AnglesTab
+          anatomias={anatomias}
           videoReferences={videoReferences.map((item) => ({ id: item.id, name: item.name }))}
           productId={product.id}
           angles={angles}
