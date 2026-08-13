@@ -525,6 +525,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       ) : null}
       {activeTab === "angulos" ? (
         <AnglesTab
+          videoReferences={videoReferences.map((item) => ({ id: item.id, name: item.name }))}
           productId={product.id}
           angles={angles}
           desires={desires}

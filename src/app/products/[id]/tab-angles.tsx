@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { MaterialForm } from "@/app/products/[id]/material-form";
 import { SectionCard } from "@/components/section-card";
 import { useJobResult } from "@/components/use-job-result";
 import {EmptyState, SelectField, Tag } from "@/components/ui";
@@ -20,6 +21,8 @@ interface AnglesTabProps {
   performance: AnglePerformance[];
   hasApiKey: boolean;
   hasResearch: boolean;
+  /** Vídeos ya analizados, para poder adjuntarlos a un material. */
+  videoReferences: { id: string; name: string }[];
 }
 
 /**
@@ -29,6 +32,7 @@ interface AnglesTabProps {
  */
 export function AnglesTab({
   productId,
+  videoReferences,
   angles,
   desires,
   performance,
@@ -77,6 +81,22 @@ export function AnglesTab({
 
   return (
     <div className="space-y-6">
+      {/*
+        Va delante de generar desde la investigación porque es otra puerta a lo
+        mismo: un anuncio que ya rindió suele dar ángulos mejores que un deseo
+        deducido, porque el mercado ya votó.
+      */}
+      <SectionCard
+        title="Sacar ángulos de un anuncio que funcionó"
+        description="Pega el copy, marca si es tuyo, y adjunta las imágenes y los vídeos con los que se lanzó. Primero se describe cómo está construido; los ángulos salen de ahí."
+      >
+        <MaterialForm
+          productId={productId}
+          videoReferences={videoReferences}
+          hasApiKey={hasApiKey}
+        />
+      </SectionCard>
+
       <SectionCard
         title="Generar ángulos"
         description="Un ángulo es la historia que despierta el deseo. Cinco ángulos del mismo deseo son cinco historias distintas para cinco segmentos distintos."
