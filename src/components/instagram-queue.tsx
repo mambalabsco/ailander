@@ -43,7 +43,7 @@ export function InstagramQueue({
   const [pending, start] = useTransition();
   const [format, setFormat] = useState("feed");
   const [count, setCount] = useState(3);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState<{ donde: string; message: string }>({ donde: "", message: "" });
   /*
    * Aprobar al crear.
    *
@@ -55,11 +55,24 @@ export function InstagramQueue({
   const [editando, setEditando] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
 
-  const correr = (fn: () => Promise<{ ok: boolean; message: string }>) =>
+  /*
+   * El aviso sale **donde se pulsó**, no siempre arriba.
+   *
+   * Antes había un solo mensaje encima de la lista. Los botones de generar,
+   * aprobar o borrar viven dentro de cada pieza, así que pulsar el de la octava
+   * dejaba la explicación a ocho piezas de distancia —fuera de pantalla— y la
+   * acción parecía no hacer nada. Con «Generar imagen» era lo peor: falla,
+   * explica exactamente por qué —la sesión de Higgsfield, la proporción, que no
+   * dice qué se ve— y nadie leía nunca ese motivo.
+   *
+   * `donde` es el identificador de la pieza, o vacío para lo que sí es de toda
+   * la lista: escribir publicaciones y planificar la semana.
+   */
+  const correr = (fn: () => Promise<{ ok: boolean; message: string }>, donde = "") =>
     start(async () => {
       const result = await fn();
 
-      setNote(result.message);
+      setNote({ donde, message: result.message });
       if (result.ok) router.refresh();
     });
 
@@ -126,7 +139,9 @@ export function InstagramQueue({
         </span>
       </div>
 
-      {note ? <p className="text-sm text-slate-600 dark:text-slate-300">{note}</p> : null}
+      {note.message && !note.donde ? (
+        <p className="text-sm text-slate-600 dark:text-slate-300">{note.message}</p>
+      ) : null}
 
       {posts.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -152,8 +167,10 @@ export function InstagramQueue({
                     variant="secondary"
                     disabled={pending}
                     onClick={() =>
-                      correr(() =>
-                        updateInstagramPostAction({ id: post.id, productId, status: "aprobado" }),
+                      correr(
+                        () =>
+                          updateInstagramPostAction({ id: post.id, productId, status: "aprobado" }),
+                        post.id,
                       )
                     }
                   >
@@ -176,7 +193,7 @@ export function InstagramQueue({
                   variant="secondary"
                   disabled={pending}
                   onClick={() =>
-                    correr(() => deleteInstagramPostAction({ id: post.id, productId }))
+                    correr(() => deleteInstagramPostAction({ id: post.id, productId }), post.id)
                   }
                 >
                   Borrar
@@ -212,7 +229,7 @@ export function InstagramQueue({
                     variant="secondary"
                     disabled={pending || !post.scene}
                     onClick={() =>
-                      correr(() => generatePostMediaAction({ id: post.id, productId }))
+                      correr(() => generatePostMediaAction({ id: post.id, productId }), post.id)
                     }
                   >
                     {pending ? "…" : "Generar imagen"}
@@ -248,6 +265,15 @@ export function InstagramQueue({
               <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">{post.error}</p>
             ) : null}
 
+            {/*
+              Lo que contestó la última acción de **esta** pieza.
+              Va aquí abajo, pegado a sus botones, porque es donde está mirando
+              quien acaba de pulsar. Arriba de la lista no lo lee nadie.
+            */}
+            {note.donde === post.id && note.message ? (
+              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">{note.message}</p>
+            ) : null}
+
             {editando === post.id ? (
               <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
                 <textarea
@@ -262,14 +288,16 @@ export function InstagramQueue({
                     type="datetime-local"
                     defaultValue={post.scheduledAt ? post.scheduledAt.slice(0, 16) : ""}
                     onChange={(event) =>
-                      correr(() =>
-                        updateInstagramPostAction({
-                          id: post.id,
-                          productId,
-                          scheduledAt: event.target.value
-                            ? new Date(event.target.value).toISOString()
-                            : "",
-                        }),
+                      correr(
+                        () =>
+                          updateInstagramPostAction({
+                            id: post.id,
+                            productId,
+                            scheduledAt: event.target.value
+                              ? new Date(event.target.value).toISOString()
+                              : "",
+                          }),
+                        post.id,
                       )
                     }
                     className="rounded-xl border border-slate-200 px-2 py-1 text-sm dark:border-slate-800 dark:bg-slate-950"
@@ -279,8 +307,9 @@ export function InstagramQueue({
                     variant="primary"
                     disabled={pending}
                     onClick={() =>
-                      correr(() =>
-                        updateInstagramPostAction({ id: post.id, productId, caption: texto }),
+                      correr(
+                        () => updateInstagramPostAction({ id: post.id, productId, caption: texto }),
+                        post.id,
                       )
                     }
                   >
