@@ -38,6 +38,7 @@ import type { ResearchDocumentId } from "@/types/research";
 import { PRODUCT_IMAGE_PATTERNS } from "@/types/visuals";
 import type { AdVisualPrompt } from "@/types/visuals";
 import { listProductMarkets } from "@/lib/data/product-markets";
+import { landingReferenceId } from "@/lib/reference-id";
 import { marketContextFor } from "@/lib/market-context";
 import { parseSelection, showSelector } from "@/lib/market-selection";
 import { marketLabel } from "@/types/store";
@@ -303,6 +304,18 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
     videoReferences = loadedReferences;
   }
 
+  /*
+   * Las páginas ya hechas, para poder adaptar una a otro ángulo.
+   *
+   * Entran **todas**: nacidas de un copy, clonadas de fuera o portadas. Viven en
+   * la misma tabla y lo que se reutiliza de ellas es la construcción, no el
+   * texto — el texto nuevo lo escribe el encargo con el ángulo que se le pida.
+   */
+  const ownPages = landings.map((page) => ({
+    id: landingReferenceId(page.id),
+    title: page.title,
+  }));
+
   let experiments: Awaited<ReturnType<typeof listExperiments>> = [];
   if (isSupabaseConfigured()) {
     experiments = await listExperiments(product.id).catch(() => []);
@@ -522,6 +535,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       ) : null}
       {activeTab === "copys" ? (
         <CopysTab
+          ownPages={ownPages}
           showMarketBadges={showSelector(marketIds)}
           marketNames={marketNames}
           copies={copies}
@@ -559,6 +573,8 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
         <LandingsTab
           productId={product.id}
           mercado={mercado}
+          angles={angles.map((angle) => ({ id: angle.id, name: angle.name }))}
+          hasApiKey={hasApiKey}
           storeDomain={store?.domain?.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}
           landings={landingViews}
           experiments={experiments}

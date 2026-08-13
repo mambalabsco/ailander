@@ -38,6 +38,8 @@ export function CopyToLanding({
   references,
   /** Páginas de tiendas analizadas, para escribir siguiendo su construcción. */
   modelPages = [],
+  /** Las páginas que ya tiene este producto, para adaptar una a otro ángulo. */
+  ownPages = [],
   hasApiKey,
   /** Si ya existe una página nacida de este copy. */
   alreadyHasLanding,
@@ -48,6 +50,8 @@ export function CopyToLanding({
   angleId?: string;
   references: { id: string; title: string }[];
   modelPages?: { id: string; title: string }[];
+  /** Ya vienen con el prefijo `landing:` en el id. */
+  ownPages?: { id: string; title: string }[];
   hasApiKey: boolean;
   alreadyHasLanding?: boolean;
 }) {
@@ -108,7 +112,7 @@ export function CopyToLanding({
           </SelectField>
         </label>
 
-        {references.length > 0 || modelPages.length > 0 ? (
+        {references.length > 0 || modelPages.length > 0 || ownPages.length > 0 ? (
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Página de referencia
@@ -118,6 +122,20 @@ export function CopyToLanding({
               onChange={(event) => setReferenceId(event.target.value)}
             >
               <option value="">Sin referencia</option>
+              {/*
+                Las tuyas van primero: adaptar una página que ya funciona en este
+                mismo producto es el caso más frecuente, y el que más se acierta
+                — el mecanismo y los datos ya son los correctos.
+              */}
+              {ownPages.length > 0 ? (
+                <optgroup label="Páginas de este producto">
+                  {ownPages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
               {/*
                 Los dos orígenes van separados porque no se eligen igual. Del
                 archivo se escoge un texto que ya funcionó; de una tienda

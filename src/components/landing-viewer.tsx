@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { AdaptLanding } from "@/app/products/[id]/adapt-landing";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { mediaKindOf } from "@/lib/landing-copy-html";
@@ -33,6 +34,8 @@ import type { ProductImage } from "@/types/visuals";
 export function LandingViewer({
   productId,
   mercado,
+  angles,
+  hasApiKey,
   page,
   preview,
   html,
@@ -41,6 +44,9 @@ export function LandingViewer({
   productId: string;
   /** El mercado en el que se está mirando la ficha, tal cual sale de la URL. */
   mercado?: string;
+  /** Los ángulos del producto, para poder adaptar esta página a otro. */
+  angles: { id: string; name: string }[];
+  hasApiKey: boolean;
   page: LandingPage;
   /** Con las imágenes puestas. Renderizado en el servidor: la plantilla vive allí. */
   preview: string;
@@ -105,18 +111,27 @@ export function LandingViewer({
             imágenes · {page.comments.length} comentarios
           </p>
         </div>
-        <Button
-          variant="ghost"
-          disabled={isPending}
-          onClick={() =>
-            startTransition(async () => {
-              await deleteLandingAction(page.id, productId);
-              router.refresh();
-            })
-          }
-        >
-          Eliminar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <AdaptLanding
+            productId={productId}
+            landingId={page.id}
+            methodId={page.methodId}
+            angles={angles}
+            hasApiKey={hasApiKey}
+          />
+          <Button
+            variant="ghost"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                await deleteLandingAction(page.id, productId);
+                router.refresh();
+              })
+            }
+          >
+            Eliminar
+          </Button>
+        </div>
       </div>
 
       {/* Publicar va arriba y separado: es la acción que sale de la

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { parseReferenceId } from "@/lib/reference-id";
 import { canPublish } from "@/lib/market-price";
 import { slugForMarket } from "@/lib/market-slug";
 import { findMarket } from "@/types/store";
@@ -94,7 +95,9 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
   let reference: { label: string; body: string; images?: string[] } | undefined;
   let theme: LandingTheme | undefined;
 
-  if (referenceId.startsWith("plano:")) {
+  const parsed = parseReferenceId(referenceId);
+
+  if (parsed.kind === "plano") {
     const { listBlueprints } = await import("@/lib/data/blueprints");
     const found = findModelPage(await listBlueprints(), referenceId);
     if (!found) {
@@ -104,7 +107,27 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
     }
 
     reference = { label: found.label, body: found.body, images: found.images };
-  } else if (referenceId) {
+  } else if (parsed.kind === "landing") {
+    /*
+     * Una página del propio producto como modelo: es adaptar.
+     *
+     * Vale cualquiera —nacida de un copy, clonada de fuera, una portada—: todas
+     * viven en la misma tabla y lo que se reutiliza de ellas es la construcción.
+     * El texto nuevo lo escribe el prompt con el ángulo que se le pida, que es
+     * justo lo que hace que esto sea adaptar y no duplicar.
+     */
+    const { readLanding } = await import("@/lib/data/landings");
+    const { renderLandingHtml } = await import("@/lib/landing-html");
+    const { htmlToText } = await import("@/lib/html-text");
+
+    const found = await readLanding(parsed.id);
+    if (!found) throw new Error("Esa página ya no existe.");
+
+    reference = {
+      label: `Tu página «${found.title}»`,
+      body: htmlToText(renderLandingHtml(found)),
+    };
+  } else if (parsed.kind === "archivo") {
     // Entre todos: calcar una landing de otra marca es el caso normal aquí, y
     // llega elegida por su id.
     const { listAllSwipeCopies } = await import("@/lib/data/swipe");
@@ -171,6 +194,8 @@ export async function generateLandingAction(input: unknown): Promise<LaunchResul
 
   const prompt = buildLandingPrompt({
     product,
+    // Lo escribe quien adapta una página a otro enfoque. Vacío el resto de veces.
+    focus: readText(raw.enfoque),
     research,
     store,
     marketContext,

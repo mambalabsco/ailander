@@ -60,6 +60,8 @@ interface CopysTabProps {
   landingCopyIds: Set<string>;
   /** Solo con varios mercados: con uno, la insignia sería siempre la misma. */
   showMarketBadges: boolean;
+  /** Las páginas ya hechas de este producto, para adaptar una a otro ángulo. */
+  ownPages: { id: string; title: string }[];
   /** Cómo se llama cada mercado, para no enseñar un uuid en la insignia. */
   marketNames: Record<string, string>;
 }
@@ -90,6 +92,7 @@ export function CopysTab({
   hasHiggsfieldKey,
   landingCopyIds,
   showMarketBadges,
+  ownPages,
   marketNames,
 }: CopysTabProps) {
   const [format, setFormat] = useState<CopyFormat>("long-copy");
@@ -734,6 +737,7 @@ export function CopysTab({
                           title: item.title,
                         }))}
                         modelPages={modelPages}
+                        ownPages={ownPages}
                         hasApiKey={hasApiKey}
                         alreadyHasLanding={landingCopyIds.has(copy.id)}
                       />

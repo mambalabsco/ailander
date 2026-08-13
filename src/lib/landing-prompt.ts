@@ -44,12 +44,20 @@ export function buildLandingPrompt(options: {
   /** Lo cerca que hay que quedarse de la referencia. */
   fidelity?: Fidelity;
   angle?: { name: string; problemMechanism: string; solutionMechanism: string } | null;
+  /**
+   * Un enfoque escrito a mano, cuando ningún ángulo guardado encaja.
+   *
+   * Va **después** del ángulo y manda sobre él: se escribe cuando se está
+   * adaptando una página que ya funciona y se quiere entrar por otro sitio. Sin
+   * esto, adaptar solo podía elegir entre los ángulos ya guardados.
+   */
+  focus?: string;
   commentStyle: "facebook" | "testimonios";
   countryName: string;
   /** Qué forma tiene la página. Sin esto salían todas iguales. */
   shapeId?: string;
 }): string {
-  const { product, research, store, method, baseCopy, angle, commentStyle } = options;
+  const { product, research, store, method, baseCopy, angle, commentStyle, focus } = options;
 
   const commentsBlock =
     commentStyle === "facebook"
@@ -76,6 +84,7 @@ ${
     ? `## Ángulo\n\n**${angle.name}**\n\n- Mecanismo del problema: ${angle.problemMechanism}\n- Mecanismo de la solución: ${angle.solutionMechanism}\n`
     : ""
 }
+${focus ? `## Enfoque pedido\n\n${focus}\n\nEsto manda sobre el ángulo de arriba si se contradicen.\n` : ""}
 ${baseCopy ? `## Texto de partida\n\nAdapta este texto ya escrito a formato de página. Conserva su ángulo y su mecanismo; reorganízalo en secciones y añade lo que le falte.\n\n---\n\n${baseCopy}\n\n---\n` : ""}
 ${
   options.reference

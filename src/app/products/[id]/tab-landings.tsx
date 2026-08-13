@@ -21,6 +21,8 @@ import type { ProductImage } from "@/types/visuals";
 export function LandingsTab({
   productId,
   mercado,
+  angles,
+  hasApiKey,
   storeDomain,
   landings,
   experiments,
@@ -28,6 +30,9 @@ export function LandingsTab({
   productId: string;
   /** El mercado de la URL, para que publicar sepa a qué dominio va. */
   mercado?: string;
+  /** Los ángulos del producto, para adaptar una página a otro. */
+  angles: { id: string; name: string }[];
+  hasApiKey: boolean;
   storeDomain?: string;
   landings: { page: LandingPage; preview: string; html: string; images: ProductImage[] }[];
   experiments: LandingExperiment[];
@@ -83,6 +88,8 @@ export function LandingsTab({
                 key={page.id}
                 productId={productId}
                 mercado={mercado}
+                angles={angles}
+                hasApiKey={hasApiKey}
                 page={page}
                 preview={preview}
                 html={html}
