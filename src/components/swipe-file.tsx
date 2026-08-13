@@ -41,6 +41,8 @@ export function SwipeFile({ productId, copies }: { productId: string; copies: Sw
     format: "long-copy",
     status: "funciona" as SwipeStatus,
     note: "",
+    // 'ajeno' de partida: es lo que se pega de otras marcas, y el lado seguro.
+    ownership: "ajeno" as "propio" | "ajeno",
   });
 
   const usable = copies.filter((copy) => copy.status !== "sin-probar").length;
@@ -172,6 +174,28 @@ export function SwipeFile({ productId, copies }: { productId: string; copies: Sw
               placeholder="Pega aquí el copy completo."
             />
           </Field>
+
+          {/*
+            De quién es no es una etiqueta: decide qué se puede reutilizar
+            después al sacar ángulos de este material.
+          */}
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.ownership === "propio"}
+              onChange={(event) =>
+                setForm({ ...form, ownership: event.target.checked ? "propio" : "ajeno" })
+              }
+              className="mt-1 size-4 accent-violet-600"
+            />
+            <span>
+              <span className="font-medium">Es mío y ya lo lancé</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                De lo tuyo se puede reutilizar una promesa concreta y sus cifras, que están
+                comprobadas. De lo ajeno, solo cómo está construido.
+              </span>
+            </span>
+          </label>
 
           <Field label="Nota (opcional)">
             <TextField

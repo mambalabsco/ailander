@@ -60,6 +60,8 @@ export async function saveSwipeCopyAction(input: unknown): Promise<SwipeCopy> {
       ? status
       : "sin-probar") as SwipeStatus,
     source: readText(raw.source) || undefined,
+    // Solo propio cuenta como propio: cualquier otra cosa cae al lado seguro.
+    ownership: readText(raw.ownership) === "propio" ? "propio" : "ajeno",
     format: readText(raw.format) || undefined,
     note: readText(raw.note) || undefined,
   });

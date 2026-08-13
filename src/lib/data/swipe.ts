@@ -20,11 +20,14 @@ function toSwipe(row: {
   source: string | null;
   format: string | null;
   note: string | null;
+  ownership?: string | null;
   created_at: string;
 }): SwipeCopy {
   return {
     id: row.id,
     productId: row.product_id ?? undefined,
+    // 'ajeno' por defecto: es el lado seguro y es lo que hay en el archivo viejo.
+    ownership: row.ownership === "propio" ? "propio" : "ajeno",
     title: row.title,
     body: row.body,
     status: (["funciona", "malo", "sin-probar"].includes(row.status)
@@ -101,6 +104,7 @@ export async function saveSwipeCopy(input: {
   source?: string;
   format?: string;
   note?: string;
+  ownership?: "propio" | "ajeno";
 }): Promise<SwipeCopy> {
   const { supabase, userId } = await requireContext();
 
@@ -115,6 +119,7 @@ export async function saveSwipeCopy(input: {
       source: input.source ?? null,
       format: input.format ?? null,
       note: input.note ?? null,
+      ownership: input.ownership ?? "ajeno",
     })
     .select("*")
     .single();

@@ -18,5 +18,14 @@ export interface SwipeCopy {
   source?: string;
   format?: string;
   note?: string;
+  /**
+   * De quién es.
+   *
+   * De lo propio se puede heredar una promesa y sus cifras: están comprobadas.
+   * De lo ajeno, solo la construcción — una cifra de otro anuncio es algo que
+   * dijo otro sobre otro producto, y darla por nuestra es afirmar lo que nadie
+   * ha comprobado aquí.
+   */
+  ownership: "propio" | "ajeno";
   createdAt: string;
 }

@@ -556,6 +556,8 @@ type SwipeCopyRow = {
   source: string | null;
   format: string | null;
   note: string | null;
+  /** 'propio' se puede heredar entero; de 'ajeno', solo la construcción. */
+  ownership: "propio" | "ajeno";
   created_at: string;
 };
 
