@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Button, SelectField } from "@/components/ui";
+import { Button, SelectField, TextField } from "@/components/ui";
 import {
   applyLookAction,
   applyThemeOrderAction,
@@ -10,6 +10,7 @@ import {
   clearDemoImagesAction,
   reviewThemeSectionsAction,
   clearSectionDraftsAction,
+  adaptPageTextsAction,
   recreatePageAction,
   themesForApplyAction,
   type LookPlan,
@@ -81,6 +82,7 @@ export function ThemePlanPanel({
   const [page, setPage] = useState<PageKind>("producto");
   const [plan, setPlan] = useState<ThemePlan | null>(null);
   const [look, setLook] = useState<LookPlan | null>(null);
+  const [enfoque, setEnfoque] = useState("");
   const [message, setMessage] = useState("");
   const [themes, setThemes] = useState<{ id: string; name: string; published: boolean }[]>([]);
   const [targetTheme, setTargetTheme] = useState("");
@@ -517,6 +519,17 @@ export function ThemePlanPanel({
             </label>
           </div>
 
+          <label className="mt-3 flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Enfoque para adaptar los textos
+            </span>
+            <TextField
+              value={enfoque}
+              placeholder="Ej. entrar por el ahorro en vez de por la salud"
+              onChange={(event) => setEnfoque(event.target.value)}
+            />
+          </label>
+
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <GenerateButton
               variant="primary"
@@ -542,6 +555,32 @@ export function ThemePlanPanel({
                 !productId ? "Necesitas un producto del que sacar el contenido" : undefined
               }
               hint="Escribe archivos en el tema elegido. Hazlo en uno sin publicar y míralo en la vista previa."
+            />
+
+            {/*
+              Adaptar los textos de una página **ya hecha**.
+              Es la pieza que faltaba entre «me vale» y «empiezo de cero»: hasta
+              ahora, cambiar el texto obligaba a tirar la página y rehacerla
+              entera, pagando otras diez u once llamadas y con otra estructura al
+              final.
+            */}
+            <GenerateButton
+              action={async () => {
+                const payload = new FormData();
+                payload.set("storeId", storeId);
+                payload.set("themeId", targetTheme);
+                payload.set("page", plan.page);
+                payload.set("productId", productId);
+                payload.set("enfoque", enfoque);
+
+                return adaptPageTextsAction(payload);
+              }}
+              label="Adaptar los textos"
+              disabled={!targetTheme || !productId || !enfoque.trim()}
+              disabledReason={
+                !enfoque.trim() ? "Escribe por dónde quieres entrar esta vez" : undefined
+              }
+              hint="Una sola llamada. Reescribe lo que dice la página; el orden, los colores y las imágenes se quedan como están."
             />
 
             <Button

@@ -1,6 +1,7 @@
 "use server";
 
 import { findStore } from "@/lib/store-registry";
+import { applyTemplateTexts, collectTemplateTexts } from "@/lib/theme-texts";
 import { marketContextFor } from "@/lib/market-context";
 import {
   listThemeFiles,
@@ -20,6 +21,7 @@ import {
 import { listBlueprints } from "@/lib/data/blueprints";
 import { findProductAnywhere } from "@/lib/products";
 import { readProductResearch } from "@/lib/research-store";
+import { readAngles } from "@/lib/copy-store";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { generateStructured } from "@/lib/generators";
 import { runInBackground } from "@/lib/background";
@@ -1166,4 +1168,127 @@ export async function themesForApplyAction(
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo consultar." };
   }
+}
+
+/**
+ * Reescribe **solo los textos** de una portada ya copiada.
+ *
+ * Hasta ahora, cambiar el texto de una página hecha desde aquí obligaba a tirar
+ * lo escrito y rehacerla entera: diez u once llamadas al modelo, pagadas otra
+ * vez, y otra estructura al final. Esto es la pieza que faltaba entre «me vale»
+ * y «empiezo de cero»: una sola llamada, la misma página, otro ángulo.
+ *
+ * Lo que **no** toca: el orden de las secciones, los colores, las imágenes y los
+ * enlaces. Eso lo garantiza `theme-texts.ts`, que solo escribe donde ya había un
+ * texto y filtra por lo que cada ajuste es.
+ */
+export async function adaptPageTextsAction(form: FormData): Promise<LaunchResult> {
+  const storeId = readText(form.get("storeId"));
+  const themeId = readText(form.get("themeId"));
+  const productId = readText(form.get("productId"));
+  const angleId = readText(form.get("angleId"));
+  const enfoque = readText(form.get("enfoque"));
+  const page = readPage(form.get("page"));
+  const templateName = TEMPLATE_FOR[page];
+
+  if (!storeId || !themeId) throw new Error("Faltan la tienda o el tema.");
+  if (!productId) throw new Error("Elige el producto del que sale el contenido.");
+  if (!angleId && !enfoque) {
+    throw new Error("Elige un ángulo o escribe un enfoque: sin uno de los dos no hay qué cambiar.");
+  }
+
+  const store = await findStore(storeId);
+  if (!store) throw new Error("No se encontró la tienda.");
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  return runInBackground({
+    productId,
+    kind: "tema",
+    label: `Adaptar los textos de ${templateName}`,
+    work: async () => {
+      const [file] = await listThemeFiles(store, themeId, [templateName]);
+      if (!file?.body) throw new Error(`No se pudo leer ${templateName} de ese tema.`);
+
+      const textos = collectTemplateTexts(file.body);
+      if (textos.length === 0) {
+        return { summary: "Esa plantilla no tiene textos que reescribir. No se ha tocado nada." };
+      }
+
+      const [research, angles] = await Promise.all([
+        readProductResearch(productId),
+        readAngles(productId),
+      ]);
+      const angle = angles.find((item) => item.id === angleId);
+      const marketContext = await marketContextFor(product);
+
+      const { buildProductContext } = await import("@/lib/copy-prompts");
+
+      const prompt = `${buildProductContext(product, research, store, marketContext)}
+
+## Qué hay que hacer
+
+Reescribe los textos de esta página para que entren por otro sitio. La página se
+queda como está: mismas secciones, mismo orden, mismas imágenes. Solo cambia lo
+que dicen.
+
+${angle ? `Ángulo: **${angle.name}**\n- Mecanismo del problema: ${angle.problemMechanism}\n- Mecanismo de la solución: ${angle.solutionMechanism}\n` : ""}${enfoque ? `Enfoque pedido: ${enfoque}\n(Manda sobre el ángulo si se contradicen.)\n` : ""}
+
+Reglas:
+
+- Devuelve **exactamente** las mismas rutas que te doy, sin inventar ninguna.
+- Respeta la longitud aproximada de cada texto: un titular de cuatro palabras no
+  puede volver con veinte, o la sección se rompe visualmente.
+- Nada de precios ni de promesas que la investigación no sostenga.
+
+## Los textos, con su ruta
+
+${textos.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`;
+
+      const outcome = await generateStructured<{ textos: { path: string; text: string }[] }>({
+        prompt,
+        schema: {
+          type: "object",
+          properties: {
+            textos: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { path: { type: "string" }, text: { type: "string" } },
+                required: ["path", "text"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["textos"],
+          additionalProperties: false,
+        },
+        role: "copy",
+        maxTokens: 16_000,
+      });
+
+      const next = applyTemplateTexts(
+        file.body,
+        (outcome.data.textos ?? []).map((item: { path: string; text: string }) => ({
+          path: item.path,
+          value: item.text,
+        })),
+      );
+
+      // Si no cambió nada no se escribe: cada escritura queda en el historial del
+      // tema y una sin cambios solo añade ruido.
+      if (next.trim() === file.body.trim()) {
+        return { summary: "El modelo no cambió ningún texto. No se ha escrito nada." };
+      }
+
+      await writeThemeFiles(store, themeId, [{ filename: templateName, content: next }]);
+
+      return {
+        summary: `${textos.length} textos reescritos en ${templateName}. Míralo en la vista previa antes de publicar.`,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
+      };
+    },
+  });
 }
