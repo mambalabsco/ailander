@@ -151,13 +151,13 @@ test("los devuelve a su sitio sin tocar el resto de la plantilla", () => {
   const next = collectTemplateTexts(
     applyTemplateTexts(template, [
       { path: "sections.hero.settings.heading", value: "Duerme sin pastillas" },
-    ]),
+    ]).json,
   );
 
   assert.equal(next[0].value, "Duerme sin pastillas");
   // El orden y las secciones ajenas siguen ahí: reescribir texto no puede
   // reordenar una portada ni tirar una sección del tema.
-  const parsed = JSON.parse(applyTemplateTexts(template, []));
+  const parsed = JSON.parse(applyTemplateTexts(template, []).json);
   assert.deepEqual(parsed.order, ["hero", "banda"]);
   assert.equal(parsed.sections.banda.settings.image, "shopify://x");
 });
@@ -165,7 +165,7 @@ test("los devuelve a su sitio sin tocar el resto de la plantilla", () => {
 test("una plantilla ilegible se devuelve tal cual, sin romper nada", () => {
   // Shopify escribe una cabecera de comentario que JSON.parse rechaza, y ya ha
   // costado un fallo antes: aquí se prefiere no tocar a dejarla a medias.
-  assert.equal(applyTemplateTexts("{ no es json", []), "{ no es json");
+  assert.equal(applyTemplateTexts("{ no es json", []).json, "{ no es json");
   assert.deepEqual(collectTemplateTexts("{ no es json"), []);
 });
 
@@ -185,7 +185,30 @@ test("la cabecera de comentario de Shopify no puede dejar la plantilla por ilegi
 
   const next = applyTemplateTexts(conCabecera, [
     { path: "sections.hero.settings.heading", value: "Duerme sin pastillas" },
-  ]);
+  ]).json;
 
   assert.equal(JSON.parse(next).sections.hero.settings.heading, "Duerme sin pastillas");
+});
+
+test("dice cuántos textos se aplicaron de verdad, no cuántos le mandaron", () => {
+  /*
+   * **Aquí estaba el segundo fallo.** La acción contaba lo que devolvía el
+   * modelo y lo daba por escrito, y el guardián de «no cambió nada» comparaba el
+   * JSON reserializado contra el archivo original — que siempre difieren por el
+   * formato y por la cabecera de Shopify. Resultado: escribía siempre y decía
+   * que había ido bien siempre, con el texto intacto.
+   */
+  const conRutasMalas = applyTemplateTexts(template, [
+    { path: "hero.settings.heading", value: "No se aplica" },
+    { path: "sections.hero.settings.inventado", value: "Tampoco" },
+  ]);
+
+  assert.equal(conRutasMalas.applied, 0);
+
+  const conUnaBuena = applyTemplateTexts(template, [
+    { path: "sections.hero.settings.heading", value: "Sí se aplica" },
+    { path: "hero.settings.heading", value: "Esta no" },
+  ]);
+
+  assert.equal(conUnaBuena.applied, 1);
 });

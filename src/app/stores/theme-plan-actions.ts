@@ -1182,18 +1182,17 @@ export async function themesForApplyAction(
  * enlaces. Eso lo garantiza `theme-texts.ts`, que solo escribe donde ya había un
  * texto y filtra por lo que cada ajuste es.
  */
+/*
+ * Una lista de textos, en el mismo orden, **sin rutas**.
+ *
+ * Pedirle al modelo que repita rutas largas es pedirle que no se equivoque en lo
+ * que no aporta nada: basta con que devuelva las frases en el orden en que se le
+ * dan. Es lo que ya hace el clonador de portadas, y por lo mismo.
+ */
 const TEXTOS_SCHEMA = {
   type: "object",
   properties: {
-    textos: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: { path: { type: "string" }, text: { type: "string" } },
-        required: ["path", "text"],
-        additionalProperties: false,
-      },
-    },
+    textos: { type: "array", items: { type: "string" } },
   },
   required: ["textos"],
   additionalProperties: false,
@@ -1266,7 +1265,7 @@ ${angle ? `Ángulo: **${angle.name}**\n- Mecanismo del problema: ${angle.problem
 
 Reglas:
 
-- Devuelve **exactamente** las mismas rutas que te doy, sin inventar ninguna.
+- Devuelve **la misma cantidad de textos y en el mismo orden** en que te los doy.
 - Respeta la longitud aproximada de cada texto: un titular de cuatro palabras no
   puede volver con veinte, o la sección se rompe visualmente.
 - Nada de precios ni de promesas que la investigación no sostenga.`;
@@ -1298,16 +1297,18 @@ Reglas:
       for (const [index, tanda] of tandas.entries()) {
         await report(`Textos ${index + 1} de ${tandas.length}`);
 
-        const outcome = await generateStructured<{ textos: { path: string; text: string }[] }>({
+        const outcome = await generateStructured<{ textos: string[] }>({
           /*
            * El contexto va aparte y **es idéntico en todas las tandas**: es el
            * prefijo que la caché reaprovecha. Pegarlo dentro del prompt haría
            * que cada tanda pagara la ficha y la investigación enteras otra vez.
            */
           context: contexto,
-          prompt: `## Los textos, con su ruta
+          prompt: `## Los textos, numerados
 
-${tanda.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`,
+Devuélvelos reescritos, ${tanda.length} en total y en este mismo orden.
+
+${tanda.map((item, i) => `${i + 1}. ${item.value}`).join("\n")}`,
           schema: TEXTOS_SCHEMA,
           role: "copy",
           maxTokens: 16_000,
@@ -1316,27 +1317,61 @@ ${tanda.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`,
         inputTokens += outcome.inputTokens;
         outputTokens += outcome.outputTokens;
 
-        escritos.push(
-          ...(outcome.data.textos ?? []).map((item: { path: string; text: string }) => ({
-            path: item.path,
-            value: item.text,
-          })),
-        );
+        /*
+         * Se casan por posición, y solo hasta donde llegan los dos.
+         *
+         * Si el modelo devuelve de menos, se quedan los que sobran con su texto
+         * original en vez de correrse una posición: un titular en el sitio del
+         * botón no da error, se ve en la tienda.
+         */
+        const vuelta = outcome.data.textos ?? [];
+        for (let i = 0; i < Math.min(tanda.length, vuelta.length); i += 1) {
+          escritos.push({ path: tanda[i].path, value: vuelta[i] });
+        }
       }
 
       const next = applyTemplateTexts(file.body, escritos);
 
-      // Si no cambió nada no se escribe: cada escritura queda en el historial del
-      // tema y una sin cambios solo añade ruido.
-      if (next.trim() === file.body.trim()) {
-        return { summary: "El modelo no cambió ningún texto. No se ha escrito nada." };
+      /*
+       * Se mira lo **aplicado**, no lo devuelto.
+       *
+       * Contar lo que responde el modelo daba un resumen que decía «doce textos
+       * reescritos» con la página intacta: si las rutas no coinciden no se
+       * escribe nada, y no había forma de enterarse. Comparar cadenas tampoco
+       * valía: el JSON reserializado siempre difiere del archivo por el formato
+       * y por la cabecera de Shopify, así que el guardián nunca saltaba.
+       */
+      if (next.applied === 0) {
+        throw new Error(
+          `El modelo devolvió ${escritos.length} textos, pero ninguno encajaba con las rutas de ${templateName}: no se ha escrito nada. Vuelve a intentarlo.`,
+        );
       }
 
       await report("Subiendo la plantilla al tema");
-      await writeThemeFiles(store, themeId, [{ filename: templateName, content: next }]);
+      await writeThemeFiles(store, themeId, [{ filename: templateName, content: next.json }]);
+
+      /*
+       * Y se comprueba que Shopify lo guardó.
+       *
+       * `themeFilesUpsert` procesa en segundo plano: la llamada vuelve bien y el
+       * archivo puede no estar todavía —o haber sido rechazado—. Está avisado en
+       * `AGENTS.md` y es justo lo que convierte «dice que sí» en «lo hizo».
+       */
+      await report("Comprobando que quedó guardado");
+      const [despues] = await listThemeFiles(store, themeId, [templateName]);
+      const quedo = despues?.body ? collectTemplateTexts(despues.body) : [];
+      const cambiados = quedo.filter((item) =>
+        escritos.some((nuevo) => nuevo.path === item.path && nuevo.value === item.value),
+      ).length;
+
+      if (cambiados === 0) {
+        throw new Error(
+          `Se envió la plantilla pero al releerla seguía con los textos anteriores. Shopify procesa las escrituras en segundo plano: espera unos segundos y míralo en la vista previa antes de repetir.`,
+        );
+      }
 
       return {
-        summary: `${escritos.length} de ${textos.length} textos reescritos en ${templateName}, en ${tandas.length} tanda(s). Míralo en la vista previa antes de publicar.`,
+        summary: `${next.applied} de ${textos.length} textos reescritos en ${templateName}, en ${tandas.length} tanda(s), y comprobados al releerla. Míralo en la vista previa antes de publicar.`,
         inputTokens,
         outputTokens,
       };

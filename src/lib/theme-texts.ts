@@ -237,10 +237,24 @@ export function collectTemplateTexts(json: string): DraftText[] {
  * secciones y todo lo que no sea texto se quedan intactos — reescribir el copy
  * de una portada no puede reordenarla ni tirar una sección del tema.
  */
-export function applyTemplateTexts(json: string, texts: DraftText[]): string {
+export function applyTemplateTexts(
+  json: string,
+  texts: DraftText[],
+): { json: string; applied: number } {
   const root = parseTemplate(json);
   const sections = sectionsOf(root);
-  if (!root || !sections) return json;
+  if (!root || !sections) return { json, applied: 0 };
+
+  /*
+   * Se cuenta lo que se **escribe**, no lo que llega.
+   *
+   * Contar lo que devuelve el modelo daba un resumen que decía «doce textos
+   * reescritos» con la página intacta: si las rutas no coinciden, no se aplica
+   * nada y no hay forma de notarlo. Y el guardián de «no cambió nada» tampoco
+   * servía, porque compara el JSON reserializado contra el archivo original y
+   * esos difieren siempre por el formato y por la cabecera de Shopify.
+   */
+  let applied = 0;
 
   for (const { path, value } of texts) {
     if (!esValorDeTexto(value)) continue;
@@ -254,7 +268,10 @@ export function applyTemplateTexts(json: string, texts: DraftText[]): string {
     if (parts.length === 4 && parts[2] === "settings") {
       const settings = asRecord(section.settings);
       const key = parts[3];
-      if (settings && esClaveDeTexto(key) && esValorDeTexto(settings[key])) settings[key] = value;
+      if (settings && esClaveDeTexto(key) && esValorDeTexto(settings[key])) {
+        if (settings[key] !== value) applied += 1;
+        settings[key] = value;
+      }
       continue;
     }
 
@@ -262,9 +279,12 @@ export function applyTemplateTexts(json: string, texts: DraftText[]): string {
       const block = asRecord(asRecord(section.blocks)?.[parts[3]]);
       const settings = asRecord(block?.settings);
       const key = parts[5];
-      if (settings && esClaveDeTexto(key) && esValorDeTexto(settings[key])) settings[key] = value;
+      if (settings && esClaveDeTexto(key) && esValorDeTexto(settings[key])) {
+        if (settings[key] !== value) applied += 1;
+        settings[key] = value;
+      }
     }
   }
 
-  return JSON.stringify(root, null, 2);
+  return { json: JSON.stringify(root, null, 2), applied };
 }
