@@ -99,7 +99,7 @@ interface Anatomia {
   /** Ritmo y tono: quién parece que habla y a qué velocidad. */
   ritmo: string;
   /** Qué se enseña y cuándo, incluido el producto. */
-  quesEnsena: string;
+  queEnsena: string;
   /** Las objeciones que toca y cómo las resuelve. */
   objeciones: { objecion: string; comoLaResuelve: string }[];
   /** Cómo cierra y qué pide. */
