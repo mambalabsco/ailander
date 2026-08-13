@@ -1207,14 +1207,28 @@ export async function adaptPageTextsAction(form: FormData): Promise<LaunchResult
     productId,
     kind: "tema",
     label: `Adaptar los textos de ${templateName}`,
-    work: async () => {
+    work: async (report) => {
+      await report(`Leyendo ${templateName}`);
+
       const [file] = await listThemeFiles(store, themeId, [templateName]);
       if (!file?.body) throw new Error(`No se pudo leer ${templateName} de ese tema.`);
 
       const textos = collectTemplateTexts(file.body);
+
+      /*
+       * Sin textos se **falla**, no se termina en silencio.
+       *
+       * Un trabajo que acaba «bien» sin haber hecho nada es indistinguible de
+       * uno que no arrancó, y eso ya costó una vuelta entera preguntándose por
+       * qué no cambiaba la portada.
+       */
       if (textos.length === 0) {
-        return { summary: "Esa plantilla no tiene textos que reescribir. No se ha tocado nada." };
+        throw new Error(
+          `No encontré textos que reescribir en ${templateName}. O la plantilla no es de bloques, o sus secciones no guardan texto en los ajustes.`,
+        );
       }
+
+      await report(`${textos.length} textos; escribiendo los nuevos`);
 
       const [research, angles] = await Promise.all([
         readProductResearch(productId),
@@ -1282,6 +1296,7 @@ ${textos.map((item) => `- \`${item.path}\`: ${item.value}`).join("\n")}`;
         return { summary: "El modelo no cambió ningún texto. No se ha escrito nada." };
       }
 
+      await report("Subiendo la plantilla al tema");
       await writeThemeFiles(store, themeId, [{ filename: templateName, content: next }]);
 
       return {

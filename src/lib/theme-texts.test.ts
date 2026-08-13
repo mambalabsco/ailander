@@ -168,3 +168,24 @@ test("una plantilla ilegible se devuelve tal cual, sin romper nada", () => {
   assert.equal(applyTemplateTexts("{ no es json", []), "{ no es json");
   assert.deepEqual(collectTemplateTexts("{ no es json"), []);
 });
+
+test("la cabecera de comentario de Shopify no puede dejar la plantilla por ilegible", () => {
+  /*
+   * **Aquí estaba el fallo.** Las plantillas de Shopify empiezan con un
+   * comentario que el propio Shopify genera, y `JSON.parse` se atraganta con la
+   * primera barra. Sin quitarlo, la plantilla se leía como ilegible: cero
+   * textos, «no hay nada que reescribir» y ningún cambio — sin un solo error.
+   */
+  const conCabecera = `/*\n * IMPORTANT: The contents of this file are auto-generated.\n */\n${template}`;
+
+  const found = collectTemplateTexts(conCabecera);
+
+  assert.equal(found.length, 2);
+  assert.equal(found[0].value, "Duerme de un tirón");
+
+  const next = applyTemplateTexts(conCabecera, [
+    { path: "sections.hero.settings.heading", value: "Duerme sin pastillas" },
+  ]);
+
+  assert.equal(JSON.parse(next).sections.hero.settings.heading, "Duerme sin pastillas");
+});

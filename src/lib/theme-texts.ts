@@ -1,7 +1,10 @@
+import { stripLeadingComments } from "./theme-structure.ts";
+
 /**
  * Los textos de una sección de tema, con su sitio.
  *
- * Sin imports, probado en `theme-texts.test.ts`.
+ * Probado en `theme-texts.test.ts`. El único import es relativo y con
+ * extensión, como en `theme-settings.ts`: así el corredor de Node lo carga.
  *
  * ## Para qué
  *
@@ -159,16 +162,23 @@ export function applyDraftTexts(draft: DraftLike, texts: DraftText[]): DraftLike
  */
 function parseTemplate(json: string): Record<string, unknown> | null {
   try {
-    const data = JSON.parse(json) as unknown;
+    /*
+     * `stripLeadingComments` **no es opcional**, y saltárselo fue el fallo.
+     *
+     * Las plantillas de Shopify empiezan con un comentario que genera el propio
+     * Shopify, y `JSON.parse` se atraganta con la primera barra. Sin quitarlo,
+     * la plantilla se leía como ilegible: cero textos, «no hay nada que
+     * reescribir» y ningún cambio — sin un solo error que lo explicara.
+     *
+     * Está avisado en `AGENTS.md` y ya había costado un fallo antes. Se usa la
+     * misma función que el resto del proyecto en vez de otra propia: es
+     * exactamente el sitio donde una copia se queda a medias.
+     */
+    const data = JSON.parse(stripLeadingComments(json)) as unknown;
     return typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
   } catch {
-    /*
-     * Una plantilla ilegible se deja en paz.
-     *
-     * Shopify escribe una cabecera de comentario que `JSON.parse` rechaza —ya
-     * costó un fallo antes, y por eso existe `readTemplateJson`—. Aquí, ante la
-     * duda, no tocar: una portada intacta es mejor que una a medio reescribir.
-     */
+    // Rota de verdad: se deja en paz. Una portada intacta es mejor que una a
+    // medio reescribir.
     return null;
   }
 }
