@@ -85,10 +85,26 @@ export async function listHiggsfieldModelsAction() {
  * Si no hay foto marcada como principal se devuelve vacío y la generación sigue
  * sin referencia: es peor no generar nada que generar sin la foto.
  */
+/**
+ * La imagen que se manda de referencia.
+ *
+ * Con app elegida es **su captura**, y no la principal del producto: en casino
+ * el producto es el país y su imagen principal no es de ninguna app en concreto.
+ * Mandar la equivocada no falla — sale un teléfono con una app parecida a la
+ * tuya, que es peor que no mandar ninguna porque parece correcta.
+ *
+ * Sin captura de esa app se cae a la principal, que es lo de siempre.
+ */
 async function readReferenceBytes(
   productId: string,
+  appId?: string,
 ): Promise<{ filename: string; bytes: Uint8Array }[]> {
-  const primary = await readPrimaryImage(productId);
+  const primary = appId
+    ? ((await readProductImages(productId)).find(
+        (image) => image.appId === appId && image.pattern === "captura-app",
+      ) ?? (await readPrimaryImage(productId)))
+    : await readPrimaryImage(productId);
+
   if (!primary?.url) return [];
 
   try {
@@ -168,6 +184,8 @@ export async function generateProductImagesAction(input: unknown): Promise<Launc
   }
 
   const model = await resolveModel(readText(raw.modelSlug));
+  // En casino, de qué app es la pantalla que hay que enseñar.
+  const appId = readText(raw.appId);
 
   const patterns = (Array.isArray(raw.patterns) ? raw.patterns : [])
     .map((item) => readText(item))
@@ -213,7 +231,7 @@ export async function generateProductImagesAction(input: unknown): Promise<Launc
   // Una sola vez para toda la tanda: bajar la misma foto diez veces solo añade
   // espera. Y solo si el modelo la admite — mandarla a uno que no la declara
   // aborta la generación entera con «Unknown params».
-  const references = model.acceptsReferences ? await readReferenceBytes(productId) : [];
+  const references = model.acceptsReferences ? await readReferenceBytes(productId, appId) : [];
 
   const existing = await readProductImages(productId);
   const { uploadGeneratedImage } = await import("@/lib/data/images");
@@ -315,6 +333,8 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
   }
 
   const model = await resolveModel(readText(raw.modelSlug));
+  // En casino, de qué app es la pantalla que hay que enseñar.
+  const appId = readText(raw.appId);
 
   // De qué copy salen. Sin esto la imagen cae en la galería sin poder enseñarse
   // dentro del anuncio que la usa.
@@ -408,7 +428,9 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
   const anyNeedsReference = visuals.some((visual) => visual.withReference ?? withReference);
 
   const references =
-    anyNeedsReference && model.acceptsReferences ? await readReferenceBytes(productId) : [];
+    anyNeedsReference && model.acceptsReferences
+      ? await readReferenceBytes(productId, appId)
+      : [];
 
   const existing = await readProductImages(productId);
   const { uploadGeneratedImage } = await import("@/lib/data/images");

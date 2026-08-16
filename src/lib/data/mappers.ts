@@ -181,6 +181,7 @@ export function toProductImage(row: Tables<"product_images">, signedUrl: string)
     id: row.id,
     productId: row.product_id,
     pattern: row.pattern as ProductImagePattern | "subida",
+    appId: row.app_id ?? undefined,
     name: row.name,
     url: signedUrl,
     prompt: row.prompt || undefined,

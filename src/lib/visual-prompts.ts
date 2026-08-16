@@ -339,6 +339,16 @@ export function buildProductImagePrompt(options: {
   const competitor = research.competitors?.competitors[0]?.name;
 
   const patternInstructions: Record<ProductImagePattern, string> = {
+    /*
+     * La captura **no se genera**, se sube.
+     *
+     * Está en la lista porque el tipo lo exige, pero si alguien la pide, lo que
+     * tiene que salir es un aviso y no una pantalla inventada: la gracia del
+     * vertical es que la app de la foto sea la de verdad.
+     */
+    "captura-app": `NO generes esta imagen. La captura de la app se sube desde el teléfono; una pantalla inventada se parece a la app pero no es la app, y es justo lo que rompe el anuncio.`,
+    "app-en-movil": `Un teléfono sostenido en una mano, con **la app de la imagen de referencia en pantalla, reproducida tal cual**. La escena alrededor es cotidiana y de ${product.country}: una cocina, un colectivo, un living con luz de tarde. Alguien de ${audience}. Nada de oficinas ni de fondos de estudio. La pantalla tiene que leerse y ser reconocible.`,
+    "app-en-mano": `Primer plano de una mano sosteniendo un teléfono que llena casi todo el encuadre, con **la app de la imagen de referencia en pantalla, reproducida tal cual**. Luz de casa, ligeramente descentrado, como una foto que alguien le mandó a una amiga. Sin texto añadido y sin aire de campaña.`,
     "packshot-principal": `${product.name} solo, centrado, sobre **fondo transparente o blanco puro**. Recorte limpio con los bordes definidos, sin sombra proyectada o con una sombra de contacto mínima. Iluminación de estudio uniforme, sin reflejos que quemen la etiqueta. Esta imagen se va a componer después dentro de otras creatividades, así que el recorte es lo más importante.`,
     "packshot-angulo": `${product.name} en vista de tres cuartos sobre fondo neutro, con sombra suave de contacto. Debe transmitir volumen y tamaño real.`,
     "producto-en-uso": `Alguien de ${audience} usando ${product.name} en su entorno cotidiano. Luz natural, gesto no posado, el producto reconocible pero sin protagonizar el encuadre.`,

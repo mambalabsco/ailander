@@ -191,6 +191,10 @@ export const PRODUCT_IMAGE_PATTERNS = [
   "comparativa-alternativa",
   "antes-despues",
   "pack-oferta",
+  // Del vertical de casino: lo que se enseña no es un envase, es una pantalla.
+  "captura-app",
+  "app-en-movil",
+  "app-en-mano",
 ] as const;
 
 export type ProductImagePattern = (typeof PRODUCT_IMAGE_PATTERNS)[number];
@@ -207,6 +211,44 @@ export interface ProductImagePatternMeta {
 }
 
 export const PRODUCT_IMAGE_PATTERN_META: Record<ProductImagePattern, ProductImagePatternMeta> = {
+  /*
+   * Los tres de casino.
+   *
+   * `captura-app` **no se genera**: se sube. Es la pantalla real de la app, y es
+   * la que viaja como referencia para que el teléfono de las otras dos enseñe
+   * *esa* app y no una parecida. Describirla en el prompt —«pantalla de casino
+   * con ruleta»— produce otra app, que es exactamente lo que no se quiere.
+   */
+  "captura-app": {
+    id: "captura-app",
+    name: "Captura de la app",
+    purpose: "La pantalla real de la app, subida tal cual desde el teléfono.",
+    conversionLogic:
+      "No convierte por sí sola: es la pieza maestra del vertical. Es lo que se manda de referencia para que el móvil de las demás enseñe esta app y no una inventada.",
+    hasText: true,
+    aspectRatio: "9:16",
+    isPrimary: true,
+  },
+  "app-en-movil": {
+    id: "app-en-movil",
+    name: "La app en el móvil",
+    purpose: "Un teléfono sostenido con la app en pantalla, dentro de una escena real.",
+    conversionLogic:
+      "Enseña que existe y que se usa desde donde ya está la persona. Un pantallazo suelto parece una web; una mano sosteniendo el teléfono parece algo que alguien está haciendo.",
+    hasText: false,
+    aspectRatio: "4:5",
+    isPrimary: false,
+  },
+  "app-en-mano": {
+    id: "app-en-mano",
+    name: "Primer plano de la pantalla",
+    purpose: "La mano y la pantalla llenando el encuadre, con luz de casa.",
+    conversionLogic:
+      "Se lee como una foto que alguien mandó, no como una campaña. Es el formato del testimonio: la prueba de que la pantalla es de verdad.",
+    hasText: false,
+    aspectRatio: "4:5",
+    isPrimary: false,
+  },
   "packshot-principal": {
     id: "packshot-principal",
     name: "Packshot principal",
@@ -310,6 +352,13 @@ export const PRODUCT_IMAGE_PATTERN_META: Record<ProductImagePattern, ProductImag
 };
 
 export interface ProductImage {
+  /**
+   * De qué app es, en casino.
+   *
+   * La captura de una app es lo que se manda de referencia para que el teléfono
+   * de la creatividad enseñe **esa** app y no una parecida.
+   */
+  appId?: string;
   id: string;
   productId: string;
   pattern: ProductImagePattern | "subida";
