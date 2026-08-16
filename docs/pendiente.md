@@ -3,26 +3,24 @@
 Escrito el 11 de agosto de 2026, al final de una sesión larga. Ordenado por lo
 que desbloquea, no por lo que cuesta.
 
-## 0 bis. Un producto en varios mercados: escrito entero, sin probar nada
+## 0 bis. Un producto en varios mercados: aplicado, y a medio comprobar
 
-Las doce tareas del plan (`superpowers/plans/2026-08-12-producto-multimercado.md`)
-están en `origin/main`. **Ninguna se ha visto funcionar**, y hay que decirlo así:
-`SUPABASE_DB_URL` en `.env.local` está truncada —termina justo después de la
-arroba, sin el host—, así que `db:push` no conecta y las dos migraciones
-(`20260812000500` y `20260812000600`) siguen sin aplicar. Se arregla pegando otra
-vez la cadena entera desde **Connect** en el panel de Supabase.
+**La cadena truncada ya no lo es y las migraciones están aplicadas.** Comprobado
+el 16 de agosto contra el proyecto real: `20260812000500` y `20260812000600`
+constan como aplicadas, `product_markets` existe con sus tres fuentes de precio,
+y `market_id` está en `products`, `copies` y `angles`.
 
-Lo comprobado es solo lo que se puede comprobar sin base: 1527 tests, `tsc`,
-`eslint` y `npm run build`.
+**El traspaso no dejó a nadie fuera**, que era la comprobación obligatoria:
+54 tablas tienen `workspace_id` y **ninguna fila lo tiene a nulo**. Una fila sin
+espacio no la ve nadie, y es la peor forma de perder algo porque no se borra.
 
-Al aplicar las migraciones, mirar en este orden:
+Lo que sigue sin mirarse, y es a mano:
 
-1. Que el traspaso no dejó a nadie fuera —las dos consultas están en el plan—.
-2. Un producto de **un solo** mercado: la ficha tiene que verse exactamente igual
+1. Un producto de **un solo** mercado: la ficha tiene que verse exactamente igual
    que antes, sin selector y con su precio. Si algo cambia ahí, es un fallo.
-3. Un producto con dos: el selector, el precio oculto en general, y el encargo de
+2. Un producto con dos: el selector, el precio oculto en general, y el encargo de
    un copy general **sin** la línea del precio.
-4. `cache_read_tokens` en el panel de Gasto. Los textos del mercado entran en los
+3. `cache_read_tokens` en el panel de Gasto. Los textos del mercado entran en los
    prefijos cacheados; si la caché dejara de acertar, el culpable es esto.
 
 Lo que quedó fuera a propósito, además de lo que ya decía la spec: el sello de
@@ -32,7 +30,8 @@ la pestaña de Copys.
 
 ## 0. Desplegar
 
-**35 commits sin aplicar.** Todo lo de estos dos días vive solo en `origin/main`.
+**Todo lo de estos días vive solo en `origin/main`**, incluidos los ángulos desde
+material (13 de agosto) y los anuncios desde material (16 de agosto).
 `./actualizar.sh` en el servidor: aplica migraciones, pasa los tests —si fallan,
 aborta sin tocar nada—, construye, reinicia e imprime la versión.
 
@@ -132,6 +131,12 @@ Shopify, que guarda las versiones anteriores.
 ## 5. Sin confirmar en producción
 
 Nada de esto se ha visto funcionar en el servidor:
+
+- **Las tres fuentes de una tanda de anuncios** (16 de agosto). Compilan, pasan
+  1580 tests y la migración está aplicada, pero **ninguna se ha visto generar**:
+  que un nivel «mismo enfoque» suene distinto de uno «solo como referencia» es
+  precisamente lo que no se puede comprobar sin gastar. Y del modo automático
+  falta ver que dos pulsaciones seguidas eligen cosas distintas.
 
 - El montaje con la música mezclada por ffmpeg y la duración mandada por las
   tomas. **Ojo**: si la voz es más larga que los planos, ahora se corta.
