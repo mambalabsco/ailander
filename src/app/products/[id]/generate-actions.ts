@@ -613,6 +613,8 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
   const anatomiaId = readText(raw.anatomiaId);
   const nivel = readText(raw.nivel) as NivelDeCopia | "";
   const motivo = readText(raw.motivo);
+  // Sin alcance, embudo: es lo que hacía siempre antes de que se pudiera elegir.
+  const alcance = readText(raw.alcance) === "etapa" ? "etapa" : "embudo";
 
   const [angles, prelandings, numbers] = await Promise.all([
     readAngles(ctx.id),
@@ -667,6 +669,7 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
     prelandings,
     angle,
     origen: anatomia && nivel ? { anatomia, nivel } : undefined,
+    alcance,
     count,
     startNumber: numbers.ad,
   })}
@@ -715,17 +718,26 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
       const savedCampaign = await saveCampaign({
         id: "",
         productId: ctx.id,
+        /*
+         * El nombre lo pone **la pantalla**, no el modelo.
+         *
+         * Al revés estaba hasta el 16 de agosto, y hacía imposible que la vista
+         * previa acertara: enseñaba el enfoque derivado del ángulo o del
+         * material y guardaba lo que el modelo hubiera decidido llamarla, que
+         * además venía en prosa. Lo que ves antes de pulsar es ahora lo que se
+         * guarda; el modelo solo nombra si aquí no hay nada.
+         */
         name: buildCampaignName({
           countryCode,
-          theme: data.campaign.theme || theme || ctx.product.category,
-          focus: data.campaign.focus || focus,
+          theme: theme || data.campaign.theme || ctx.product.category,
+          focus: focus || data.campaign.focus,
         }),
         countryCode,
-        theme: data.campaign.theme || theme,
+        theme: theme || data.campaign.theme,
         // La etapa de la campaña queda como la de entrada, que es la del primer
         // conjunto: el campo sigue existiendo y hay pantallas que lo leen.
         stage: data.adsets[0]?.stage ?? stage,
-        focus: data.campaign.focus || focus,
+        focus: focus || data.campaign.focus,
         createdAt: new Date().toISOString(),
       });
 

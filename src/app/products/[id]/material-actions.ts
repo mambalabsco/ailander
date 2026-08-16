@@ -282,6 +282,7 @@ export async function generateAdsFromNewMaterialAction(
   const nivel = readText(form.get("nivel")) || "ampliado";
   const cuantos = Math.min(20, Math.max(1, Number(form.get("cuantos")) || 5));
   const etapa = readText(form.get("stage")) || "BOFU";
+  const alcance = readText(form.get("alcance")) === "etapa" ? "etapa" : "embudo";
   const destino = readText(form.get("destination")) || "producto";
   const prelandingId = readText(form.get("prelandingId"));
   const pendientes = readText(form.get("videosPendientes"));
@@ -370,6 +371,7 @@ export async function generateAdsFromNewMaterialAction(
         nivel,
         count: cuantos,
         stage: etapa,
+        alcance,
         destination: destino,
         prelandingId,
       });

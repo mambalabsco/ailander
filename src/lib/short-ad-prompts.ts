@@ -12,6 +12,8 @@ import {
 } from "@/types/campaign";
 import { buildProductContext } from "@/lib/copy-prompts";
 import { copyLevelRule } from "@/lib/nivel-de-copia";
+import { batchScopeRule } from "@/lib/alcance-de-tanda";
+import type { AlcanceDeTanda } from "@/lib/alcance-de-tanda";
 import type { NivelDeCopia } from "@/lib/nivel-de-copia";
 import type { Anatomia } from "@/lib/anatomia";
 import type { Store } from "@/types/store";
@@ -70,6 +72,13 @@ export function buildShortAdBatchPrompt(options: {
    * dos instrucciones que se pisan, y el modelo acaba obedeciendo a la última.
    */
   origen?: { anatomia: Anatomia; nivel: NivelDeCopia };
+  /**
+   * Si la tanda monta el embudo entero o un solo conjunto de su etapa.
+   *
+   * Hasta el 16 de agosto siempre montaba el embudo y no se podía pedir otra
+   * cosa, aunque la pantalla dijera «Etapa del embudo» como si se pudiera.
+   */
+  alcance?: AlcanceDeTanda;
   count?: number;
   /** Formatos concretos; si no se indican, se reparten los de la etapa. */
   formats?: ShortAdFormat[];
@@ -83,6 +92,7 @@ export function buildShortAdBatchPrompt(options: {
     prelandings,
     angle,
     count = DEFAULT_BATCH_SIZE,
+    alcance = "embudo",
     startNumber,
   } = options;
 
@@ -172,18 +182,16 @@ ${
 
 ## Tarea
 
-Monta **una campaña completa**, no un conjunto suelto.
+${batchScopeRule({ alcance, stage: adset.stage, count })}
+${
+  origen
+    ? `
+**Toda esta campaña va del ángulo del anuncio de arriba**, no del resto de la investigación. El deseo, el reencuadre y el tema son los suyos; la investigación del producto está para sostener lo que se afirme, **no para cambiar de qué habla la campaña**. Si acabas escribiendo sobre otro problema del producto, te has salido del encargo.
 
-Devuelve **de dos a cuatro conjuntos de anuncios dentro de la misma campaña**, y que **no sean todos de la misma etapa del embudo**. Una campaña real mezcla:
-
-- **TOFU** — entra por el problema, a quien todavía no sabe qué lo causa.
-- **MOFU** — entra por el mecanismo, a quien ya probó cosas que fallaron.
-- **BOFU** — entra por la oferta, a quien ya sabe qué es y duda del precio o la garantía.
-
-El conjunto de arriba —**${adset.stage}**— es el de entrada y debe estar. Los demás los decides tú según lo que pida este producto y esta investigación: si el público ya conoce la categoría, pesa más MOFU y BOFU; si el problema ni se nombra, pesa más TOFU.
-
-Cada conjunto lleva su propia etapa, su enfoque, su audiencia y su objetivo, y **de tres a cinco anuncios propios**. Cada anuncio es una pieza independiente: distinto gancho, distinta entrada y distinto enfoque. Si dos anuncios se pudieran intercambiar sin que se note, están mal.
-
+Eso vale también para los conjuntos de TOFU y MOFU: entran por el problema y por el mecanismo **de este ángulo**, no por los del producto en general.
+`
+    : ""
+}
 En el campo \`name\` de cada anuncio escribe **solo el gancho en pocas palabras**, sin prefijos ni numeración: el nombre completo lo monta la plataforma.
 
 ### Formatos de esta tanda
@@ -215,7 +223,7 @@ ${openInvitation}
 - Usa el lenguaje del cliente que aparece en la investigación y evita el que está marcado como prohibido.
 - Escribe en ${product.language} y con el vocabulario de ${product.country}.
 
-Devuelve los ${count} anuncios uno detrás de otro, separados y numerados.`;
+Devuelve los ${count} anuncios —ese total, sumando todos los conjuntos— uno detrás de otro, separados y numerados.`;
 }
 
 /**

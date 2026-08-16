@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SectionCard } from "@/components/section-card";
 import { EmptyState, Field, SelectField, TextAreaField, TextField } from "@/components/ui";
 import { ReferenceAds, type ReferenceAd } from "@/components/video/reference-ads";
@@ -15,6 +16,7 @@ import type { AdDestinationType, FunnelStage, Prelanding } from "@/types/campaig
 import { DEFAULT_BATCH_SIZE } from "@/lib/short-ad-prompts";
 import { NIVELES } from "@/lib/nivel-de-copia";
 import type { NivelDeCopia } from "@/lib/nivel-de-copia";
+import type { AlcanceDeTanda } from "@/lib/alcance-de-tanda";
 import type { Anatomia } from "@/lib/anatomia";
 import type { Product } from "@/types";
 import type { MarketingAngle } from "@/types/copy";
@@ -23,7 +25,10 @@ import {
   generateAdsAutoAction,
   generateShortAdsAction,
 } from "@/app/products/[id]/generate-actions";
-import { generateAdsFromNewMaterialAction } from "@/app/products/[id]/material-actions";
+import {
+  generateAdsFromNewMaterialAction,
+  saveAnatomiaAction,
+} from "@/app/products/[id]/material-actions";
 
 /**
  * De dónde sale una tanda de anuncios.
@@ -57,6 +62,17 @@ export function AdsGenerator({
   hasApiKey: boolean;
   hasResearch: boolean;
 }) {
+  /*
+   * Embudo entero o una sola etapa.
+   *
+   * Hasta el 16 de agosto solo existía lo primero, y la pantalla no lo decía: el
+   * desplegable se llamaba «Etapa del embudo» como si la tanda entera fuera de
+   * esa etapa, cuando era solo por dónde entraba.
+   */
+  const router = useRouter();
+  const [guardandoDuenio, setGuardandoDuenio] = useState(false);
+  const [alcance, setAlcance] = useState<AlcanceDeTanda>("embudo");
+  const embudoCompleto = alcance === "embudo";
   const [fuente, setFuente] = useState<"angulo" | "material" | "nuevo">("angulo");
   const [copyNuevo, setCopyNuevo] = useState("");
   const [propio, setPropio] = useState(false);
@@ -148,6 +164,36 @@ export function AdsGenerator({
             común a las dos: un anuncio nacido de un material se numera y se sube
             igual que cualquier otro.
           */}
+          <div>
+            <span className="mb-2 block text-sm font-medium">Cómo se arma</span>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["embudo", "Embudo completo"],
+                  ["etapa", "Una sola etapa"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setAlcance(value)}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    alcance === value
+                      ? "border-violet-600 bg-violet-600 text-white"
+                      : "border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              {embudoCompleto
+                ? "De dos a cuatro conjuntos, mezclando etapas. La que elijas abajo es por dónde entra."
+                : "Un solo conjunto de la etapa que elijas. Para cuando el embudo ya está montado y solo quieres más de una."}
+            </p>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -181,7 +227,7 @@ export function AdsGenerator({
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Etapa del embudo">
+            <Field label={embudoCompleto ? "Por dónde entra el embudo" : "La etapa de la tanda"}>
               <SelectField
                 value={stage}
                 onChange={(event) => setStage(event.target.value as FunnelStage)}
@@ -330,11 +376,48 @@ export function AdsGenerator({
                 ))}
               </div>
 
-              {(fuente === "material" && selectedAnatomia?.anatomia.ownership === "ajeno") ||
-              (fuente === "nuevo" && !propio) ? (
+              {/*
+                De quién es, visible y cambiable desde aquí.
+
+                Las anatomías escritas antes de que existiera el campo se leen
+                como ajenas, y nadie lo eligió: se veía en el resultado y no en la
+                pantalla. Cambiarlo aquí lo guarda en la anatomía, así que la
+                siguiente tanda ya sale bien sin volver a analizar el material.
+              */}
+              {fuente === "material" && selectedAnatomia ? (
+                <label className="mt-3 flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnatomia.anatomia.ownership === "propio"}
+                    disabled={guardandoDuenio}
+                    onChange={(event) => {
+                      const ownership = event.target.checked ? "propio" : "ajeno";
+                      setGuardandoDuenio(true);
+                      void saveAnatomiaAction(selectedAnatomia.id, product.id, {
+                        ...selectedAnatomia.anatomia,
+                        ownership,
+                      }).finally(() => {
+                        setGuardandoDuenio(false);
+                        router.refresh();
+                      });
+                    }}
+                    className="mt-1 size-4 accent-violet-600"
+                  />
+                  <span>
+                    <span className="font-medium">Este anuncio es mío y ya lo lancé</span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      {selectedAnatomia.anatomia.ownership === "propio"
+                        ? "Sus cifras están comprobadas y se pueden repetir tal cual."
+                        : "De otra marca: se hereda su idea entera, pero ninguna de sus cifras se dirá como nuestra."}
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+
+              {fuente === "nuevo" && !propio ? (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  Este material es de otra marca: se copia cómo está construido, pero ninguna de sus
-                  cifras se va a decir como nuestra.
+                  De otra marca: se hereda su idea —el tema, el deseo, el reencuadre— pero ninguna
+                  de sus cifras se va a decir como nuestra.
                 </p>
               ) : null}
             </div>
@@ -409,12 +492,33 @@ export function AdsGenerator({
               Así quedará la estructura
             </p>
             <div className="mt-2 space-y-1 font-mono text-sm">
-              <p>{campaignName}</p>
+              <p className="break-all">{campaignName}</p>
               <p className="pl-4">└── {adsetName}</p>
               <p className="pl-8 text-slate-500 dark:text-slate-400">
                 ├── Ad{nextNumbers.ad} … Ad{nextNumbers.ad + count - 1}
               </p>
             </div>
+
+            {/*
+              Lo que la vista previa **no** puede saber, dicho aquí.
+              Antes dibujaba un conjunto y salían tres, y el nombre que enseñaba
+              no era el que se guardaba. El nombre de la campaña ya es exacto; el
+              reparto en conjuntos lo decide el modelo y no se puede prometer.
+            */}
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              {embudoCompleto ? (
+                <>
+                  El nombre de la campaña es el definitivo. Dentro saldrán de{" "}
+                  <span className="font-medium">dos a cuatro conjuntos</span> —este es el de
+                  entrada— y sus nombres los pone el modelo según las etapas que decida.
+                </>
+              ) : (
+                <>
+                  El nombre de la campaña y el del conjunto son los definitivos. Un solo conjunto,
+                  con los {count} anuncios dentro.
+                </>
+              )}
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -534,6 +638,7 @@ export function AdsGenerator({
                   payload.set("nivel", nivel);
                   payload.set("cuantos", String(count));
                   payload.set("stage", stage);
+                  payload.set("alcance", alcance);
                   payload.set("destination", destinationType);
                   payload.set("prelandingId", prelandingId);
                   for (const id of videosElegidos) payload.append("videoReferenceIds", id);
@@ -548,6 +653,7 @@ export function AdsGenerator({
                   productId: product.id,
                   count,
                   stage,
+                  alcance,
                   // Uno de los dos, nunca los dos: el material sustituye al
                   // ángulo en el encargo, no se suma.
                   angleId: desdeMaterial ? "" : angleId,

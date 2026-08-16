@@ -1,6 +1,11 @@
-// Relativo y con extensión: es un import **de valor**, y con el alias `@/` el
-// corredor de Node no lo resuelve y el test de este módulo no se puede cargar.
-import { inheritanceRule } from "./material-herencia.ts";
+/*
+ * Sin importar `inheritanceRule`, y a propósito.
+ *
+ * Esa regla la escribe la **anatomía**, donde el encargo es describir un anuncio
+ * ajeno sin atribuirle nada al producto. Aquí el encargo es el contrario:
+ * escribir con su idea. Compartir el texto fue justo lo que hizo que una tanda
+ * saliera hablando de otra cosa — ver `claimRule`.
+ */
 
 /**
  * Con qué cercanía se copia un material que ya funcionó.
@@ -47,30 +52,52 @@ export const NIVELES: { id: NivelDeCopia; nombre: string; explicacion: string }[
   },
 ];
 
-/** El texto base de cada nivel, que cambia si el material es de otra marca. */
-function levelText(nivel: NivelDeCopia, ownership: "propio" | "ajeno"): string {
+/** El texto base de cada nivel. El tema del material se conserva en los tres. */
+function levelText(nivel: NivelDeCopia): string {
   if (nivel === "mismo") {
-    return ownership === "propio"
-      ? "**Mismo enfoque.** Mantén la **misma promesa**, el mismo mecanismo y el mismo público del material. Lo que cambia es la ejecución: otro gancho, otra entrada, otro formato. No busques un ángulo nuevo — este ya funciona y lo que se quiere es más de esto."
-      : "**Mismo enfoque.** Mantén la construcción y la **misma promesa** en su *clase* —el mismo tipo de resultado y el mismo mecanismo—, pero dicha con lo que nuestra investigación sostiene. Lo que cambia es la ejecución: otro gancho, otra entrada, otro formato.";
+    return "**Mismo enfoque.** Mantén el **tema, el deseo y el mecanismo** del material, y el mismo público. Lo que cambia es la ejecución: otro gancho, otra entrada, otro formato. No busques un ángulo nuevo — este ya funciona y lo que se quiere es más de esto.";
   }
 
   if (nivel === "ampliado") {
-    return ownership === "propio"
-      ? "**Parecido, con más ideas.** Conserva el mecanismo y el deseo del material, y añade **entradas nuevas**: otras objeciones, otro momento emocional, un público adyacente. Cada anuncio tiene que aportar algo que el material no tenía."
-      : "**Parecido, con más ideas.** Conserva el mecanismo y el deseo del material, y añade **entradas nuevas** —otras objeciones, otro momento emocional, un público adyacente— sostenidas por nuestra investigación, no por lo que prometía el otro anuncio.";
+    return "**Parecido, con más ideas.** Conserva el **tema, el deseo y el mecanismo** del material, y añade **entradas nuevas**: otras objeciones, otro momento emocional, un público adyacente. Cada anuncio aporta algo que el material no tenía, **sin cambiar de qué va**.";
   }
 
-  return "**Solo como referencia.** Toma de aquí únicamente la construcción: cómo entra, en qué orden coloca las partes, con qué ritmo y cómo cierra. Todo lo que se afirme sale de la **investigación** de nuestro producto, no del material.";
+  return "**Solo como referencia.** De aquí se toma cómo está construido —cómo entra, en qué orden coloca las partes, con qué ritmo y cómo cierra— y también **su idea de fondo**: el deseo que explota y el reencuadre que propone. Lo que se rellena con nuestra investigación son los hechos, no el ángulo.";
 }
 
 /**
- * La instrucción completa: el nivel, y encima qué se puede heredar.
+ * Qué se puede afirmar, según de quién sea el material.
  *
- * Las dos van juntas siempre. Devolver solo el nivel dejaría que «mismo enfoque»
- * arrastrara las cifras de otra marca, que es justo lo que la otra regla existe
- * para impedir.
+ * ## El fallo del 16 de agosto, que es la razón de que esto esté separado
+ *
+ * Antes, «ajeno» decía «reutiliza **solo su construcción**». El modelo hizo caso
+ * al pie de la letra: tiró el ángulo del material —un anuncio de colesterol
+ * sobre evitar la estatina— y rellenó con lo único que le quedaba, la
+ * investigación del producto. Salió una campaña sobre cansancio y niebla mental
+ * a partir de un anuncio sobre colesterol, y no falló nada: se pidió eso.
+ *
+ * La distinción, que está en la spec y yo había perdido: **el ángulo puede ir
+ * tan lejos como haga falta; la frase que se publica, no.** De un material ajeno
+ * se hereda la idea entera —el tema, el deseo, el reencuadre—; lo que no se
+ * hereda son **sus cifras y sus resultados concretos**, porque son de otro
+ * producto y nadie los ha comprobado aquí.
+ */
+function claimRule(ownership: "propio" | "ajeno"): string {
+  if (ownership === "propio") {
+    return "Este material es **nuestro y ya se lanzó**: sus promesas y sus cifras están comprobadas, así que se pueden repetir tal cual.";
+  }
+
+  return "Este material es **de otra marca**. Su **idea sí se hereda entera** —el tema, el deseo, el reencuadre, el mecanismo—: eso es justo lo que se ha venido a reutilizar. Lo que no se hereda son sus **datos**: **no atribuyas a nuestro producto ninguna cifra, porcentaje, plazo ni resultado concreto que aparezca en el anuncio**, porque son de otro producto y aquí no los ha comprobado nadie. Donde el material use un dato suyo, usa el nuestro si la investigación lo sostiene, y si no lo sostiene, dilo sin cifra.";
+}
+
+/**
+ * La instrucción completa: qué se conserva del material y qué no se puede
+ * afirmar de él.
+ *
+ * Las dos mitades van juntas siempre. Con solo la primera se cuela una cifra
+ * ajena dicha como nuestra; con solo la segunda se pierde el ángulo, que es lo
+ * que pasó el 16 de agosto.
  */
 export function copyLevelRule(nivel: NivelDeCopia, ownership: "propio" | "ajeno"): string {
-  return `${levelText(nivel, ownership)}\n\n${inheritanceRule(ownership)}`;
+  return `${levelText(nivel)}\n\n${claimRule(ownership)}`;
 }

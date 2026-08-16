@@ -314,8 +314,22 @@ export interface CampaignTree {
 
 /* --------------------------- Convención de nombres ------------------------------ */
 
-/** Normaliza un fragmento para que entre en un nombre: sin espacios ni acentos. */
-function nameToken(value: string): string {
+/**
+ * Normaliza un fragmento para que entre en un nombre: sin espacios ni acentos, y
+ * **acotado en palabras**.
+ *
+ * El tope no es cosmético. `theme` y `focus` los devuelve el modelo, y devuelve
+ * lo que quiere: el 16 de agosto devolvió dos párrafos y salió una campaña
+ * llamada con 514 caracteres, inservible en el gestor de anuncios. No dio ningún
+ * error — se guardó y se vio en la lista como cualquier otra.
+ *
+ * Se corta **por el final**: las primeras palabras son las que distinguen una
+ * campaña de otra cuando hay veinte en una lista.
+ *
+ * Y va aquí, no solo en el encargo, porque pedirle brevedad a un modelo es pedir,
+ * no garantizar. Probado en `campaign.test.ts`.
+ */
+function nameToken(value: string, maxWords = 8): string {
   return value
     .trim()
     .normalize("NFD")
@@ -324,8 +338,14 @@ function nameToken(value: string): string {
     .replace(/^_+|_+$/g, "")
     .split("_")
     .filter(Boolean)
+    .slice(0, maxWords)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join("_");
+}
+
+/** Junta las partes de un nombre sin dejar guiones bajos colgando. */
+function joinName(...parts: string[]): string {
+  return parts.filter(Boolean).join("_");
 }
 
 /** `[CL]_Tiroides_Fria_BOFU_Oferta_Precio` */
@@ -345,7 +365,10 @@ export function buildCampaignName(options: {
   focus: string;
 }): string {
   const country = options.countryCode.toUpperCase().slice(0, 3);
-  return `[${country}]_${nameToken(options.theme)}_${nameToken(options.focus)}`;
+
+  // Cinco y cinco: con el `[CL]_` delante, el nombre queda por debajo de los 120
+  // caracteres y se sigue leyendo de un vistazo en la lista.
+  return joinName(`[${country}]`, nameToken(options.theme, 5), nameToken(options.focus, 5));
 }
 
 /** `ADSET13_BOFU_Oferta_Precio_Urgencia` */
@@ -354,7 +377,9 @@ export function buildAdsetName(options: {
   stage: FunnelStage;
   focus: string;
 }): string {
-  return `ADSET${options.number}_${options.stage}_${nameToken(options.focus)}`;
+  // El número y la etapa son lo que nunca se puede perder: con ellos se localiza
+  // el conjunto aunque el enfoque venga recortado.
+  return joinName(`ADSET${options.number}`, options.stage, nameToken(options.focus, 6));
 }
 
 /** `Ad36_Cuaderno_Busco_Mujeres` */
