@@ -125,22 +125,12 @@ esta estructura:
 Se escribe en el habla del país, con su vocabulario, porque un testimonio en
 neutro no se lee como un testimonio.
 
-## Lo que hay que decidir, y es de negocio
+## La regla que estorbaba, decidida y fuera
 
-**La regla que dejé el 16 de agosto en el encargo de copy prohíbe este texto.**
-Dice «nunca prometas ganancias ni presentes el juego como una forma de ganar
-dinero», y el ejemplo es exactamente eso: alguien que gana 2.847.000 y le cambia
-la vida.
-
-No se pueden tener las dos cosas. Las opciones, sin adornos:
-
-- **Quitarla.** El encargo produce lo que se pide. Lo que se publique y dónde es
-  decisión de quien lo publica, no de la herramienta.
-- **Dejarla.** Este método no se puede usar, y la mitad del vertical con él.
-
-**No lo decido yo**: no es una cuestión técnica. Lo que sí digo es que dejar la
-regla puesta y esperar que el modelo produzca el testimonio es la peor de las
-tres, porque falla en silencio: salen textos flojos y no se sabe por qué.
+El encargo llevaba «nunca prometas ganancias», que prohibía este método entero.
+**Se ha quitado**, decidido el 16 de agosto: el testimonio de casino es una
+historia de ganancia, y una herramienta que no puede escribir lo que se le pide
+no sirve para este vertical.
 
 ## Alcance
 

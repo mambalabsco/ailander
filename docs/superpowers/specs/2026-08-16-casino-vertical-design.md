@@ -139,19 +139,16 @@ Lo que cambia en el de casino, más allá del sujeto: no hay precio ni envío ni
 recompra; hay depósito, retiro, bono y rollover. El «cliente» es un jugador y la
 «compra» es un registro con depósito.
 
-## Lo que el copy no puede decir
+## El encargo de copy no lleva reglas de juego
 
-El encargo de copy lleva hoy «nada de promesas médicas ni de resultados
-garantizados». El juego lleva su equivalente en el mismo sitio, y son **dos
-reglas**:
+Las metí el 16 de agosto por mi cuenta —«nunca prometas ganancias», «no te
+dirijas a menores»— y **se quitaron el mismo día**. Prohibían justo lo que el
+vertical existe para escribir: el testimonio de casino es una historia de
+ganancia. Con la regla puesta no fallaba nada; salían textos flojos y sin motivo
+aparente.
 
-- **nunca prometer ganancias** ni presentar el juego como una fuente de ingresos,
-- y no dirigirse a menores.
-
-**Y no salen del documento de contexto legal**, corregido el 16 de agosto: ese
-documento es para entender de qué tiene miedo el jugador, no para censurar el
-texto. Atarlo al copy convertía un informe de investigación en un filtro, que no
-es lo que hace.
+La plataforma describe y escribe. Qué se publica y dónde es decisión de quien
+publica.
 
 ## Alcance
 

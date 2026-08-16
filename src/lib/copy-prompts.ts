@@ -240,29 +240,17 @@ export function buildProductContext(
   }
 
   /*
-   * Las reglas del juego, donde vive la regla médica.
+   * Aquí hubo un bloque de reglas de juego, y se ha quitado entero.
    *
-   * Van **aquí y no en cada encargo** por dos motivos: este es el sitio por el
-   * que pasan todos los textos —long copy, anuncios cortos, landings, Instagram—
-   * y es el **prefijo cacheado**, que sigue siendo idéntico para el mismo
-   * producto, así que la caché no se rompe.
+   * Lo añadí por mi cuenta —«nunca prometas ganancias», «no te dirijas a
+   * menores»— y prohibía justo lo que el vertical existe para escribir: el
+   * testimonio de casino **es** una historia de ganancia. Con la regla puesta no
+   * fallaba nada: salían textos flojos y sin motivo aparente, que es la peor
+   * forma de romper algo.
    *
-   * Sin esto salen copys que no se pueden publicar, y quien lo descubre es el
-   * revisor de Meta después de haberlos pagado.
-   *
-   * Son dos reglas y ninguna sale del documento de **contexto legal**: ese es
-   * para entender los miedos del jugador, no para censurar el texto. Atarlo aquí
-   * convertía un informe de investigación en un filtro, que no es lo que hace.
+   * La plataforma describe y escribe. Qué se publica y dónde es decisión de
+   * quien publica, y esa decisión ya está tomada.
    */
-  if (product.vertical === "casino") {
-    lines.push(
-      "",
-      "## Lo que este texto no puede decir",
-      "",
-      "- **Nunca prometas ganancias** ni presentes el juego como una forma de ganar dinero, de pagar deudas o de resolver un problema económico.",
-      "- No te dirijas a menores, ni uses imágenes o lenguaje que apunten a ellos.",
-    );
-  }
 
   return lines.join("\n");
 }
