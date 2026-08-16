@@ -1,4 +1,5 @@
 import type { ProductIngredient } from "@/types/ingredient";
+import type { Vertical } from "@/types/research";
 export type ProductStatus = "active" | "draft";
 
 /**
@@ -73,6 +74,14 @@ export interface Product {
    * productos en vez de tener uno solo.
    */
   researchShared: boolean;
+  /**
+   * En qué negocio está.
+   *
+   * En `casino` el producto **es el país**: su investigación son los documentos
+   * de quién juega allí, y las apps cuelgan de él. Por eso no tiene precio ni
+   * envío ni tienda, y esas pestañas no se enseñan.
+   */
+  vertical: Vertical;
   /** Handle de la ficha en la tienda, para construir la URL del mercado. */
   handle?: string;
   /** Si viene de duplicar otro producto, de cuál. */

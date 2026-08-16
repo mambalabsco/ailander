@@ -55,6 +55,8 @@ export function toProduct(row: Tables<"products">): Product {
     storeId: row.store_id ?? undefined,
     marketId: row.market_id ?? undefined,
     researchShared: row.research_shared,
+    // Sin vertical, e-commerce: es lo que era todo antes de que hubiera verticales.
+    vertical: row.vertical === "casino" ? "casino" : "ecommerce",
     handle: row.handle || undefined,
     duplicatedFromId: row.duplicated_from_id ?? undefined,
   };
@@ -97,6 +99,7 @@ export function fromProduct(product: Partial<Product>): TablesUpdate<"products">
   assign("status", product.status);
   assign("owner", product.owner);
   assign("research_shared", product.researchShared);
+  assign("vertical", product.vertical);
   /*
    * Estos cuatro se miran con `in`, no con `??`.
    *

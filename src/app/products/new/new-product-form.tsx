@@ -25,6 +25,7 @@ const initialState = {
   amazonUrl: "",
   targetAgeRange: "",
   targetGenders: [] as string[],
+  vertical: "ecommerce" as "ecommerce" | "casino",
   storeId: "",
   marketId: "",
   handle: "",
@@ -152,8 +153,42 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
     });
   };
 
+  const esCasino = form.vertical === "casino";
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      <section>
+        <h3 className="text-sm font-semibold">En qué negocio está</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(
+            [
+              ["ecommerce", "Producto de e-commerce"],
+              ["casino", "Casino online"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => update("vertical", value)}
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                form.vertical === value
+                  ? "border-violet-600 bg-violet-600 text-white"
+                  : "border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {esCasino ? (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            En casino el producto es el <strong>país</strong>, no la app: su investigación es la de
+            quién juega allí, y las apps van dentro. No tiene precio, ni envío, ni tienda.
+          </p>
+        ) : null}
+      </section>
+
+      {esCasino ? null : (
       <section className="rounded-3xl border border-sky-200 bg-sky-50/60 p-5 dark:border-sky-900 dark:bg-sky-950/20">
         <h3 className="text-sm font-semibold">Importar desde la tienda</h3>
         <p className="mt-1 mb-4 text-sm text-slate-600 dark:text-slate-300">
@@ -195,6 +230,7 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
           </div>
         ) : null}
       </section>
+      )}
 
       <section>
         <h3 className="text-sm font-semibold">Dónde se vende</h3>

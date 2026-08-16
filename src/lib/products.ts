@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import type { Product, ProductResearchInputs, ProductStatus } from "@/types";
+import type { Vertical } from "@/types/research";
 import { findProduct, listOwnProducts, saveProduct } from "@/lib/store";
 import { addProductImage } from "@/lib/image-store";
 import { buildImageName } from "@/types/visuals";
@@ -24,6 +25,8 @@ export interface ProductDraftInput {
   price: number;
   landingUrl: string;
   tone: string;
+  /** En qué negocio está. Sin decir nada, e-commerce. */
+  vertical?: Vertical;
   research: ProductResearchInputs;
   /** Tienda y mercado en los que se da de alta. */
   storeId?: string;
@@ -62,6 +65,7 @@ export async function createProduct(input: ProductDraftInput): Promise<Product> 
   const product: Product = {
     id: buildProductId(input.name),
     researchShared: false,
+    vertical: input.vertical ?? "ecommerce",
     name: input.name,
     brand: input.brand || input.name,
     category: input.category,

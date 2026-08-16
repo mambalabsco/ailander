@@ -1,5 +1,5 @@
 import { SectionCard } from "@/components/section-card";
-import { RESEARCH_DOCUMENT_IDS, RESEARCH_DOCUMENT_META } from "@/types/research";
+import { RESEARCH_DOCUMENT_META, documentsFor } from "@/types/research";
 import { NewProductForm } from "@/app/products/new/new-product-form";
 import { listStores } from "@/lib/store-registry";
 
@@ -9,9 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function NewProductPage() {
   const stores = await listStores();
 
-  const documents = [...RESEARCH_DOCUMENT_IDS].sort(
-    (a, b) => RESEARCH_DOCUMENT_META[a].order - RESEARCH_DOCUMENT_META[b].order,
-  );
+  /*
+   * La lista de e-commerce, que es el vertical con el que arranca el formulario.
+   *
+   * No se recorre `RESEARCH_DOCUMENT_IDS` porque ahí están también los tres de
+   * casino: enseñarlos aquí prometería nueve documentos a quien está creando un
+   * producto de suplementos.
+   */
+  const documents = documentsFor("ecommerce");
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
@@ -25,7 +30,8 @@ export default async function NewProductPage() {
       <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <p className="text-sm font-medium">Qué se podrá generar después</p>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Seis documentos de investigación que se convierten en la base de datos del producto.
+          {documents.length} documentos de investigación que se convierten en la base de datos del
+          producto. En casino son nueve: los mismos más regulación, pagos y el panorama de casinos.
         </p>
         <ol className="mt-4 space-y-3">
           {documents.map((id) => {

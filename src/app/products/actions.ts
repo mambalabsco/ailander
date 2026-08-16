@@ -55,6 +55,10 @@ function normalizeDraft(input: unknown): ProductDraftInput {
     price: readNumber(raw.price),
     landingUrl: readText(raw.landingUrl),
     tone: readText(raw.tone, "Claro"),
+    // Cualquier cosa que no sea 'casino' es e-commerce: es el lado que no cambia
+    // de comportamiento, y un vertical mal escrito no puede colar un producto en
+    // un juego de documentos que no le toca.
+    vertical: readText(raw.vertical) === "casino" ? "casino" : "ecommerce",
     research: {
       niche: readText(raw.niche, "General"),
       // Una URL por línea en el formulario.
@@ -223,6 +227,7 @@ export async function createCompetitorProduct(input: unknown) {
   const competitor: Product = {
     id: `comp-${Date.now().toString(36)}`,
     researchShared: false,
+    vertical: "ecommerce",
     name: draft.name,
     brand: draft.brand,
     category: draft.category,
