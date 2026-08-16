@@ -154,6 +154,33 @@ export interface CopyMethod {
 
 export const COPY_METHODS: CopyMethod[] = [
   {
+    /*
+     * El testimonio de cambio de vida.
+     *
+     * Es el formato del vertical de casino, y **no lo cubre ninguno de los
+     * demás**: `advertorial-trial` es un diario de treinta días con el resultado
+     * al final, y aquí el resultado llega de golpe en un solo momento y lo que
+     * ocupa el texto es lo de antes y lo de después.
+     *
+     * Las seis partes son las del ejemplo real que lo motivó, y el orden importa:
+     * el fondo del pozo primero y largo, porque es lo que hace creíble lo demás;
+     * y el **retiro que sí llegó** siempre, porque es la objeción número uno según
+     * el documento de pagos —no que se pueda ganar, sino que te paguen—.
+     */
+    id: "long-copy-testimonio",
+    format: "long-copy",
+    name: "Testimonio de cambio de vida",
+    origin: "propio",
+    narrator: "La propia persona a la que le pasó, en primera persona y en su habla local",
+    wordRange: [1100, 1500],
+    readingLevel: "Habla coloquial del país, con su vocabulario. Párrafos cortos",
+    summary:
+      "Seis partes: el fondo del pozo con detalles cotidianos, el descubrimiento casual con escepticismo declarado, el momento contado despacio, el retiro que sí llegó con su plazo, la vida después medida en cosas normales, y un cierre que invita a intentarlo sin prometer repetir el resultado.",
+    whenToUse:
+      "Casino y cualquier cosa donde la prueba sea que a alguien le pasó. El escepticismo declarado del narrador es lo que sostiene el resto; sin él suena a anuncio.",
+    supportsAngleDriver: true,
+  },
+  {
     id: "long-copy-discovery",
     format: "long-copy",
     name: "Historia de descubrimiento personal",

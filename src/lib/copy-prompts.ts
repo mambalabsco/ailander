@@ -48,6 +48,15 @@ export interface ProductContextExtras {
   notes?: ProductNote[];
   /** Copys ya probados, ya descritos por `describeSwipeCopies`. */
   swipe?: string;
+  /**
+   * La app para la que se escribe, en casino.
+   *
+   * Sin esto el texto habla de «el casino» en abstracto y sirve para cualquiera,
+   * que es justo lo contrario de para qué existen las apps: lo que se descarga
+   * tiene nombre, y el enfoque es lo único que distingue un texto de otro dentro
+   * del mismo país.
+   */
+  app?: { name: string; focus: string; downloadUrl: string } | null;
 }
 
 export function buildProductContext(
@@ -105,6 +114,19 @@ export function buildProductContext(
     `Descripción: ${product.description}`,
     `Público objetivo: ${product.targetAudience}`,
   ];
+
+  if (extras?.app) {
+    lines.push(
+      "",
+      "## La app de la que habla este texto",
+      "",
+      `Se llama **${extras.app.name}**, y es lo que la persona descarga al final.`,
+      ...(extras.app.focus ? ["", `Su enfoque: ${extras.app.focus}`] : []),
+      ...(extras.app.downloadUrl ? [`Enlace de descarga: ${extras.app.downloadUrl}`] : []),
+      "",
+      "Nómbrala. Un texto que dice «esta app» sin decir cuál vale para cualquiera, y entonces no vale para ninguna.",
+    );
+  }
 
   if (product.researchInputs?.niche) {
     lines.push(`Nicho: ${product.researchInputs.niche}`);
