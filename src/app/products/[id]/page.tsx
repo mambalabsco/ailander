@@ -58,6 +58,8 @@ import { listVideos } from "@/lib/data/videos";
 import { videoProvidersReady } from "@/lib/video/providers";
 import { ImagesTab } from "@/app/products/[id]/tab-images";
 import { AdsTab } from "@/app/products/[id]/tab-ads";
+import { AppsTab } from "@/app/products/[id]/tab-apps";
+import { listApps } from "@/lib/data/apps";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +77,8 @@ const TABS = [
   { id: "videos", label: "Vídeos" },
   { id: "imagenes", label: "Imágenes" },
   { id: "ads", label: "Ads" },
+  // Solo en casino: se filtra abajo, con las que se esconden en ese vertical.
+  { id: "apps", label: "Apps" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -180,11 +184,15 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
    * URL a una escondida cae en el panel en vez de reventar.
    */
   const SIN_SENTIDO_EN_CASINO = new Set<string>(["precios", "oferta"]);
+  // Y al revés: Apps solo tiene sentido en casino, donde el producto es el país.
+  const SOLO_EN_CASINO = new Set<string>(["apps"]);
 
   const visibleTabs = TABS.filter(
     (item) =>
       (item.id !== "precios" || Boolean(productStore)) &&
-      (product.vertical !== "casino" || !SIN_SENTIDO_EN_CASINO.has(item.id)),
+      (product.vertical === "casino"
+        ? !SIN_SENTIDO_EN_CASINO.has(item.id)
+        : !SOLO_EN_CASINO.has(item.id)),
   );
 
   // Cómo se llama cada mercado, para que las insignias no enseñen un uuid.
@@ -337,6 +345,13 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
    * Sin tumbar la página si fallan: son un añadido y la ficha tiene que
    * aparecer igual, como el resto de lo que se lee aquí.
    */
+  // Solo en casino: en e-commerce la consulta no aporta nada y son apps que no
+  // existen.
+  const apps =
+    product.vertical === "casino" && isSupabaseConfigured()
+      ? await listApps(product.id).catch(() => [])
+      : [];
+
   const anatomias = isSupabaseConfigured()
     ? await listAnatomias(product.id).catch(() => [])
     : [];
@@ -617,6 +632,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           hasHiggsfieldKey={hasHiggsfieldKey}
         />
       ) : null}
+      {activeTab === "apps" ? <AppsTab productId={product.id} apps={apps} /> : null}
       {activeTab === "ads" ? (
         <AdsTab
           product={product}

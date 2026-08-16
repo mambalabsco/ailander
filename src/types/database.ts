@@ -175,6 +175,25 @@ type ProductMarketRow = {
   updated_at: string;
 };
 
+/**
+ * Una app de casino: el subproducto del que se descarga.
+ *
+ * Vive en su tabla y no como etiqueta porque tiene enfoque propio, y ese enfoque
+ * entra en el encargo del copy.
+ */
+type AppRow = {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  product_id: string;
+  name: string;
+  focus: string;
+  download_url: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type ProductOfferRow = {
   product_id: string;
   user_id: string;
@@ -264,6 +283,8 @@ type AngleRow = {
   promise_to_validate: string;
   /** De qué mercado es la pieza. **Nulo es general**: vale en todos. */
   market_id: string | null;
+  /** De qué app es. **Nulo es general**: vale para todas las del producto. */
+  app_id: string | null;
   desire: string;
   name: string;
   target_audience: string;
@@ -353,6 +374,8 @@ type CopyRow = {
   market_id: string | null;
   angle_id: string | null;
   hook_id: string | null;
+  /** De qué app es el texto. Nulo en todo lo que no es casino. */
+  app_id: string | null;
   adset_id: string | null;
   ad_number: number | null;
   ad_name: string;
@@ -375,6 +398,8 @@ type CopyRow = {
 };
 
 type ProductImageRow = {
+  /** De qué app es la captura. Es la que se manda de referencia al generar. */
+  app_id: string | null;
   shopify_url: string | null;
   copy_id: string | null;
   ad_id: string | null;
@@ -1264,6 +1289,10 @@ export type Database = {
         ProductRow,
         Insertable<ProductRow, Exclude<keyof ProductRow, "user_id" | "name">>
       >;
+      apps: Table<
+        AppRow,
+        Insertable<AppRow, Exclude<keyof AppRow, "user_id" | "product_id" | "name">>
+      >;
       product_markets: Table<
         ProductMarketRow,
         Insertable<
@@ -1344,6 +1373,7 @@ export type Database = {
           | "market_id"
           | "angle_id"
           | "hook_id"
+          | "app_id"
           | "adset_id"
           | "ad_number"
           | "ad_name"
@@ -1362,6 +1392,7 @@ export type Database = {
         Insertable<
           ProductImageRow,
           | "market_id"
+          | "app_id"
           | "pattern"
           | "storage_bucket"
           | "mime_type"
