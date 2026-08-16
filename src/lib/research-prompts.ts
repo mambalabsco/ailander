@@ -2,8 +2,10 @@ import type { Product } from "@/types";
 import { priceLine } from "@/lib/market-price";
 import type { MarketContext } from "@/lib/market-selection";
 import type { ProductResearch, ResearchDocumentId } from "@/types/research";
-import { RESEARCH_DOCUMENT_META } from "@/types/research";
+import { RESEARCH_DOCUMENT_META, documentsFor } from "@/types/research";
+import type { Vertical } from "@/types/research";
 import type { Store } from "@/types/store";
+import { buildCasinoResearchPrompt } from "@/lib/research-casino-prompts";
 import { describeOffers, type ProductOffers } from "@/types/offer";
 import { describeNotes, type ProductNote } from "@/types/note";
 
@@ -559,6 +561,18 @@ export function buildResearchPrompt(
   store: Store | null | undefined,
   extras: ResearchExtras,
 ): string {
+  /*
+   * Casino primero, y devolviendo `null` cuando no le toca.
+   *
+   * Así los seis de e-commerce siguen bajando por el `switch` de siempre sin un
+   * solo condicional dentro de sus constructores: los dos juegos de encargos se
+   * pueden leer enteros y por separado.
+   */
+  if (product.vertical === "casino") {
+    const casino = buildCasinoResearchPrompt(id, product, research, store, extras);
+    if (casino) return casino;
+  }
+
   switch (id) {
     case "awareness":
       return buildAwarenessPrompt(product, store, extras);
@@ -592,8 +606,15 @@ export function buildResearchPrompt(
  * dependen de otros esperan a que estén los suyos. Sale de `dependsOn`, así que
  * añadir una dependencia nueva reordena esto solo.
  */
-export function researchWaves(): ResearchDocumentId[][] {
-  const pending = Object.keys(RESEARCH_DOCUMENT_META) as ResearchDocumentId[];
+export function researchWaves(vertical: Vertical = "ecommerce"): ResearchDocumentId[][] {
+  /*
+   * La lista del vertical, no todas las claves de la meta.
+   *
+   * Recorrer `RESEARCH_DOCUMENT_META` entera le metía a un producto de
+   * suplementos los tres documentos de casino, y no habría dado ningún error:
+   * habría salido una tanda pidiendo un informe de regulación del juego.
+   */
+  const pending = documentsFor(vertical);
   const done = new Set<ResearchDocumentId>();
   const waves: ResearchDocumentId[][] = [];
 
@@ -615,8 +636,13 @@ export function researchWaves(): ResearchDocumentId[][] {
 export function blockedBy(
   id: ResearchDocumentId,
   research: ProductResearch,
+  vertical: Vertical = "ecommerce",
 ): ResearchDocumentId[] {
+  const disponibles = documentsFor(vertical);
+
   return RESEARCH_DOCUMENT_META[id].dependsOn.filter(
-    (dependency) => !research.documents[dependency].generatedAt,
+    // Una dependencia fuera del vertical no bloquea: no existe en esa pantalla y
+    // esperarla dejaría el documento bloqueado para siempre, sin decir por qué.
+    (dependency) => disponibles.includes(dependency) && !research.documents[dependency].generatedAt,
   );
 }

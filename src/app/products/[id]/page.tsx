@@ -235,7 +235,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   ) as Record<ResearchDocumentId, string>;
 
   const researchBlocked = Object.fromEntries(
-    RESEARCH_DOCUMENT_IDS.map((id) => [id, blockedBy(id, research)]),
+    RESEARCH_DOCUMENT_IDS.map((id) => [id, blockedBy(id, research, product.vertical)]),
   ) as Record<ResearchDocumentId, ResearchDocumentId[]>;
 
   const primaryImage = images.find((image) => image.isPrimary) ?? null;
@@ -514,7 +514,8 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           productId={product.id}
           costRange={estimateResearchCost(providerModel)}
           prompts={researchPrompts}
-          waves={researchWaves()}
+          vertical={product.vertical}
+          waves={researchWaves(product.vertical)}
           blocked={researchBlocked}
         />
       ) : null}

@@ -11,7 +11,8 @@ import { RetryExtraction } from "@/components/retry-extraction";
 import { GenerationWatcher } from "@/components/generation-watcher";
 import { CostHint } from "@/components/cost-hint";
 import { generateResearchAction, type GenerationSummary } from "@/app/products/[id]/research-actions";
-import { RESEARCH_DOCUMENT_IDS, RESEARCH_DOCUMENT_META } from "@/types/research";
+import { RESEARCH_DOCUMENT_META, documentsFor } from "@/types/research";
+import type { Vertical } from "@/types/research";
 import type {
   ProductResearch,
   ResearchDocumentId,
@@ -123,12 +124,15 @@ export function DocumentsTab({
   missingInputs,
   needsCompetitors,
   productId,
+  vertical,
   prompts,
   waves,
   blocked,
   costRange,
 }: {
   productId: string;
+  /** De qué vertical es el producto: decide qué documentos se enseñan. */
+  vertical: Vertical;
   research: ProductResearch;
   hasApiKey: boolean;
   missingInputs: string[];
@@ -162,7 +166,7 @@ export function DocumentsTab({
    * Se excluye lo que ya está listo y lo que está generándose: repetirlo sería
    * pagar dos veces por lo mismo.
    */
-  const pendingInWave = [...RESEARCH_DOCUMENT_IDS].filter((id) => {
+  const pendingInWave = documentsFor(vertical).filter((id) => {
     const status = research.documents[id].status;
     return status !== "ready" && status !== "generating";
   });
@@ -184,9 +188,9 @@ export function DocumentsTab({
     });
   };
 
-  const ordered = [...RESEARCH_DOCUMENT_IDS].sort(
-    (a, b) => RESEARCH_DOCUMENT_META[a].order - RESEARCH_DOCUMENT_META[b].order,
-  );
+  // Ya vienen ordenados por `documentsFor`, y solo los de este vertical: un
+  // producto de suplementos no puede ver el informe de regulación del juego.
+  const ordered = documentsFor(vertical);
 
   const readyCount = ordered.filter((id) => research.documents[id].status === "ready").length;
 

@@ -17,7 +17,8 @@ import { listStores } from "@/lib/store-registry";
 import { hasActiveProviderKey } from "@/lib/provider-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { readyToRun, runResearchDocument, retryResearchExtraction } from "@/lib/research-runner";
-import { RESEARCH_DOCUMENT_IDS, RESEARCH_DOCUMENT_META } from "@/types/research";
+import { RESEARCH_DOCUMENT_META, documentsFor } from "@/types/research";
+import type { Vertical } from "@/types/research";
 import type { ResearchDocumentId } from "@/types/research";
 import { emptyOffers } from "@/types/offer";
 
@@ -38,9 +39,17 @@ function readText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function readDocumentIds(value: unknown): ResearchDocumentId[] {
+/**
+ * Los documentos pedidos, acotados a los del vertical del producto.
+ *
+ * Se comprueba contra `documentsFor` y no contra `RESEARCH_DOCUMENT_IDS`: esa
+ * lista tiene los nueve, así que sin esto se puede lanzar el informe de
+ * regulación del juego en un producto de suplementos llamando a la acción con
+ * otro identificador. La pantalla no lo ofrece; la acción sí lo aceptaba.
+ */
+function readDocumentIds(value: unknown, vertical: Vertical): ResearchDocumentId[] {
   if (!Array.isArray(value)) return [];
-  const valid = new Set<string>(RESEARCH_DOCUMENT_IDS);
+  const valid = new Set<string>(documentsFor(vertical));
   return value
     .map((item) => readText(item))
     .filter((item): item is ResearchDocumentId => valid.has(item));
@@ -68,11 +77,17 @@ export async function generateResearchAction(
     throw new Error("No hay clave de API configurada. Añádela en Configuración.");
   }
 
-  const wanted = readDocumentIds(documentIds);
-  if (wanted.length === 0) throw new Error("No has elegido ningún documento.");
-
+  /*
+   * El producto se lee **antes** de validar los documentos.
+   *
+   * Qué documentos son válidos depende de su vertical, así que sin él la
+   * comprobación no puede hacerse y aceptaría cualquiera de los nueve.
+   */
   const product = await findProductAnywhere(id);
   if (!product) throw new Error("No se encontró el producto.");
+
+  const wanted = readDocumentIds(documentIds, product.vertical);
+  if (wanted.length === 0) throw new Error("No has elegido ningún documento.");
 
   const [initialResearch, stores] = await Promise.all([readProductResearch(id), listStores()]);
   // Se relee en cada tanda: el documento 4 necesita el contenido del 1, 2 y 3,
@@ -268,15 +283,26 @@ export async function retryResearchExtractionAction(input: unknown) {
   if (!productId) throw new Error("Falta el producto.");
 
   const documentId = readText(raw.documentId);
-  if (!RESEARCH_DOCUMENT_IDS.includes(documentId as ResearchDocumentId)) {
-    throw new Error("Documento desconocido.");
-  }
 
   if (!isSupabaseConfigured()) {
     throw new Error("La investigación se guarda en Supabase y todavía no está configurado.");
   }
   if (!(await hasActiveProviderKey())) {
     throw new Error("Falta la clave de la IA. Añádela en Configuración.");
+  }
+
+  /*
+   * El documento se valida contra los del **vertical del producto**, no contra
+   * los nueve: si no, se puede reintentar la extracción de un informe de
+   * regulación del juego en un producto de suplementos. Y sin la comprobación,
+   * `RESEARCH_DOCUMENT_META[documentId]` sería `undefined` y reventaría al leer
+   * su título, que es un error mucho peor de entender.
+   */
+  const producto = await findProductAnywhere(productId);
+  if (!producto) throw new Error("No se encontró el producto.");
+
+  if (!documentsFor(producto.vertical).includes(documentId as ResearchDocumentId)) {
+    throw new Error("Documento desconocido.");
   }
 
   const title = RESEARCH_DOCUMENT_META[documentId as ResearchDocumentId].title;
