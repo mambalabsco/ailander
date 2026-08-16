@@ -282,7 +282,42 @@ export interface Campaign {
   theme: string;
   stage: FunnelStage;
   focus: string;
+  /** En qué carpeta se ve. Vacío es «sin carpeta», que es donde nacen todas. */
+  folderId?: string;
+  /**
+   * Cuándo se archivó. Vacío es activa.
+   *
+   * Archivar **no toca `folderId`**: por eso devolverla la lleva a la carpeta
+   * donde estaba, que es lo que se espera de un archivador y no de una papelera.
+   */
+  archivedAt?: string;
   createdAt: string;
+}
+
+/** Una carpeta para ordenar las campañas de un producto. */
+export interface CampaignFolder {
+  id: string;
+  productId: string;
+  name: string;
+  position: number;
+  createdAt: string;
+}
+
+/**
+ * Una campaña archivada, **sin su árbol**.
+ *
+ * En «Archivadas» no se abre nada ni se genera nada: se ve qué hay y se pulsa
+ * «Devolver». Traer sus conjuntos y anuncios sería cargar en cada visita todo lo
+ * que se archivó para no enseñarlo, y eso crece sin tope.
+ */
+export interface ArchivedCampaign {
+  id: string;
+  name: string;
+  stage: FunnelStage;
+  folderId?: string;
+  archivedAt: string;
+  adsets: number;
+  ads: number;
 }
 
 /**

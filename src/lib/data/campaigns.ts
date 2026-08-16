@@ -6,8 +6,10 @@ import { readCopies } from "@/lib/data/copy";
 import type {
   AdSet,
   AdUnit,
+  ArchivedCampaign,
   Campaign,
   CampaignTree,
+  FunnelStage,
   Prelanding,
   ShortAd,
   ShortAdFormat,
@@ -94,6 +96,8 @@ function toCampaign(row: Tables<"campaigns">): Campaign {
     theme: row.theme,
     stage: row.stage,
     focus: row.focus,
+    folderId: row.folder_id ?? undefined,
+    archivedAt: row.archived_at ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -151,6 +155,10 @@ export async function readCampaignTrees(productId: string): Promise<CampaignTree
       .from("campaigns")
       .select("*, adsets(*, short_ads(*))")
       .eq("product_id", productId)
+      // Solo lo activo. Lo archivado se lee aparte y plano: traer su árbol sería
+      // cargar en cada visita todo lo que se guardó para no enseñarlo, y eso
+      // crece sin tope.
+      .is("archived_at", null)
       .order("created_at", { ascending: true }),
     readCopies(productId),
   ]);
@@ -322,6 +330,80 @@ export async function saveShortAds(
 
   if (error) throw new Error(`No se pudieron guardar los anuncios: ${error.message}`);
   return (data ?? []).map(toShortAd);
+}
+
+/**
+ * Las campañas archivadas, **sin su árbol**.
+ *
+ * Trae solo los identificadores de los conjuntos y los anuncios, que es lo justo
+ * para contarlos: en «Archivadas» no se abre nada ni se genera nada, así que los
+ * textos de los anuncios —que es lo que pesa— no hacen falta.
+ */
+export async function readArchivedCampaigns(productId: string): Promise<ArchivedCampaign[]> {
+  const { supabase } = await requireContext();
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("id, name, stage, folder_id, archived_at, adsets(id, short_ads(id))")
+    .eq("product_id", productId)
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false });
+
+  if (error) throw new Error(`No se pudieron leer las campañas archivadas: ${error.message}`);
+
+  type Fila = {
+    id: string;
+    name: string;
+    stage: FunnelStage;
+    folder_id: string | null;
+    archived_at: string;
+    adsets: { id: string; short_ads: { id: string }[] }[];
+  };
+
+  return ((data ?? []) as unknown as Fila[]).map((row) => {
+    const nodos = row.adsets ?? [];
+    return {
+      id: row.id,
+      name: row.name,
+      stage: row.stage,
+      folderId: row.folder_id ?? undefined,
+      archivedAt: row.archived_at,
+      adsets: nodos.length,
+      ads: nodos.reduce((sum, nodo) => sum + (nodo.short_ads?.length ?? 0), 0),
+    };
+  });
+}
+
+/** Mueve una campaña de carpeta. Nulo la deja «sin carpeta». */
+export async function setCampaignFolder(
+  campaignId: string,
+  folderId: string | null,
+): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ folder_id: folderId })
+    .eq("id", campaignId);
+
+  if (error) throw new Error(`No se pudo mover la campaña: ${error.message}`);
+}
+
+/**
+ * Archiva o devuelve una campaña.
+ *
+ * Devolverla **no toca `folder_id`**: por eso vuelve a la carpeta donde estaba,
+ * que es lo que se espera de un archivador y no de una papelera.
+ */
+export async function setCampaignArchived(campaignId: string, archived: boolean): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .eq("id", campaignId);
+
+  if (error) throw new Error(`No se pudo archivar la campaña: ${error.message}`);
 }
 
 export async function deleteShortAd(id: string): Promise<boolean> {

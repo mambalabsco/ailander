@@ -1,12 +1,22 @@
 import { promises as fs } from "fs";
 import path from "path";
-import type { AdSet, AdUnit, Campaign, CampaignTree, Prelanding, ShortAd } from "@/types/campaign";
+import type {
+  AdSet,
+  AdUnit,
+  ArchivedCampaign,
+  Campaign,
+  CampaignFolder,
+  CampaignTree,
+  Prelanding,
+  ShortAd,
+} from "@/types/campaign";
 import { COPY_FORMAT_LABELS } from "@/types/copy";
 import { readCopies } from "@/lib/copy-store";
 import { campaignFixture } from "@/lib/campaign-fixture";
 import { isDemoResearchProduct } from "@/lib/research-store";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import * as db from "@/lib/data/campaigns";
+import * as folders from "@/lib/data/campaign-folders";
 
 /** Persistencia de campañas, conjuntos de anuncios, anuncios cortos y prelandings. */
 
@@ -109,43 +119,49 @@ export async function readCampaignTrees(productId: string): Promise<CampaignTree
     readCopies(productId),
   ]);
 
-  return campaigns.map((campaign) => ({
-    campaign,
-    adsets: adsets
-      .filter((adset) => adset.campaignId === campaign.id)
-      .sort((a, b) => a.number - b.number)
-      .map((adset) => {
-        const adsetAds = ads
-          .filter((ad) => ad.adsetId === adset.id)
-          .sort((a, b) => a.number - b.number);
+  return (
+    campaigns
+      // El mismo filtro que la rama de Supabase. Sin él, el respaldo enseñaría
+      // las archivadas y el fallo solo saldría en la máquina sin Supabase.
+      .filter((campaign) => !campaign.archivedAt)
+      .map((campaign) => ({
+        campaign,
+        adsets: adsets
+          .filter((adset) => adset.campaignId === campaign.id)
+          .sort((a, b) => a.number - b.number)
+          .map((adset) => {
+            const adsetAds = ads
+              .filter((ad) => ad.adsetId === adset.id)
+              .sort((a, b) => a.number - b.number);
 
-        // Las piezas largas asignadas a este conjunto entran en la misma lista.
-        const longUnits: AdUnit[] = copies
-          .filter((copy) => copy.adsetId === adset.id)
-          .map((copy) => ({
-            kind: "largo" as const,
-            copyId: copy.id,
-            number: copy.adNumber ?? 0,
-            name: copy.adName ?? copy.content.headline,
-            headline: copy.content.headline,
-            description: copy.content.description,
-            primaryText: copy.content.primaryText,
-            format: COPY_FORMAT_LABELS[copy.format],
-            methodId: copy.methodId,
-          }));
+            // Las piezas largas asignadas a este conjunto entran en la misma lista.
+            const longUnits: AdUnit[] = copies
+              .filter((copy) => copy.adsetId === adset.id)
+              .map((copy) => ({
+                kind: "largo" as const,
+                copyId: copy.id,
+                number: copy.adNumber ?? 0,
+                name: copy.adName ?? copy.content.headline,
+                headline: copy.content.headline,
+                description: copy.content.description,
+                primaryText: copy.content.primaryText,
+                format: COPY_FORMAT_LABELS[copy.format],
+                methodId: copy.methodId,
+              }));
 
-        const units: AdUnit[] = [
-          ...adsetAds.map((ad) => ({ kind: "corto" as const, ad })),
-          ...longUnits,
-        ].sort((a, b) => {
-          const left = a.kind === "corto" ? a.ad.number : a.number;
-          const right = b.kind === "corto" ? b.ad.number : b.number;
-          return left - right;
-        });
+            const units: AdUnit[] = [
+              ...adsetAds.map((ad) => ({ kind: "corto" as const, ad })),
+              ...longUnits,
+            ].sort((a, b) => {
+              const left = a.kind === "corto" ? a.ad.number : a.number;
+              const right = b.kind === "corto" ? b.ad.number : b.number;
+              return left - right;
+            });
 
-        return { adset, ads: adsetAds, units };
-      }),
-  }));
+            return { adset, ads: adsetAds, units };
+          }),
+      }))
+  );
 }
 
 /**
@@ -200,4 +216,107 @@ export async function saveShortAds(ads: ShortAd[]): Promise<ShortAd[]> {
   const ids = new Set(ads.map((ad) => ad.id));
   await writeJson(paths.shortAds, [...stored.filter((ad) => !ids.has(ad.id)), ...ads]);
   return ads;
+}
+
+/* ----------------------------- Carpetas y archivo ------------------------------ */
+
+const foldersPath = path.join(dataRoot, "campaign-folders.json");
+
+export async function readCampaignFolders(productId: string): Promise<CampaignFolder[]> {
+  if (isSupabaseConfigured()) return folders.readCampaignFolders(productId);
+
+  const stored = await readJson<CampaignFolder[]>(foldersPath, []);
+  return stored.filter((folder) => folder.productId === productId);
+}
+
+export async function saveCampaignFolder(input: {
+  id?: string;
+  productId: string;
+  name: string;
+  position?: number;
+}): Promise<CampaignFolder> {
+  if (isSupabaseConfigured()) return folders.saveCampaignFolder(input);
+
+  const stored = await readJson<CampaignFolder[]>(foldersPath, []);
+  const folder: CampaignFolder = {
+    id: input.id || crypto.randomUUID(),
+    productId: input.productId,
+    name: input.name,
+    position: input.position ?? 0,
+    createdAt: new Date().toISOString(),
+  };
+
+  const index = stored.findIndex((item) => item.id === folder.id);
+  if (index >= 0) stored[index] = folder;
+  else stored.push(folder);
+
+  await writeJson(foldersPath, stored);
+  return folder;
+}
+
+export async function deleteCampaignFolder(id: string): Promise<void> {
+  if (isSupabaseConfigured()) return folders.deleteCampaignFolder(id);
+
+  const stored = await readJson<CampaignFolder[]>(foldersPath, []);
+  await writeJson(
+    foldersPath,
+    stored.filter((folder) => folder.id !== id),
+  );
+
+  // Las campañas que estaban dentro vuelven a «sin carpeta», que es lo que hace
+  // el `on delete set null` en la rama de Supabase.
+  const campaigns = await readJson<Campaign[]>(paths.campaigns, []);
+  await writeJson(
+    paths.campaigns,
+    campaigns.map((item) => (item.folderId === id ? { ...item, folderId: undefined } : item)),
+  );
+}
+
+export async function readArchivedCampaigns(productId: string): Promise<ArchivedCampaign[]> {
+  if (isSupabaseConfigured()) return db.readArchivedCampaigns(productId);
+
+  const { campaigns, adsets, ads } = await readEntities(productId);
+
+  return campaigns
+    .filter((campaign) => Boolean(campaign.archivedAt))
+    .map((campaign) => {
+      const propios = adsets.filter((adset) => adset.campaignId === campaign.id);
+      const ids = new Set(propios.map((adset) => adset.id));
+
+      return {
+        id: campaign.id,
+        name: campaign.name,
+        stage: campaign.stage,
+        folderId: campaign.folderId,
+        archivedAt: campaign.archivedAt as string,
+        adsets: propios.length,
+        ads: ads.filter((ad) => ids.has(ad.adsetId)).length,
+      };
+    });
+}
+
+export async function setCampaignFolder(
+  campaignId: string,
+  folderId: string | null,
+): Promise<void> {
+  if (isSupabaseConfigured()) return db.setCampaignFolder(campaignId, folderId);
+
+  await patchCampaign(campaignId, { folderId: folderId ?? undefined });
+}
+
+export async function setCampaignArchived(campaignId: string, archived: boolean): Promise<void> {
+  if (isSupabaseConfigured()) return db.setCampaignArchived(campaignId, archived);
+
+  await patchCampaign(campaignId, {
+    archivedAt: archived ? new Date().toISOString() : undefined,
+  });
+}
+
+/** Cambia unos campos de una campaña guardada en el respaldo local. */
+async function patchCampaign(campaignId: string, patch: Partial<Campaign>): Promise<void> {
+  const stored = await readJson<Campaign[]>(paths.campaigns, []);
+  await writeJson(
+    paths.campaigns,
+    stored.map((item) => (item.id === campaignId ? { ...item, ...patch } : item)),
+  );
 }
