@@ -37,6 +37,13 @@ interface Visual {
    * suplemento en medio del desagüe de la ducha.
    */
   withReference?: boolean;
+  /**
+   * La imagen que ésta rehace, si sale del botón de una miniatura.
+   *
+   * La vieja no se esconde al pulsar sino cuando la nueva ya está guardada: la
+   * generación va por la cola y puede fallar.
+   */
+  replacesImageId?: string;
 }
 
 export function AdVisualSender({

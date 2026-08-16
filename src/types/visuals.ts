@@ -395,6 +395,13 @@ export interface ProductImage {
   concept?: string;
   /** El gancho o el ángulo que la originó, para reconocerla. */
   originLabel?: string;
+  /**
+   * Cuándo se descartó al rehacerla. Sin valor, está vigente.
+   *
+   * Rehacer no borra: esconde. El archivo sigue en el bucket por si la nueva
+   * sale peor, y se recupera desde el pie de su rejilla.
+   */
+  discardedAt?: string;
   createdAt: string;
 }
 

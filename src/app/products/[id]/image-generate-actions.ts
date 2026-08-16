@@ -250,7 +250,16 @@ export async function generateProductImagesAction(input: unknown): Promise<Launc
   // aborta la generación entera con «Unknown params».
   const references = model.acceptsReferences ? await readReferenceBytes(productId, appId) : [];
 
-  const existing = await readProductImages(productId);
+  /*
+   * Con las descartadas.
+   *
+   * El nombre del archivo se numera con `existing.length`. Si las descartadas
+   * dejaran de contar, el contador **retrocedería**: descartas tres de diez y la
+   * siguiente vuelve a llamarse `…_08`, que ya existe. En el bucket no chocan
+   * —la ruta lleva sufijo aleatorio— pero te bajas dos archivos con el mismo
+   * nombre y uno pisa al otro en la carpeta de descargas.
+   */
+  const existing = await readProductImages(productId, { incluirDescartadas: true });
   const { uploadGeneratedImage } = await import("@/lib/data/images");
 
   const failures: ImageGenerationResult["failures"] = [];
@@ -398,6 +407,9 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
         // cada imagen pertenece a un anuncio distinto.
         adId: readText(visual.adId),
         landingId: readText(visual.landingId),
+        // A cuál sustituye, cuando se pulsa «Rehacer» sobre una miniatura. Se
+        // esconde al guardar la nueva, no ahora.
+        replacesImageId: readText(visual.replacesImageId),
         // El gancho o el ángulo del que nace: es lo que hace reconocible el
         // archivo cuando lo descargas junto a otros diecinueve.
         origin: readText(visual.origin),
@@ -449,7 +461,16 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
       ? await readReferenceBytes(productId, appId)
       : [];
 
-  const existing = await readProductImages(productId);
+  /*
+   * Con las descartadas.
+   *
+   * El nombre del archivo se numera con `existing.length`. Si las descartadas
+   * dejaran de contar, el contador **retrocedería**: descartas tres de diez y la
+   * siguiente vuelve a llamarse `…_08`, que ya existe. En el bucket no chocan
+   * —la ruta lleva sufijo aleatorio— pero te bajas dos archivos con el mismo
+   * nombre y uno pisa al otro en la carpeta de descargas.
+   */
+  const existing = await readProductImages(productId, { incluirDescartadas: true });
   const { uploadGeneratedImage } = await import("@/lib/data/images");
 
   const failures: ImageGenerationResult["failures"] = [];
@@ -501,6 +522,8 @@ export async function generateAdVisualsAction(input: unknown): Promise<LaunchRes
         landingId: visual.landingId || landingId || undefined,
         concept: visual.concept || undefined,
         originLabel: visual.origin || undefined,
+        // Esconde la que se rehízo, ya con ésta guardada.
+        replacesImageId: visual.replacesImageId || undefined,
       });
 
       created += 1;

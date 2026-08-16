@@ -194,6 +194,7 @@ export function toProductImage(row: Tables<"product_images">, signedUrl: string)
     shopifyUrl: row.shopify_url ?? undefined,
     concept: row.concept ?? undefined,
     originLabel: row.origin_label ?? undefined,
+    discardedAt: row.discarded_at ?? undefined,
     createdAt: row.created_at,
   };
 }

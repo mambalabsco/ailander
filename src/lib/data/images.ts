@@ -96,14 +96,24 @@ function storagePath(userId: string, productId: string, name: string, mimeType: 
   return `${userId}/${productId}/${safe || "imagen"}-${crypto.randomUUID().slice(0, 8)}.${extensionFor(mimeType)}`;
 }
 
-export async function listProductImages(productId: string): Promise<ProductImage[]> {
+export async function listProductImages(
+  productId: string,
+  opciones: { incluirDescartadas?: boolean } = {},
+): Promise<ProductImage[]> {
   const { supabase } = await requireContext();
 
-  const { data, error } = await supabase
-    .from("product_images")
-    .select("*")
-    .eq("product_id", productId)
-    .order("created_at", { ascending: true });
+  let pendiente = supabase.from("product_images").select("*").eq("product_id", productId);
+
+  /*
+   * Las descartadas fuera, y en el SQL.
+   *
+   * Filtrarlas después costaría además firmar la URL de cada una: la firma va en
+   * una sola llamada para todas, así que traer descartes encarece la galería
+   * entera para enseñar menos.
+   */
+  if (!opciones.incluirDescartadas) pendiente = pendiente.is("discarded_at", null);
+
+  const { data, error } = await pendiente.order("created_at", { ascending: true });
 
   if (error) throw new Error(`No se pudieron leer las imágenes: ${error.message}`);
 
@@ -265,6 +275,14 @@ export async function uploadGeneratedImage(input: {
   landingId?: string;
   concept?: string;
   originLabel?: string;
+  /**
+   * La imagen que ésta reemplaza, si viene de «Rehacer».
+   *
+   * Se descarta al final de esta función y no al pulsar el botón: la generación
+   * va por la cola y puede fallar, y marcarla antes dejaría el anuncio sin
+   * ninguna imagen visible.
+   */
+  replacesImageId?: string;
 }): Promise<ProductImage> {
   const { supabase, userId } = await requireContext();
 
@@ -333,11 +351,60 @@ export async function uploadGeneratedImage(input: {
     throw new Error(`No se pudo registrar la imagen: ${error.message}`);
   }
 
+  /*
+   * La que ésta rehace se descarta **aquí**, con la nueva ya insertada.
+   *
+   * Marcarla al pulsar «Rehacer» dejaría el anuncio sin ninguna imagen visible
+   * mientras se genera —que va por la cola y tarda— y sin ninguna para siempre
+   * si la generación falla. Llegados aquí, la nueva existe.
+   */
+  if (input.replacesImageId) {
+    const { error: discardError } = await supabase
+      .from("product_images")
+      .update({ discarded_at: new Date().toISOString() })
+      .eq("id", input.replacesImageId);
+
+    // No se relanza: la imagen nueva ya está guardada y perderla por no haber
+    // podido esconder la vieja sería el peor de los dos resultados.
+    if (discardError) {
+      console.error(`No se pudo descartar la imagen anterior: ${discardError.message}`);
+    }
+  }
+
   const { data: signed } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(path, SIGNED_URL_SECONDS);
 
   return toProductImage(data, signed?.signedUrl ?? "");
+}
+
+/**
+ * Esconde una imagen sin borrarla.
+ *
+ * Es lo que hace «Rehacer» con la anterior: deja de verse pero el archivo sigue,
+ * por si la nueva sale peor. Borrar de verdad es otro botón —
+ * `deleteProductImage`— y ese sí es definitivo.
+ */
+export async function discardProductImage(imageId: string): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("product_images")
+    .update({ discarded_at: new Date().toISOString() })
+    .eq("id", imageId);
+
+  if (error) throw new Error(`No se pudo descartar la imagen: ${error.message}`);
+}
+
+export async function restoreProductImage(imageId: string): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("product_images")
+    .update({ discarded_at: null })
+    .eq("id", imageId);
+
+  if (error) throw new Error(`No se pudo recuperar la imagen: ${error.message}`);
 }
 
 export async function setPrimaryImage(productId: string, imageId: string): Promise<boolean> {

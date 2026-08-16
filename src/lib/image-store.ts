@@ -28,10 +28,28 @@ async function writeAll(images: ProductImage[]) {
   await fs.writeFile(imagesPath, JSON.stringify(images, null, 2), "utf8");
 }
 
-export async function readProductImages(productId: string): Promise<ProductImage[]> {
-  if (isSupabaseConfigured()) return storage.listProductImages(productId);
+/**
+ * Las imágenes de un producto.
+ *
+ * **Aquí es donde se esconden las descartadas**, y no en cada llamador: por esta
+ * función pasan las quince lecturas del proyecto —la galería, las landings, los
+ * vídeos, los flujos y el generador—, así que filtrar en otro sitio dejaría al
+ * siguiente que lea imágenes enseñando descartes sin enterarse.
+ *
+ * Las dos ramas filtran. Si solo lo hiciera la de Supabase, el respaldo local se
+ * comportaría distinto y el fallo aparecería únicamente en la máquina sin
+ * Supabase configurado, que es la peor forma de encontrarlo.
+ */
+export async function readProductImages(
+  productId: string,
+  opciones: { incluirDescartadas?: boolean } = {},
+): Promise<ProductImage[]> {
+  if (isSupabaseConfigured()) return storage.listProductImages(productId, opciones);
   const all = await readAll();
-  return all.filter((image) => image.productId === productId);
+  return all.filter(
+    (image) =>
+      image.productId === productId && (opciones.incluirDescartadas || !image.discardedAt),
+  );
 }
 
 /** La imagen que viaja como referencia a los anuncios. */
