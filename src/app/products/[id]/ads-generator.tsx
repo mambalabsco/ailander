@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SectionCard } from "@/components/section-card";
-import { EmptyState, Field, SelectField, TextField } from "@/components/ui";
+import { EmptyState, Field, SelectField, TextAreaField, TextField } from "@/components/ui";
+import { ReferenceAds, type ReferenceAd } from "@/components/video/reference-ads";
 import {
   FUNNEL_STAGES,
   FUNNEL_STAGE_META,
@@ -19,6 +20,7 @@ import type { Product } from "@/types";
 import type { MarketingAngle } from "@/types/copy";
 import { GenerateButton } from "@/components/generate-button";
 import { generateShortAdsAction } from "@/app/products/[id]/generate-actions";
+import { generateAdsFromNewMaterialAction } from "@/app/products/[id]/material-actions";
 
 /**
  * De dónde sale una tanda de anuncios.
@@ -33,6 +35,7 @@ export function AdsGenerator({
   prelandings,
   angles,
   anatomias,
+  videoReferences,
   desires,
   nextNumbers,
   hasApiKey,
@@ -43,13 +46,19 @@ export function AdsGenerator({
   angles: MarketingAngle[];
   /** Anuncios que ya funcionaron, analizados en la pestaña de Ángulos. */
   anatomias: { id: string; title: string; summary: string; anatomia: Anatomia }[];
+  /** Vídeos ya analizados: de ahí sale su análisis, no el vídeo. */
+  videoReferences: ReferenceAd[];
   /** Deseos validados del documento 6, para cuando no se elige ángulo. */
   desires: string[];
   nextNumbers: { adset: number; ad: number };
   hasApiKey: boolean;
   hasResearch: boolean;
 }) {
-  const [fuente, setFuente] = useState<"angulo" | "material">("angulo");
+  const [fuente, setFuente] = useState<"angulo" | "material" | "nuevo">("angulo");
+  const [copyNuevo, setCopyNuevo] = useState("");
+  const [propio, setPropio] = useState(false);
+  const [videosElegidos, setVideosElegidos] = useState<string[]>([]);
+  const imagenesRef = useRef<HTMLInputElement>(null);
   const [anatomiaId, setAnatomiaId] = useState(anatomias[0]?.id ?? "");
   /*
    * «Parecido, con más ideas» por defecto y no «mismo enfoque».
@@ -74,6 +83,7 @@ export function AdsGenerator({
   const selectedAngle = angles.find((angle) => angle.id === angleId);
   const selectedAnatomia = anatomias.find((item) => item.id === anatomiaId);
   const desdeMaterial = fuente === "material" && Boolean(selectedAnatomia);
+  const copyCorto = copyNuevo.trim().length < 200;
 
   /**
    * El tema y el enfoque no se piden: se deducen.
@@ -139,7 +149,8 @@ export function AdsGenerator({
             {(
               [
                 ["angulo", "Desde un ángulo"],
-                ["material", "Desde un anuncio que funcionó"],
+                ["material", "Desde un anuncio ya analizado"],
+                ["nuevo", "Pegar un anuncio"],
               ] as const
             ).map(([value, label]) => {
               const disabled = value === "material" && anatomias.length === 0;
@@ -180,7 +191,7 @@ export function AdsGenerator({
               </SelectField>
             </Field>
 
-            {fuente === "material" ? (
+            {fuente === "nuevo" ? null : fuente === "material" ? (
               <Field label="Qué anuncio copiar">
                 <SelectField
                   value={anatomiaId}
@@ -216,7 +227,81 @@ export function AdsGenerator({
             )}
           </div>
 
-          {fuente === "material" ? (
+          {fuente === "nuevo" ? (
+            <div className="space-y-3">
+              <Field label="El copy que funcionó, entero">
+                <TextAreaField
+                  rows={10}
+                  value={copyNuevo}
+                  onChange={(event) => setCopyNuevo(event.target.value)}
+                  placeholder="Pega el anuncio completo, tal y como se publicó."
+                />
+              </Field>
+
+              {/*
+                De quién es no es una etiqueta: decide qué se puede reutilizar.
+                De lo ajeno solo se hereda la construcción, porque una cifra de
+                otro anuncio es algo que dijo otro sobre otro producto.
+              */}
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={propio}
+                  onChange={(event) => setPropio(event.target.checked)}
+                  className="mt-1 size-4 accent-violet-600"
+                />
+                <span>
+                  <span className="font-medium">Es mío y ya lo lancé</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    De lo tuyo se puede reutilizar una promesa concreta y sus cifras, que están
+                    comprobadas. De lo ajeno, solo cómo está construido.
+                  </span>
+                </span>
+              </label>
+
+              <Field label="Imágenes del anuncio (opcional)">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={imagenesRef}
+                  className="text-sm"
+                />
+              </Field>
+
+              {videoReferences.length > 0 ? (
+                <Field label="Vídeos ya analizados que se lanzaron con este copy">
+                  <div className="space-y-1">
+                    {videoReferences.map((item) => (
+                      <label key={item.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={videosElegidos.includes(item.id)}
+                          onChange={(event) =>
+                            setVideosElegidos((current) =>
+                              event.target.checked
+                                ? [...current, item.id]
+                                : current.filter((id) => id !== item.id),
+                            )
+                          }
+                          className="size-4 accent-violet-600"
+                        />
+                        {item.name}
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+              ) : null}
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Primero se escribe la anatomía del anuncio y de ahí salen los tuyos. La anatomía
+                queda guardada en la pestaña de Ángulos: la puedes corregir, y la siguiente tanda
+                desde este mismo material ya no la paga.
+              </p>
+            </div>
+          ) : null}
+
+          {fuente !== "angulo" ? (
             <div>
               <span className="mb-2 block text-sm font-medium">Con qué cercanía</span>
               <div className="space-y-2">
@@ -242,7 +327,8 @@ export function AdsGenerator({
                 ))}
               </div>
 
-              {selectedAnatomia?.anatomia.ownership === "ajeno" ? (
+              {(fuente === "material" && selectedAnatomia?.anatomia.ownership === "ajeno") ||
+              (fuente === "nuevo" && !propio) ? (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   Este material es de otra marca: se copia cómo está construido, pero ninguna de sus
                   cifras se va a decir como nuestra.
@@ -436,8 +522,26 @@ export function AdsGenerator({
 
           <div className="flex flex-wrap items-center gap-3">
             <GenerateButton
-              action={() =>
-                generateShortAdsAction({
+              action={() => {
+                if (fuente === "nuevo") {
+                  const payload = new FormData();
+                  payload.set("productId", product.id);
+                  payload.set("copy", copyNuevo);
+                  payload.set("ownership", propio ? "propio" : "ajeno");
+                  payload.set("nivel", nivel);
+                  payload.set("cuantos", String(count));
+                  payload.set("stage", stage);
+                  payload.set("destination", destinationType);
+                  payload.set("prelandingId", prelandingId);
+                  for (const id of videosElegidos) payload.append("videoReferenceIds", id);
+                  for (const file of imagenesRef.current?.files ?? []) {
+                    payload.append("imagenes", file);
+                  }
+
+                  return generateAdsFromNewMaterialAction(payload);
+                }
+
+                return generateShortAdsAction({
                   productId: product.id,
                   count,
                   stage,
@@ -450,12 +554,24 @@ export function AdsGenerator({
                   audience: derivedAudience,
                   destination: destinationType,
                   prelandingId,
-                })
+                });
+              }}
+              label={
+                fuente === "nuevo"
+                  ? `Analizar y generar ${count} anuncios`
+                  : `Generar ${count} anuncios y armar la campaña`
               }
-              label={`Generar ${count} anuncios y armar la campaña`}
-              disabled={!hasApiKey}
-              disabledReason="Configura tu clave de API en Configuración"
-              hint={`Crea la campaña, el conjunto y los ${count} anuncios numerados. Entre 0,20 y 0,60 USD.`}
+              disabled={!hasApiKey || (fuente === "nuevo" && copyCorto)}
+              disabledReason={
+                fuente === "nuevo" && copyCorto
+                  ? "Pega el copy entero: con un fragmento no hay anatomía que sacar"
+                  : "Configura tu clave de API en Configuración"
+              }
+              hint={
+                fuente === "nuevo"
+                  ? `Dos llamadas: la anatomía y los ${count} anuncios. Aparecerán dos trabajos en el panel.`
+                  : `Crea la campaña, el conjunto y los ${count} anuncios numerados. Entre 0,20 y 0,60 USD.`
+              }
             />
             {!hasApiKey ? (
               <p className="text-sm text-amber-700 dark:text-amber-400">
@@ -463,6 +579,20 @@ export function AdsGenerator({
               </p>
             ) : null}
           </div>
+
+          {fuente === "nuevo" ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
+              <p className="text-sm font-medium">¿El anuncio llevaba un vídeo sin analizar?</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Analízalo aquí abajo: son minutos, y la tanda de arriba{" "}
+                <span className="font-medium">no lo va a esperar</span>. Cuando termine aparecerá en
+                la lista de vídeos y entrará en la siguiente.
+              </p>
+              <div className="mt-3">
+                <ReferenceAds productId={product.id} references={videoReferences} />
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </SectionCard>

@@ -258,3 +258,135 @@ export async function generateAnglesFromMaterialAction(input: {
     },
   });
 }
+
+/**
+ * Pegar un material y sacar anuncios de él, de una vez.
+ *
+ * Un botón por fuera; dos llamadas por dentro, y **pasando por la anatomía**
+ * aunque saltársela sería una llamada menos. Dos motivos:
+ *
+ * - La anatomía es donde se corrige. Una lectura equivocada del anuncio cuesta
+ *   un minuto ahí, y diez anuncios escritos con ella si se descubre después.
+ * - Queda guardada: la segunda tanda desde el mismo material ya no la paga, y
+ *   aparece en Ángulos como cualquier otra.
+ *
+ * Los vídeos que se estén analizando **no se esperan**. Analizar son minutos, y
+ * un botón que se queda girando es un botón que se pulsa dos veces.
+ */
+export async function generateAdsFromNewMaterialAction(
+  form: FormData,
+): Promise<LaunchResult> {
+  const productId = readText(form.get("productId"));
+  const copy = readText(form.get("copy"));
+  const ownership = readText(form.get("ownership")) === "propio" ? "propio" : "ajeno";
+  const nivel = readText(form.get("nivel")) || "ampliado";
+  const cuantos = Math.min(20, Math.max(1, Number(form.get("cuantos")) || 5));
+  const etapa = readText(form.get("stage")) || "BOFU";
+  const destino = readText(form.get("destination")) || "producto";
+  const prelandingId = readText(form.get("prelandingId"));
+  const pendientes = readText(form.get("videosPendientes"));
+  const videoIds = form
+    .getAll("videoReferenceIds")
+    .map((item) => readText(item))
+    .filter(Boolean);
+
+  if (!productId) throw new Error("Falta el producto.");
+  if (copy.length < 200) {
+    throw new Error("Pega el copy entero: con un fragmento no hay anatomía que sacar.");
+  }
+
+  const product = await findProductAnywhere(productId);
+  if (!product) throw new Error("No se encontró el producto.");
+
+  const imagenes = form.getAll("imagenes").filter((item): item is File => item instanceof File);
+
+  return runInBackground({
+    productId,
+    kind: "material",
+    label: `Material y anuncios · ${copy.slice(0, 40)}…`,
+    work: async (report) => {
+      await report("Leyendo el material");
+
+      const referencias = await listVideoReferences();
+      const analyses = referencias
+        .filter((item) => videoIds.includes(item.id))
+        .map((item) => item.analysis);
+
+      const store = product.storeId ? await findStore(product.storeId) : null;
+      const research = await readProductResearch(productId);
+      const marketContext = await marketContextFor(product);
+      const { buildProductContext } = await import("@/lib/copy-prompts");
+
+      const images = await Promise.all(
+        imagenes.slice(0, 6).map(async (file) => ({
+          mediaType: file.type,
+          base64: Buffer.from(await file.arrayBuffer()).toString("base64"),
+        })),
+      );
+
+      const outcome = await generateStructured<Omit<Anatomia, "swipeId" | "ownership">>({
+        context: buildProductContext(product, research, store, marketContext),
+        prompt: buildAnatomiaPrompt({
+          copy,
+          ownership,
+          videos: describeVideoAnalyses(analyses),
+        }),
+        schema: ANATOMIA_SCHEMA,
+        role: "copy",
+        images,
+        maxTokens: 8_000,
+      });
+
+      await report("Guardando la anatomía");
+
+      const anatomiaId = await saveAnatomia({
+        productId,
+        title: `Anatomía · ${copy.slice(0, 60)}`,
+        // Sin `swipeId`: este material se pegó en Ads y no deja fila en el
+        // archivo de copys. Por eso `ownership` vive dentro de la anatomía y no
+        // se busca allí.
+        anatomia: { ...outcome.data, swipeId: "", ownership },
+      });
+
+      await report("Encargando los anuncios");
+
+      const { generateShortAdsAction } = await import(
+        "@/app/products/[id]/generate-actions"
+      );
+
+      /*
+       * Se reutiliza la acción de siempre en vez de repetir aquí el guardado de
+       * campaña, conjuntos y anuncios. Dos rutas paralelas se desincronizan: se
+       * arregla una y la otra sigue rota.
+       *
+       * Ojo: esa acción abre **su propio trabajo de fondo** —`after` se puede
+       * anidar, está en la documentación de Next—, así que en el panel aparecen
+       * dos filas, cada una con sus tokens. Por eso este resumen dice
+       * «encargados» y no «guardados»: cuántos se salvaron lo sabe la otra fila.
+       */
+      await generateShortAdsAction({
+        productId,
+        anatomiaId,
+        nivel,
+        count: cuantos,
+        stage: etapa,
+        destination: destino,
+        prelandingId,
+      });
+
+      revalidatePath(`/products/${productId}`);
+
+      return {
+        // Lo que **no** entró se dice, y no en letra pequeña: una tanda que salió
+        // sin mirar lo que le diste es indistinguible de una que sí lo miró.
+        summary: `Anatomía escrita con ${analyses.length} vídeo(s) y ${images.length} imagen(es), y ${cuantos} anuncios encargados desde ella.${
+          pendientes
+            ? ` Generado sin ${pendientes}, que sigue analizándose: vuelve a generar cuando termine si quieres que entre.`
+            : ""
+        } La anatomía queda en Ángulos por si hay que corregirla.`,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
+      };
+    },
+  });
+}

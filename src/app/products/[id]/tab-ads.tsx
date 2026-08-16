@@ -11,6 +11,7 @@ import { SHORT_AD_FORMAT_META } from "@/types/campaign";
 import type { CampaignTree, Prelanding } from "@/types/campaign";
 import type { AdCampaign, Product } from "@/types";
 import type { Anatomia } from "@/lib/anatomia";
+import type { ReferenceAd } from "@/components/video/reference-ads";
 import type { MarketingAngle } from "@/types/copy";
 import type { PerformanceRecord } from "@/types/performance";
 import type { ProductImage } from "@/types/visuals";
@@ -22,6 +23,8 @@ interface AdsTabProps {
   angles: MarketingAngle[];
   /** Anuncios que ya funcionaron, analizados en la pestaña de Ángulos. */
   anatomias: { id: string; title: string; summary: string; anatomia: Anatomia }[];
+  /** Vídeos ya analizados, para adjuntarlos a un material pegado aquí. */
+  videoReferences: ReferenceAd[];
   /** Deseos validados del documento 6, para cuando no se elige ángulo. */
   desires: string[];
   /** Creatividades subidas a la biblioteca y asociadas al producto. */
@@ -49,6 +52,7 @@ export function AdsTab({
   prelandings,
   angles,
   anatomias,
+  videoReferences,
   desires,
   libraryAds,
   nextNumbers,
@@ -63,6 +67,7 @@ export function AdsTab({
         prelandings={prelandings}
         angles={angles}
         anatomias={anatomias}
+        videoReferences={videoReferences}
         desires={desires}
         nextNumbers={nextNumbers}
         hasApiKey={hasApiKey}
