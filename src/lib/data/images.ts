@@ -128,6 +128,15 @@ export async function uploadProductImages(input: {
   /** Nombre legible, el que se citará en el anuncio. */
   names: string[];
   makeFirstPrimary: boolean;
+  /** De qué app son, en casino. Nulo en todo lo demás. */
+  appId?: string;
+  /**
+   * Qué son.
+   *
+   * `captura-app` es la pantalla que viaja de referencia al generar: es lo que
+   * hace que el teléfono de la creatividad enseñe **esa** app y no una parecida.
+   */
+  pattern?: string;
 }): Promise<{ uploaded: ProductImage[]; errors: string[] }> {
   const { supabase, userId } = await requireContext();
 
@@ -168,9 +177,10 @@ export async function uploadProductImages(input: {
     const { data, error } = await supabase
       .from("product_images")
       .insert({
+        app_id: input.appId ?? null,
         user_id: userId,
         product_id: input.productId,
-        pattern: "subida",
+        pattern: input.pattern || "subida",
         name: item.name,
         storage_path: item.path,
         storage_bucket: BUCKET,
@@ -247,6 +257,8 @@ export async function uploadGeneratedImage(input: {
   isPrimary?: boolean;
   /** De qué copy salió, para poder enseñarla dentro de su anuncio. */
   copyId?: string;
+  /** De qué app es, en casino. La captura es la que viaja de referencia. */
+  appId?: string;
   /** De qué anuncio corto salió. */
   adId?: string;
   /** De qué página salió. */

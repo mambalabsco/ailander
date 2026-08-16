@@ -43,6 +43,11 @@ carga de tráfico que estás pagando.
 
 ## Lo demás que hace falta
 
+- **Chromium para las capturas de las apps.** `playwright-core` no trae
+  navegadores: hay que instalarlo una vez con `npx playwright-core install
+  chromium` desde la carpeta del proyecto y **con el usuario `plataforma`**, que
+  es quien ejecuta el servicio — se guarda en su `~/.cache/ms-playwright/`, y con
+  `sudo` acaba en el de root, que el servicio no mira. Son unos 100 MB.
 - Un dominio apuntando a su IP. **HTTPS es obligatorio**: el App Proxy de Shopify
   no llama a direcciones sin certificado.
 - Node 22 o superior.

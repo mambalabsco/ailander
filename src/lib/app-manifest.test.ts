@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { manifestUrlFrom, readAppManifest } from "./app-manifest.ts";
+import { imagesFrom, manifestUrlFrom, readAppManifest } from "./app-manifest.ts";
 
 /*
  * El manifiesto real de `dreamsenmonticell.bar`, recortado.
@@ -73,4 +73,30 @@ test("sin manifiesto declarado se prueba la ruta de siempre", () => {
     manifestUrlFrom("<html><head></head></html>", "https://x.bar/"),
     "https://x.bar/manifest.json",
   );
+});
+
+test("las pantallas de la página se sacan absolutas y sin el icono", () => {
+  /*
+   * De `dreamsenmonticell.bar`: la página trae las pantallas promocionales de la
+   * app —el bono, los métodos de pago— y también el icono repetido en cinco
+   * tamaños. El icono no es una pantalla, y colarlo de referencia haría que la
+   * creatividad enseñara un logo en vez de la app.
+   */
+  const html = `
+    <img src="/npi1-pwa-images/0b/dd/52/pantalla.png">
+    <img src="/npi1-pwa-images/71/99/ad/icono_w192h192.png">
+    <img src="/npi1-pwa-images/71/99/ad/icono_w48h48.png">
+    <img src="https://otro.cdn/pantalla2.png">
+  `;
+
+  assert.deepEqual(imagesFrom(html, "https://dreamsenmonticell.bar/"), [
+    "https://dreamsenmonticell.bar/npi1-pwa-images/0b/dd/52/pantalla.png",
+    "https://otro.cdn/pantalla2.png",
+  ]);
+});
+
+test("la misma imagen dos veces se devuelve una", () => {
+  const html = `<img src="/a.png"><img src="/a.png">`;
+
+  assert.equal(imagesFrom(html, "https://x.bar/").length, 1);
 });

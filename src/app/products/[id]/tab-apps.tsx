@@ -4,7 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SectionCard } from "@/components/section-card";
 import { Button, EmptyState, Field, TextAreaField, TextField } from "@/components/ui";
-import { saveAppAction, deleteAppAction } from "@/app/products/[id]/app-actions";
+import {
+  saveAppAction,
+  deleteAppAction,
+  importAppFromUrlAction,
+} from "@/app/products/[id]/app-actions";
 import type { CasinoApp } from "@/types/app";
 
 /**
@@ -20,6 +24,7 @@ export function AppsTab({ productId, apps }: { productId: string; apps: CasinoAp
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [draft, setDraft] = useState({ id: "", name: "", focus: "", downloadUrl: "" });
+  const [url, setUrl] = useState("");
 
   const limpiar = () => setDraft({ id: "", name: "", focus: "", downloadUrl: "" });
 
@@ -42,8 +47,45 @@ export function AppsTab({ productId, apps }: { productId: string; apps: CasinoAp
       if (result.ok) router.refresh();
     });
 
+  const importar = () =>
+    startTransition(async () => {
+      const result = await importAppFromUrlAction(url, productId);
+      setMessage(result.message);
+      setFailed(!result.ok);
+      if (result.ok) {
+        setUrl("");
+        router.refresh();
+      }
+    });
+
   return (
     <div className="space-y-6">
+      <SectionCard
+        title="Traer una app desde su dirección"
+        description="De una PWA salen su nombre, su icono y su captura móvil sin escribir nada."
+      >
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-3">
+            <TextField
+              type="url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://dreamsenmonticell.bar/"
+              className="min-w-64 flex-1"
+            />
+            <Button onClick={importar} disabled={isPending || !url.trim()}>
+              {isPending ? "Trayendo..." : "Traer"}
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            El nombre y el icono salen de su <code className="font-mono">manifest.json</code>. La
+            captura se hace renderizando la página en tamaño móvil, y es la que después viaja de
+            referencia para que el teléfono de tus creatividades enseñe <strong>esta</strong> app.
+            Tarda unos segundos.
+          </p>
+        </div>
+      </SectionCard>
+
       <SectionCard
         title={draft.id ? "Editar la app" : "Añadir una app"}
         description="El producto es el país; cada app es lo que la persona acaba descargando."

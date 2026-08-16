@@ -72,3 +72,33 @@ export function manifestUrlFrom(html: string, pageUrl: string): string {
 
   return new URL(href || "/manifest.json", pageUrl).toString();
 }
+
+/**
+ * Las imágenes de la página, absolutas y sin los iconos.
+ *
+ * Las apps de casino se anuncian con una réplica de la ficha de Google Play, y
+ * dentro llevan **sus pantallas promocionales**: el bono, los juegos y los
+ * métodos de pago locales. Eso es mucho mejor referencia que una captura de la
+ * página entera, que lo que enseña es la ficha falsa y no la app.
+ *
+ * Se descartan los iconos —vienen con el sufijo de tamaño, `_w192h192`— porque
+ * un logo metido de referencia hace que la creatividad enseñe el logo en vez de
+ * la app, y eso no da ningún error: sale una imagen, y es la equivocada.
+ */
+export function imagesFrom(html: string, pageUrl: string): string[] {
+  const encontradas = html.match(/src=["']([^"']+\.(?:png|jpe?g|webp))["']/gi) ?? [];
+
+  const urls = encontradas
+    .map((tag) => /src=["']([^"']+)["']/i.exec(tag)?.[1] ?? "")
+    .filter((src) => src && !/_w\d+h\d+\./i.test(src))
+    .map((src) => {
+      try {
+        return new URL(src, pageUrl).toString();
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean);
+
+  return [...new Set(urls)];
+}

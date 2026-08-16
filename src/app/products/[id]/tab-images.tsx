@@ -259,7 +259,13 @@ export function ImagesTab({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              {PRODUCT_IMAGE_PATTERNS.map((pattern) => {
+              {/*
+                `captura-app` no está: **no se genera, se sube**.
+                Una pantalla inventada se parece a la app y no es la app, que es
+                justo lo que rompe el anuncio. Se trae con la dirección en la
+                pestaña de Apps.
+              */}
+              {PRODUCT_IMAGE_PATTERNS.filter((pattern) => pattern !== "captura-app").map((pattern) => {
                 const meta = PRODUCT_IMAGE_PATTERN_META[pattern];
                 const active = selected.includes(pattern);
                 const recommended = patternModels[pattern];

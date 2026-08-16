@@ -84,3 +84,106 @@ export async function assignAngleToAppAction(
     message: readText(appId) ? "Acotado a esa app." : "Ahora es general: vale para todas las apps.",
   };
 }
+
+/**
+ * Da de alta una app a partir de su dirección.
+ *
+ * De la PWA salen gratis el nombre, la descripción y el icono —están en su
+ * `manifest.json`— y la **captura móvil** se hace renderizando la página con un
+ * navegador sin cabeza, que es la única forma: una PWA se pinta con JavaScript,
+ * así que pedir el HTML devuelve un armazón vacío.
+ *
+ * La captura se guarda con el patrón `captura-app`, que es el que
+ * `readReferenceBytes` busca: es lo que hace que el teléfono de una creatividad
+ * enseñe **esta** app y no una parecida.
+ */
+export async function importAppFromUrlAction(
+  url: unknown,
+  productId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const direccion = readText(url);
+  const product = readText(productId);
+
+  if (!product) return { ok: false, message: "Falta el producto." };
+  if (!/^https?:\/\//i.test(direccion)) {
+    return { ok: false, message: "Pega la dirección completa, con https://" };
+  }
+
+  const { manifestUrlFrom, readAppManifest } = await import("@/lib/app-manifest");
+
+  /*
+   * El manifiesto primero, y si falla se sigue.
+   *
+   * Sin él se pierden el nombre y el icono, pero la captura —que es lo que se
+   * vino a buscar— se puede hacer igual. Abortar aquí dejaría sin nada a quien
+   * tiene una app que no declara manifiesto.
+   */
+  let datos = { name: "", description: "", iconUrl: "", themeColor: "" };
+  try {
+    const pagina = await fetch(direccion, { redirect: "follow" });
+    const html = await pagina.text();
+    const manifiesto = await fetch(manifestUrlFrom(html, direccion));
+    datos = readAppManifest(await manifiesto.json());
+  } catch {
+    // Se sigue sin él: lo dice el resumen del final.
+  }
+
+  const app = await saveApp({
+    productId: product,
+    name: datos.name || new URL(direccion).hostname,
+    focus: datos.description,
+    downloadUrl: direccion,
+  });
+
+  const { uploadGeneratedImage } = await import("@/lib/data/images");
+  const avisos: string[] = [];
+
+  if (datos.iconUrl) {
+    try {
+      await uploadGeneratedImage({
+        productId: product,
+        appId: app.id,
+        sourceUrl: datos.iconUrl,
+        name: `Icono · ${app.name}`,
+        pattern: "subida",
+        source: "subida",
+      });
+    } catch (error) {
+      avisos.push(`el icono no se pudo guardar (${error instanceof Error ? error.message : "?"})`);
+    }
+  } else {
+    avisos.push("no declara icono en su manifiesto");
+  }
+
+  let capturaOk = false;
+  try {
+    const { captureMobile } = await import("@/lib/app-screenshot");
+    const { uploadProductImages } = await import("@/lib/data/images");
+    const bytes = await captureMobile(direccion);
+
+    const resultado = await uploadProductImages({
+      productId: product,
+      files: [new File([new Uint8Array(bytes)], "captura.png", { type: "image/png" })],
+      names: [`Pantalla · ${app.name}`],
+      makeFirstPrimary: false,
+      appId: app.id,
+      pattern: "captura-app",
+    });
+
+    capturaOk = resultado.uploaded.length > 0;
+    if (!capturaOk) avisos.push(resultado.errors.join("; ") || "la captura no se pudo guardar");
+  } catch (error) {
+    avisos.push(`sin captura: ${error instanceof Error ? error.message : "?"}`);
+  }
+
+  revalidatePath(`/products/${product}`);
+
+  return {
+    ok: true,
+    // Se dice lo que **no** salió, y no en letra pequeña: un alta que parece
+    // completa y llega sin captura deja las creatividades enseñando otra app.
+    message: `«${app.name}» dada de alta${capturaOk ? " con su captura móvil" : ""}.${
+      avisos.length > 0 ? ` Ojo: ${avisos.join("; ")}.` : ""
+    }`,
+  };
+}
