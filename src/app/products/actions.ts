@@ -83,9 +83,21 @@ function normalizeDraft(input: unknown): ProductDraftInput {
 export async function createProductFromForm(input: unknown) {
   const draft = normalizeDraft(input);
 
-  // Todo producto cuelga de una tienda y un mercado: si el formulario no los
-  // trae, se usan los principales en vez de dejarlo huérfano.
-  if (!draft.storeId || !draft.marketId) {
+  /*
+   * En casino **no se rellena la tienda**, y esto no es un detalle.
+   *
+   * Un casino no tiene tienda: el producto es el país. Con el relleno de abajo,
+   * «Casino online Chile» nacía colgado de la primera tienda de la lista y de su
+   * mercado principal, y como en casino la pestaña de Precios está escondida, no
+   * se veía. Lo que sí pasaba: ese mercado entra en `buildProductContext`, así
+   * que el encargo del copy decía que el mercado era México mientras el producto
+   * era Chile. Sin ningún error.
+   */
+  const esCasino = draft.vertical === "casino";
+
+  // Todo producto de e-commerce cuelga de una tienda y un mercado: si el
+  // formulario no los trae, se usan los principales en vez de dejarlo huérfano.
+  if (!esCasino && (!draft.storeId || !draft.marketId)) {
     const stores = await listStores();
     const store = stores.find((item) => item.id === draft.storeId) ?? stores[0];
     if (store) {

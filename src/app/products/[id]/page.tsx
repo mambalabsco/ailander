@@ -567,6 +567,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       {activeTab === "angulos" ? (
         <AnglesTab
           anatomias={anatomias}
+          apps={apps.map((item) => ({ id: item.id, name: item.name }))}
           videoReferences={videoReferences.map((item) => ({ id: item.id, name: item.name }))}
           productId={product.id}
           angles={angles}

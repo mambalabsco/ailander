@@ -144,7 +144,17 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
 
     startTransition(async () => {
       try {
-        const result = await createProductFromForm(form);
+        /*
+         * En casino la tienda se manda vacía a propósito.
+         *
+         * El estado arranca con la primera tienda de la lista para el caso
+         * normal, y mandarla aquí colgaría el casino de una tienda que no es
+         * suya. Eso no falla: mete su mercado en el encargo del copy, y el texto
+         * de Chile saldría hablando del mercado de México.
+         */
+        const result = await createProductFromForm(
+          form.vertical === "casino" ? { ...form, storeId: "", marketId: "", handle: "" } : form,
+        );
         router.push(`/products/${result.product.id}?tab=documentos`);
         router.refresh();
       } catch (submitError) {
@@ -232,6 +242,31 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
       </section>
       )}
 
+      {esCasino ? (
+        <section>
+          <h3 className="text-sm font-semibold">De qué país</h3>
+          <p className="mt-1 mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Un casino no tiene tienda ni mercado: el producto <strong>es</strong> el país, y de él
+            cuelgan las apps. País e idioma se escriben aquí.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="País">
+              <TextField
+                value={form.country}
+                onChange={(event) => update("country", event.target.value)}
+                placeholder="Chile"
+              />
+            </Field>
+            <Field label="Idioma">
+              <TextField
+                value={form.language}
+                onChange={(event) => update("language", event.target.value)}
+                placeholder="Español"
+              />
+            </Field>
+          </div>
+        </section>
+      ) : (
       <section>
         <h3 className="text-sm font-semibold">Dónde se vende</h3>
         <p className="mt-1 mb-4 text-sm text-slate-500 dark:text-slate-400">
@@ -278,6 +313,7 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
           </p>
         )}
       </section>
+      )}
 
       <section>
         <h3 className="text-sm font-semibold">Ficha del producto</h3>

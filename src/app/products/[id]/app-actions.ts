@@ -57,3 +57,30 @@ export async function deleteAppAction(
     message: "App borrada. Los copys y las imágenes que la citaban siguen ahí, sin app asignada.",
   };
 }
+
+/**
+ * Acota un ángulo a una app, o lo deja general.
+ *
+ * Vacío es general y es el estado inicial de todos: un ángulo general vale para
+ * cualquier app del país, y acotarlo es lo excepcional. Al revés —cada ángulo de
+ * una app— duplicaría el trabajo por app desde el primer día.
+ */
+export async function assignAngleToAppAction(
+  angleId: unknown,
+  appId: unknown,
+  productId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const angle = readText(angleId);
+  const product = readText(productId);
+  if (!angle || !product) return { ok: false, message: "Falta el ángulo." };
+
+  const { assignAngleToApp } = await import("@/lib/data/copy");
+  await assignAngleToApp(angle, readText(appId));
+
+  revalidatePath(`/products/${product}`);
+
+  return {
+    ok: true,
+    message: readText(appId) ? "Acotado a esa app." : "Ahora es general: vale para todas las apps.",
+  };
+}

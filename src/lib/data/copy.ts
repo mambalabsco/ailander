@@ -103,6 +103,23 @@ export async function addAngles(
   return (data ?? []).map(toAngle);
 }
 
+/**
+ * A qué app pertenece un ángulo, o a ninguna.
+ *
+ * Cadena vacía lo deja **general**, que es el estado en el que nacen todos: una
+ * historia sirve para varias apps, y acotarla es la excepción, no la norma.
+ */
+export async function assignAngleToApp(angleId: string, appId: string): Promise<void> {
+  const { supabase } = await requireContext();
+
+  const { error } = await supabase
+    .from("angles")
+    .update({ app_id: appId || null })
+    .eq("id", angleId);
+
+  if (error) throw new Error(`No se pudo asignar la app: ${error.message}`);
+}
+
 export async function deleteAngle(angleId: string): Promise<boolean> {
   const { supabase } = await requireContext();
 

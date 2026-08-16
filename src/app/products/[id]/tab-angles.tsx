@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AnatomyEditor } from "@/app/products/[id]/anatomy-editor";
 import type { Anatomia } from "@/lib/anatomia";
 import { MaterialForm } from "@/app/products/[id]/material-form";
@@ -11,6 +12,7 @@ import type { MarketingAngle } from "@/types/copy";
 import type { AnglePerformance } from "@/types/performance";
 import { PERFORMANCE_META, PERFORMANCE_RATINGS } from "@/types/performance";
 import { Copyable } from "@/components/copyable";
+import { assignAngleToAppAction } from "@/app/products/[id]/app-actions";
 import { GenerateButton } from "@/components/generate-button";
 import { AWARENESS_LABELS } from "@/types/research";
 import { generateAnglesAction, generateIdeasAction, type GeneratedIdea } from "@/app/products/[id]/generate-actions";
@@ -25,6 +27,8 @@ interface AnglesTabProps {
   hasResearch: boolean;
   /** Vídeos ya analizados, para poder adjuntarlos a un material. */
   videoReferences: { id: string; name: string }[];
+  /** Las apps del producto. Vacío en todo lo que no es casino. */
+  apps: { id: string; name: string }[];
   /** Las anatomías ya escritas de este producto. */
   anatomias: { id: string; title: string; summary: string; anatomia: Anatomia }[];
 }
@@ -37,6 +41,7 @@ interface AnglesTabProps {
 export function AnglesTab({
   productId,
   videoReferences,
+  apps,
   anatomias,
   angles,
   desires,
@@ -44,6 +49,8 @@ export function AnglesTab({
   hasApiKey,
   hasResearch,
 }: AnglesTabProps) {
+  const router = useRouter();
+  const [asignando, startAsignando] = useTransition();
   const [ideaTarget, setIdeaTarget] = useState<"angulos" | "anuncios" | "publirreportajes">(
     "angulos",
   );
@@ -388,6 +395,38 @@ export function AnglesTab({
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                       {angle.targetAudience}
                     </p>
+
+                    {/*
+                      A qué app se acota, o a ninguna.
+
+                      Nace **general** y ese es el estado normal: una historia
+                      sirve para varias apps. Acotarlo es la excepción, y por eso
+                      la primera opción del desplegable es «todas».
+                    */}
+                    {apps.length > 0 ? (
+                      <label className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-slate-500 dark:text-slate-400">Vale para</span>
+                        <SelectField
+                          value={angle.appId ?? ""}
+                          onChange={(event) => {
+                            const appId = event.target.value;
+                            startAsignando(async () => {
+                              await assignAngleToAppAction(angle.id, appId, productId);
+                              router.refresh();
+                            });
+                          }}
+                          disabled={asignando}
+                          aria-label="Para qué app vale este ángulo"
+                        >
+                          <option value="">todas las apps</option>
+                          {apps.map((app) => (
+                            <option key={app.id} value={app.id}>
+                              solo {app.name}
+                            </option>
+                          ))}
+                        </SelectField>
+                      </label>
+                    ) : null}
 
                     {/*
                       Se avisa, no se esconde. Un ángulo silenciado es un ángulo
