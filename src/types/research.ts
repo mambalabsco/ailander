@@ -151,11 +151,12 @@ export const RESEARCH_DOCUMENT_META: Record<
   },
   regulation: {
     order: 7,
-    title: "Regulación y legalidad",
-    description: "Qué se puede decir y qué no al anunciar juego en este país.",
+    title: "Contexto legal y sus miedos",
+    description: "Qué cree el jugador sobre la legalidad, y qué teme por ello.",
     /*
-     * Sin dependencias a propósito: es lo que **acota** lo que los demás pueden
-     * prometer, así que tiene que poder escribirse el primero.
+     * **No acota lo que se puede escribir.** Es contexto para entender de qué
+     * tiene miedo quien juega: si le pueden bloquear la cuenta, si tributa, si
+     * el sitio es legal. Eso alimenta las objeciones del copy, no sus límites.
      */
     dependsOn: [],
   },
@@ -448,19 +449,27 @@ export interface ResearchDocumentState {
   error?: string;
 }
 
+/**
+ * El contexto legal **como lo vive el jugador**, no como una lista de límites.
+ *
+ * Se escribió primero al revés —qué puede y qué no puede decir un anuncio— y era
+ * el documento equivocado: eso convierte la investigación en un censor. Lo que
+ * hace falta de aquí es de qué tiene miedo quien juega, que es materia de
+ * objeciones y por tanto de copy.
+ */
 export interface RegulationResearch {
-  /** Legal, tolerado o prohibido, dicho sin rodeos. */
+  /** Legal, tolerado o prohibido, dicho sin rodeos. El hecho, no la norma. */
   estado: string;
   /** Quién regula, si alguien. */
   regulador: string;
-  /** Edad mínima para jugar. Entra en cada copy. */
+  /** Edad mínima para jugar. */
   edadMinima: string;
-  /** Lo que un anuncio **no** puede decir en este país. */
-  prohibido: string[];
-  /** Los avisos que hay que incluir, tal y como deben aparecer. */
-  avisosObligatorios: string[];
-  /** Qué pide Meta para anunciar juego aquí. */
-  requisitosDePlataforma: string;
+  /** Lo que el jugador **cree** que pasa, sea cierto o no. Ahí vive la objeción. */
+  creenciasDelJugador: string[];
+  /** Lo que teme: que le bloqueen, que no le paguen, que tribute, que se sepa. */
+  miedos: { miedo: string; deDondeSale: string }[];
+  /** Cómo pesa todo eso a la hora de fiarse de un casino que no conoce. */
+  efectoEnLaConfianza: string;
 }
 
 export interface PaymentsResearch {

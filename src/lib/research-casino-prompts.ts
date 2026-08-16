@@ -24,23 +24,14 @@ function paisLine(product: Product): string {
   return `**País:** ${product.country} · **Idioma:** ${product.language}`;
 }
 
-/**
- * Lo que ningún documento de casino puede olvidar.
+/*
+ * Aquí había un bloque de «límites» en los ocho documentos, y se ha quitado.
  *
- * Va al final de todos porque es lo que acota: un informe que proponga un ángulo
- * ilegal en ese país no es un informe con un error, es uno que hay que tirar
- * entero.
+ * Decía que la regulación mandaba sobre lo que se podía escribir, y eso convertía
+ * la investigación en un censor. Un documento de investigación **describe**: lo
+ * que hace falta del contexto legal no son sus prohibiciones, sino de qué tiene
+ * miedo quien juega, que es materia de objeciones y por tanto de copy.
  */
-function limites(product: Product): string {
-  return `
-## Límites
-
-Lo que diga el documento de **regulación** manda sobre todo lo demás. Si algo que
-ibas a escribir no se puede decir en ${product.country}, no lo escribas y dilo.
-
-Nunca presentes el juego como una forma de ganar dinero ni de resolver un
-problema económico.`;
-}
 
 export function buildCasinoResearchPrompt(
   id: ResearchDocumentId,
@@ -64,22 +55,25 @@ export function buildCasinoResearchPrompt(
 
 ## Qué tienes que averiguar
 
-Cómo está regulado el **juego online** en ${product.country} y qué se puede decir
-al anunciarlo.
+Qué cree la gente de ${product.country} sobre la legalidad del juego online, y
+**qué teme por ello**.
 
-Necesito, con fuentes:
+Esto no es un informe de cumplimiento y no sirve para decidir qué puede decir un
+anuncio: sirve para entender el ruido que el jugador ya trae en la cabeza cuando
+ve uno.
 
 1. **Estado legal**, dicho sin rodeos: legal y regulado, tolerado, o prohibido.
-2. **Quién regula**, si hay alguien.
-3. **Edad mínima** para jugar.
-4. **Qué no puede decir un anuncio** en este país. Lista concreta.
-5. **Qué avisos son obligatorios**, escritos tal y como deben aparecer.
-6. **Qué exige Meta** para anunciar juego aquí: permisos, certificaciones o
-   restricciones de segmentación.
+   El hecho, en una línea.
+2. **Quién regula**, si hay alguien, y si el jugador de a pie lo conoce.
+3. **Edad mínima**.
+4. **Qué cree el jugador que pasa**, sea cierto o no. Aquí interesa la creencia
+   más que el dato: es la que le frena.
+5. **Qué teme**, y de dónde le viene ese miedo: que le bloqueen la cuenta, que no
+   le paguen, que tenga que declararlo, que en su casa se enteren.
+6. **Cómo pesa todo eso** cuando se plantea probar un casino que no conoce.
 
-Esto acota lo que todos los demás documentos pueden prometer, así que **cuando no
-lo sepas dilo**: un límite inventado se salta con la misma facilidad que uno real
-se incumple.${extra}`;
+Los puntos 4, 5 y 6 son los que importan. Los tres primeros están solo para poder
+entenderlos.${extra}`;
 
     case "payments":
       return `${paisLine(product)}
@@ -95,7 +89,7 @@ Cómo deposita y cómo cobra la gente que juega online en ${product.country}.
    las nuestras.
 
 El retiro importa más que el depósito: depositar es fácil en todas partes y la
-desconfianza está en cobrar.${extra}${limites(product)}`;
+desconfianza está en cobrar.${extra}`;
 
     case "casino-landscape":
       return `${paisLine(product)}
@@ -111,7 +105,7 @@ Y al final, **cuál es el bono estándar del país**: el que todos ofrecen y por
 debajo del cual no se compite.
 
 Una brecha solo vale si se puede atacar: «su app es lenta» sirve, «no son muy
-conocidos» no.${extra}${limites(product)}`;
+conocidos» no.${extra}`;
 
     case "awareness":
       return `${paisLine(product)}
@@ -129,7 +123,7 @@ mercado con fuentes, el reparto por edad y género, y los tres avatares
 principales.
 
 Un jugador que ya tiene cuenta en otro casino no está «inconsciente»: está
-consciente del producto y comparando. Esa distinción cambia todo el mensaje.${extra}${limites(product)}`;
+consciente del producto y comparando. Esa distinción cambia todo el mensaje.${extra}`;
 
     case "competitors":
       return `${paisLine(product)}
@@ -143,7 +137,7 @@ depósito mínimo y qué juegos lo liberan. Un bono de 100.000 con rollover de 4
 es peor oferta que uno de 20.000 con 5x, y el jugador experimentado lo sabe.
 
 De cada uno: cómo entra por publicidad, qué promete, por dónde mete al usuario
-—app, web, enlace de afiliado— y **dónde tiene la brecha**.${extra}${limites(product)}`;
+—app, web, enlace de afiliado— y **dónde tiene la brecha**.${extra}`;
 
     case "avatars":
       return `${paisLine(product)}
@@ -159,7 +153,7 @@ que decide si prueba otro casino.
 
 Citas reales, de foros y reseñas, no inventadas.${
         research.awareness ? "\n\nUsa el reparto por edad y género del documento 1." : ""
-      }${extra}${limites(product)}`;
+      }${extra}`;
 
     case "master":
       return `${paisLine(product)}
@@ -169,8 +163,9 @@ Citas reales, de foros y reseñas, no inventadas.${
 Condensa en un solo documento lo que hay que saber para escribir: quién es el
 jugador, qué sabe, qué desea, qué le frena, y con qué lenguaje habla.
 
-Añade lo que digan **regulación** y **pagos**: lo primero acota lo que se puede
-prometer y lo segundo es la objeción que más veces hay que resolver.${extra}${limites(product)}`;
+Añade lo que digan **contexto legal** y **pagos**: son las dos fuentes de las
+objeciones que más veces hay que resolver —el miedo a que no le paguen y el ruido
+sobre si esto es legal—.${extra}`;
 
     case "desire-extraction":
       return `${paisLine(product)}
@@ -181,7 +176,7 @@ Mapea lo que el casino **hace por el jugador** contra los deseos masivos.
 
 Las «actuaciones» aquí no son beneficios de un producto: son pagar rápido, un
 bono que de verdad se puede liberar, un juego que entiende, poder depositar con
-lo que ya usa, y que nadie de su casa se entere.${extra}${limites(product)}`;
+lo que ya usa, y que nadie de su casa se entere.${extra}`;
 
     case "desire-validation":
       return `${paisLine(product)}
@@ -191,7 +186,7 @@ lo que ya usa, y que nadie de su casa se entere.${extra}${limites(product)}`;
 Puntúa los deseos del documento anterior con **evidencia real** —lo que dicen los
 jugadores, no lo que suena bien— y ordena los cinco más fuertes.
 
-Un deseo sin evidencia se puntúa bajo aunque parezca obvio.${extra}${limites(product)}`;
+Un deseo sin evidencia se puntúa bajo aunque parezca obvio.${extra}`;
 
     default:
       return null;

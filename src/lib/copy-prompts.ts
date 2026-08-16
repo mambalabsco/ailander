@@ -249,6 +249,10 @@ export function buildProductContext(
    *
    * Sin esto salen copys que no se pueden publicar, y quien lo descubre es el
    * revisor de Meta después de haberlos pagado.
+   *
+   * Son dos reglas y ninguna sale del documento de **contexto legal**: ese es
+   * para entender los miedos del jugador, no para censurar el texto. Atarlo aquí
+   * convertía un informe de investigación en un filtro, que no es lo que hace.
    */
   if (product.vertical === "casino") {
     lines.push(
@@ -256,9 +260,7 @@ export function buildProductContext(
       "## Lo que este texto no puede decir",
       "",
       "- **Nunca prometas ganancias** ni presentes el juego como una forma de ganar dinero, de pagar deudas o de resolver un problema económico.",
-      "- Incluye la **mayoría de edad** y el aviso de **juego responsable** que exija la regulación de este país.",
-      "- No te dirijas a quien no puede jugar legalmente, ni uses imágenes o lenguaje que apunten a menores.",
-      "- Lo que diga el documento de regulación manda sobre cualquier cosa de aquí.",
+      "- No te dirijas a menores, ni uses imágenes o lenguaje que apunten a ellos.",
     );
   }
 

@@ -71,7 +71,7 @@ Los seis de siempre, con el encargo adaptado, más tres que no tienen equivalent
 
 | Documento | Por qué no cabe en los seis |
 |---|---|
-| **Regulación y legalidad** | Qué se puede decir y qué no en ese país. Acota lo que el copy puede prometer, igual que la investigación acota las promesas de un suplemento |
+| **Contexto legal y sus miedos** | Qué cree el jugador sobre la legalidad y qué teme por ello. **No acota lo que se escribe**: alimenta las objeciones del copy, no sus límites |
 | **Pagos y retiros** | Los métodos locales. En casino es la primera objeción, no un detalle de la ficha |
 | **Panorama de casinos** | Los competidores reales del país, sus bonos y su posicionamiento |
 
@@ -139,18 +139,19 @@ Lo que cambia en el de casino, más allá del sujeto: no hay precio ni envío ni
 recompra; hay depósito, retiro, bono y rollover. El «cliente» es un jugador y la
 «compra» es un registro con depósito.
 
-## Lo que el copy no puede decir, que no es un detalle
+## Lo que el copy no puede decir
 
 El encargo de copy lleva hoy «nada de promesas médicas ni de resultados
-garantizados». **El juego necesita su equivalente y va en el mismo sitio**:
+garantizados». El juego lleva su equivalente en el mismo sitio, y son **dos
+reglas**:
 
-- mayoría de edad y juego responsable donde la regulación lo exija,
 - **nunca prometer ganancias** ni presentar el juego como una fuente de ingresos,
-- y lo que diga el documento de regulación de ese país, que por eso es un
-  documento y no una nota.
+- y no dirigirse a menores.
 
-Sin esto salen copys que no se pueden publicar, y quien lo descubre es el
-revisor de Meta —después de haberlos pagado—.
+**Y no salen del documento de contexto legal**, corregido el 16 de agosto: ese
+documento es para entender de qué tiene miedo el jugador, no para censurar el
+texto. Atarlo al copy convertía un informe de investigación en un filtro, que no
+es lo que hace.
 
 ## Alcance
 
