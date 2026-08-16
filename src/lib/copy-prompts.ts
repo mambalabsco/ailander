@@ -239,6 +239,29 @@ export function buildProductContext(
     );
   }
 
+  /*
+   * Las reglas del juego, donde vive la regla médica.
+   *
+   * Van **aquí y no en cada encargo** por dos motivos: este es el sitio por el
+   * que pasan todos los textos —long copy, anuncios cortos, landings, Instagram—
+   * y es el **prefijo cacheado**, que sigue siendo idéntico para el mismo
+   * producto, así que la caché no se rompe.
+   *
+   * Sin esto salen copys que no se pueden publicar, y quien lo descubre es el
+   * revisor de Meta después de haberlos pagado.
+   */
+  if (product.vertical === "casino") {
+    lines.push(
+      "",
+      "## Lo que este texto no puede decir",
+      "",
+      "- **Nunca prometas ganancias** ni presentes el juego como una forma de ganar dinero, de pagar deudas o de resolver un problema económico.",
+      "- Incluye la **mayoría de edad** y el aviso de **juego responsable** que exija la regulación de este país.",
+      "- No te dirijas a quien no puede jugar legalmente, ni uses imágenes o lenguaje que apunten a menores.",
+      "- Lo que diga el documento de regulación manda sobre cualquier cosa de aquí.",
+    );
+  }
+
   return lines.join("\n");
 }
 

@@ -171,7 +171,21 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
    * Sin tienda sí se esconde: los mercados son de la tienda, y sin ella no hay
    * ninguno que ofrecer.
    */
-  const visibleTabs = TABS.filter((item) => item.id !== "precios" || Boolean(productStore));
+  /*
+   * Y en casino no hay precio, ni envío, ni pedidos, ni ficha en Shopify.
+   *
+   * Se esconden y no se desactivan: una pestaña que pide datos que no existen
+   * enseña a ignorar la pantalla, y quien la ignora se salta también las que sí
+   * importan. `resolveTab` sigue comprobando contra `TABS`, así que llegar por
+   * URL a una escondida cae en el panel en vez de reventar.
+   */
+  const SIN_SENTIDO_EN_CASINO = new Set<string>(["precios", "oferta"]);
+
+  const visibleTabs = TABS.filter(
+    (item) =>
+      (item.id !== "precios" || Boolean(productStore)) &&
+      (product.vertical !== "casino" || !SIN_SENTIDO_EN_CASINO.has(item.id)),
+  );
 
   // Cómo se llama cada mercado, para que las insignias no enseñen un uuid.
   const marketNames = Object.fromEntries(
