@@ -303,6 +303,10 @@ type AdsetRow = {
   product_id: string;
   campaign_id: string;
   angle_id: string | null;
+  /** La anatomía de la que salió la tanda. Nulo = salió de un ángulo. */
+  source_analysis_id: string | null;
+  /** 'mismo' | 'ampliado' | 'referencia'. Vacío = no salió de un material. */
+  source_level: string;
   name: string;
   number: number;
   stage: DbFunnelStage;
@@ -1304,6 +1308,8 @@ export type Database = {
         Insertable<
           AdsetRow,
           | "angle_id"
+          | "source_analysis_id"
+          | "source_level"
           | "stage"
           | "focus"
           | "destination"

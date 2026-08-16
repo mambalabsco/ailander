@@ -252,6 +252,19 @@ export interface AdSet {
    * el anuncio no lo guarda, porque todos los de un conjunto comparten origen.
    */
   angleId?: string;
+  /**
+   * Anatomía de la que salió la tanda, si salió de un material.
+   *
+   * Vive aquí y no en el anuncio por lo mismo que `angleId`: todos los anuncios
+   * de un conjunto comparten origen.
+   *
+   * El nivel va escrito a mano y no importando `NivelDeCopia`: este archivo solo
+   * tiene imports de tipo, y meterle uno de valor de `@/lib/nivel-de-copia`
+   * impediría cargarlo desde cualquier test.
+   */
+  sourceAnalysisId?: string;
+  /** Con qué cercanía se copió. Ausente = no salió de un material. */
+  sourceLevel?: "mismo" | "ampliado" | "referencia";
   audience: string;
   objective: string;
   /** Escalera de precios que ancla todos los anuncios del conjunto. */

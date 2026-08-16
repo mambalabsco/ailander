@@ -114,6 +114,8 @@ function toAdset(row: Tables<"adsets">): AdSet {
       plannedNote: row.destination_note || undefined,
     },
     angleId: row.angle_id ?? undefined,
+    sourceAnalysisId: row.source_analysis_id ?? undefined,
+    sourceLevel: (row.source_level || undefined) as AdSet["sourceLevel"],
     audience: row.audience,
     objective: row.objective,
     offerStack: row.offer_stack,
@@ -265,6 +267,10 @@ export async function saveAdset(
     product_id: input.productId,
     campaign_id: input.campaignId,
     angle_id: input.angleId ?? null,
+    source_analysis_id: input.sourceAnalysisId ?? null,
+    // Cadena vacía y no nulo: la columna es `not null` con `check`, y ese vacío
+    // es el que significa «no salió de un material».
+    source_level: input.sourceLevel ?? "",
     name: input.name,
     number: input.number,
     stage: input.stage,
