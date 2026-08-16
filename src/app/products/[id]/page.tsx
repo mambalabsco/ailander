@@ -29,7 +29,13 @@ import { marketMoney } from "@/lib/money";
 import { blockedBy, buildResearchPrompt, researchWaves } from "@/lib/research-prompts";
 import { estimateResearchCost } from "@/lib/claude";
 import { readProviderConfig } from "@/lib/provider-config";
-import { nextNumbers, readCampaignTrees, readPrelandings } from "@/lib/campaign-store";
+import {
+  nextNumbers,
+  readArchivedCampaigns,
+  readCampaignFolders,
+  readCampaignTrees,
+  readPrelandings,
+} from "@/lib/campaign-store";
 import { performanceIndex, readPerformance, rollUpByAngle } from "@/lib/performance-store";
 import { buildCopyCoverage, pendingCombinations } from "@/lib/copy-coverage";
 import { buildAdVisualPrompts, recommendModelForPattern } from "@/lib/visual-prompts";
@@ -117,25 +123,41 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   const selection = parseSelection(mercado, marketIds);
   const marketContext = await marketContextFor(product, mercado);
 
-  const [research, hooks, angles, copies, images, ads, hasApiKey, hasHiggsfieldKey] =
+  const [research, hooks, angles, copies, todasLasImagenes, ads, hasApiKey, hasHiggsfieldKey] =
     await Promise.all([
       readProductResearch(id, product.researchShared ? undefined : selection),
       readProductHooks(id, selection),
       readAngles(id, selection),
       readCopies(id, selection),
-      readProductImages(id),
+      // Con las descartadas, y se parten aquí abajo. Una sola lectura: pedirlas
+      // dos veces sería firmar todas las URL dos veces.
+      readProductImages(id, { incluirDescartadas: true }),
       listAds(),
       hasActiveProviderKey(),
       hasHiggsfieldCredentials(),
     ]);
 
-  const [trees, prelandings, counters, performanceRecords, stores] = await Promise.all([
-    readCampaignTrees(id),
-    readPrelandings(id),
-    nextNumbers(id),
-    readPerformance(id, selection),
-    listStores(),
-  ]);
+  /*
+   * Las vigentes y las descartadas, separadas.
+   *
+   * Todo lo que ya existía —la galería, las landings, los vídeos— sigue
+   * recibiendo `images` sin descartes, que es como se comportaba. Las
+   * descartadas solo viajan a la pestaña de Ads, que es la única que las
+   * enseña, y plegadas.
+   */
+  const images = todasLasImagenes.filter((image) => !image.discardedAt);
+  const discardedImages = todasLasImagenes.filter((image) => image.discardedAt);
+
+  const [trees, prelandings, counters, performanceRecords, stores, folders, archived] =
+    await Promise.all([
+      readCampaignTrees(id),
+      readPrelandings(id),
+      nextNumbers(id),
+      readPerformance(id, selection),
+      listStores(),
+      readCampaignFolders(id),
+      readArchivedCampaigns(id),
+    ]);
 
   const performance = performanceIndex(performanceRecords);
 
@@ -639,6 +661,9 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
         <AdsTab
           product={product}
           images={images}
+          discardedImages={discardedImages}
+          folders={folders}
+          archived={archived}
           trees={trees}
           prelandings={prelandings}
           angles={angles}

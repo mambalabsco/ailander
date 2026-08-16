@@ -1,14 +1,23 @@
 "use client";
 
+import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SectionCard } from "@/components/section-card";
 import { StatusPill } from "@/components/status-pill";
-import { EmptyState, Tag } from "@/components/ui";
+import { Button, EmptyState, Tag } from "@/components/ui";
 import { CampaignStructure } from "@/app/products/[id]/campaign-structure";
 import { AdsGenerator } from "@/app/products/[id]/ads-generator";
+import { FolderBar } from "@/app/products/[id]/folder-bar";
+import { archiveCampaignAction } from "@/app/products/[id]/folder-actions";
 import { SHORT_AD_FORMAT_META } from "@/types/campaign";
-import type { CampaignTree, Prelanding } from "@/types/campaign";
+import type {
+  ArchivedCampaign,
+  CampaignFolder,
+  CampaignTree,
+  Prelanding,
+} from "@/types/campaign";
 import type { AdCampaign, Product } from "@/types";
 import type { Anatomia } from "@/lib/anatomia";
 import type { ReferenceAd } from "@/components/video/reference-ads";
@@ -33,6 +42,12 @@ interface AdsTabProps {
   performance: Map<string, PerformanceRecord>;
   /** Para enseñar dentro de cada anuncio sus creatividades ya generadas. */
   images: ProductImage[];
+  /** Las descartadas al rehacer: van al pie de la rejilla de su anuncio. */
+  discardedImages: ProductImage[];
+  /** Las carpetas del producto, para la barra y para mover. */
+  folders: CampaignFolder[];
+  /** Lo archivado, plano: aquí no se abre ni se genera nada. */
+  archived: ArchivedCampaign[];
   hasApiKey: boolean;
   hasResearch: boolean;
 }
@@ -48,6 +63,9 @@ interface AdsTabProps {
 export function AdsTab({
   product,
   images,
+  discardedImages,
+  folders,
+  archived,
   trees,
   prelandings,
   angles,
@@ -60,6 +78,18 @@ export function AdsTab({
   hasApiKey,
   hasResearch,
 }: AdsTabProps) {
+  // `null` es Todas; `"archivadas"`, el archivo; si no, el id de una carpeta.
+  const [folder, setFolder] = useState<string | null>(null);
+
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const tree of trees) {
+      const key = tree.campaign.folderId ?? "";
+      map[key] = (map[key] ?? 0) + 1;
+    }
+    return map;
+  }, [trees]);
+
   return (
     <div className="space-y-6">
       <AdsGenerator
@@ -76,15 +106,31 @@ export function AdsTab({
 
       <SectionCard
         title="Estructura de campaña"
-        description="Cómo cuelga cada anuncio de su conjunto y a dónde apunta cada uno."
+        description="Cada campaña entra plegada. Ábrela para ver sus conjuntos y sus anuncios."
       >
-        <CampaignStructure
+        <FolderBar
           productId={product.id}
-          images={images}
-          trees={trees}
-          prelandings={prelandings}
-          performance={performance}
+          folders={folders}
+          counts={counts}
+          archivedCount={archived.length}
+          active={folder}
+          onChange={setFolder}
         />
+
+        {folder === "archivadas" ? (
+          <ArchivedList productId={product.id} campaigns={archived} />
+        ) : (
+          <CampaignStructure
+            productId={product.id}
+            images={images}
+            discardedImages={discardedImages}
+            trees={trees}
+            folders={folders}
+            onlyFolder={folder}
+            prelandings={prelandings}
+            performance={performance}
+          />
+        )}
       </SectionCard>
 
       <SectionCard
@@ -216,5 +262,62 @@ export function AdsTab({
         </div>
       </SectionCard>
     </div>
+  );
+}
+
+/**
+ * Lo archivado: qué hay y el botón de devolverlo.
+ *
+ * Aquí no se abre nada ni se genera nada, y por eso llega plano —sin conjuntos
+ * ni anuncios—: traer su árbol sería cargar en cada visita todo lo que se
+ * archivó para no enseñarlo.
+ */
+function ArchivedList({
+  productId,
+  campaigns,
+}: {
+  productId: string;
+  campaigns: ArchivedCampaign[];
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  if (campaigns.length === 0) {
+    return (
+      <EmptyState
+        title="No hay campañas archivadas"
+        description="Archivar saca una campaña de la lista sin borrarla, y al devolverla vuelve a la carpeta donde estaba."
+      />
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {campaigns.map((campaign) => (
+        <li
+          key={campaign.id}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800"
+        >
+          <span className="flex flex-wrap items-center gap-3">
+            <code className="font-mono text-sm">{campaign.name}</code>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {campaign.adsets} conjuntos · {campaign.ads} anuncios
+            </span>
+          </span>
+          <Button
+            variant="secondary"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                await archiveCampaignAction(campaign.id, false, productId);
+                router.refresh();
+              })
+            }
+          >
+            Devolver
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }

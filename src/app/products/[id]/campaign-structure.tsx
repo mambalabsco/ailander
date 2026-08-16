@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { EmptyState, Tag } from "@/components/ui";
+import { CampaignBatch } from "@/app/products/[id]/campaign-batch";
+import {
+  archiveCampaignAction,
+  moveCampaignAction,
+} from "@/app/products/[id]/folder-actions";
+import type { CampaignFolder } from "@/types/campaign";
 import { Copyable, CopyableBlock } from "@/components/copyable";
 import { PerformanceControl } from "@/components/performance-control";
 import type { PerformanceRecord } from "@/types/performance";
@@ -19,8 +26,14 @@ import { ImageDownloads } from "@/components/image-downloads";
 interface CampaignStructureProps {
   /** Todas las del producto; aquí se agrupan por el anuncio que las originó. */
   images: ProductImage[];
+  /** Las descartadas al rehacer, para el pie de cada rejilla. */
+  discardedImages: ProductImage[];
   productId: string;
   trees: CampaignTree[];
+  /** Para el desplegable de «mover a». */
+  folders: CampaignFolder[];
+  /** `null` es todas; si no, solo las de esa carpeta. */
+  onlyFolder: string | null;
   prelandings: Prelanding[];
   /** Rendimiento marcado, indexado por `short-ad::id`. */
   performance: Map<string, PerformanceRecord>;
@@ -49,9 +62,12 @@ function destinationStyle(type: string) {
 export function CampaignStructure({
   productId,
   trees,
+  folders,
+  onlyFolder,
   prelandings,
   performance,
   images,
+  discardedImages,
 }: CampaignStructureProps) {
   // Las creatividades ya generadas, por anuncio.
   const imagesByAd = useMemo(() => {
@@ -63,23 +79,50 @@ export function CampaignStructure({
     return map;
   }, [images]);
 
+  // Las descartadas de cada anuncio, para el pie de su rejilla.
+  const discardedByAd = useMemo(() => {
+    const map: Record<string, ProductImage[]> = {};
+    for (const image of discardedImages) {
+      if (!image.adId) continue;
+      (map[image.adId] ??= []).push(image);
+    }
+    return map;
+  }, [discardedImages]);
+
   const [view, setView] = useState<"arbol" | "tabla">("arbol");
   const [openAdId, setOpenAdId] = useState<string | null>(null);
 
+  // El filtro por carpeta se aplica aquí: la barra ya tenía todas delante para
+  // poder contarlas.
+  const visibles = useMemo(
+    () =>
+      onlyFolder === null
+        ? trees
+        : trees.filter((tree) => (tree.campaign.folderId ?? "") === onlyFolder),
+    [trees, onlyFolder],
+  );
+
   const totals = useMemo(() => {
-    const adsets = trees.reduce((sum, tree) => sum + tree.adsets.length, 0);
-    const ads = trees.reduce(
+    const adsets = visibles.reduce((sum, tree) => sum + tree.adsets.length, 0);
+    const ads = visibles.reduce(
       (sum, tree) => sum + tree.adsets.reduce((inner, node) => inner + node.units.length, 0),
       0,
     );
-    return { campaigns: trees.length, adsets, ads };
-  }, [trees]);
+    return { campaigns: visibles.length, adsets, ads };
+  }, [visibles]);
 
-  if (trees.length === 0) {
-    return (
+  if (visibles.length === 0) {
+    // Con filtro puesto el vacío significa otra cosa, y decir «todavía no hay
+    // estructura» dentro de una carpeta vacía manda a generar lo que ya existe.
+    return onlyFolder === null ? (
       <EmptyState
         title="Todavía no hay estructura de campaña"
         description="Al generar una tanda de anuncios se arma la campaña, su conjunto y los anuncios numerados de forma correlativa."
+      />
+    ) : (
+      <EmptyState
+        title="Esta carpeta está vacía"
+        description="Mueve campañas a ella desde el desplegable «Carpeta» de cada una, en la pestaña Todas."
       />
     );
   }
@@ -110,24 +153,58 @@ export function CampaignStructure({
 
       {view === "arbol" ? (
         <div className="space-y-6">
-          {trees.map((tree) => (
-            <div
+          {visibles.map((tree) => {
+            const adsDeLaCampana = tree.adsets.flatMap((node) => node.ads);
+            const totalUnidades = tree.adsets.reduce((sum, node) => sum + node.units.length, 0);
+            const conImagen = adsDeLaCampana.filter(
+              (ad) => (imagesByAd[ad.id] ?? []).length > 0,
+            ).length;
+
+            return (
+            /*
+              Cerrada de entrada, y el plegado en el DOM.
+
+              Con `useState` habría que reponerlo en cada `router.refresh()`, que
+              es lo que dispara cada generación: se te cerraría la campaña que
+              estabas mirando justo al lanzar sus imágenes.
+            */
+            <details
               key={tree.campaign.id}
-              className="rounded-3xl border border-slate-200 p-5 dark:border-slate-800"
+              className="group rounded-3xl border border-slate-200 p-5 dark:border-slate-800"
             >
               {/* Campaña */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Campaña
-                </span>
-                <Copyable value={tree.campaign.name} label="nombre de campaña">
-                  <code className="font-mono text-sm">{tree.campaign.name}</code>
-                </Copyable>
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 marker:content-none">
+                <span className="text-violet-600 group-open:hidden">▸</span>
+                <span className="hidden text-violet-600 group-open:inline">▾</span>
+                <code className="font-mono text-sm">{tree.campaign.name}</code>
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STAGE_COLORS[tree.campaign.stage]}`}
                 >
                   {FUNNEL_STAGE_META[tree.campaign.stage].label}
                 </span>
+                {/* Lo justo para decidir si hace falta abrirla. */}
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {tree.adsets.length} conjuntos · {totalUnidades} anuncios · {conImagen}/
+                  {adsDeLaCampana.length} con imagen
+                </span>
+              </summary>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Copyable value={tree.campaign.name} label="nombre de campaña">
+                  <code className="font-mono text-xs">{tree.campaign.name}</code>
+                </Copyable>
+                <CampaignBatch
+                  productId={productId}
+                  ads={adsDeLaCampana}
+                  images={images}
+                  label="esta campaña"
+                />
+                <CampaignRowActions
+                  productId={productId}
+                  campaignId={tree.campaign.id}
+                  folderId={tree.campaign.folderId}
+                  folders={folders}
+                />
               </div>
 
               {/* Conjuntos, colgando de la campaña con una guía vertical. */}
@@ -174,6 +251,18 @@ export function CampaignStructure({
                         </div>
                       </dl>
 
+                      {/* El conjunto es la unidad real de trabajo —mismo
+                          destino, misma audiencia—, así que lleva su propio
+                          botón además del de la campaña. */}
+                      <div className="mt-3">
+                        <CampaignBatch
+                          productId={productId}
+                          ads={node.ads}
+                          images={images}
+                          label="este conjunto"
+                        />
+                      </div>
+
                       {node.adset.offerStack.length > 0 ? (
                         <div className="mt-3">
                           <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
@@ -202,6 +291,7 @@ export function CampaignStructure({
                                 productId={productId}
                                 ad={unit.ad}
                                 images={imagesByAd[unit.ad.id] ?? []}
+                                discarded={discardedByAd[unit.ad.id] ?? []}
                                 record={performance.get(`short-ad::${unit.ad.id}`)}
                                 open={openAdId === key}
                                 onToggle={() => setOpenAdId(openAdId === key ? null : key)}
@@ -223,8 +313,9 @@ export function CampaignStructure({
                   </div>
                 ))}
               </div>
-            </div>
-          ))}
+            </details>
+            );
+          })}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -239,7 +330,7 @@ export function CampaignStructure({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {trees.flatMap((tree) =>
+              {visibles.flatMap((tree) =>
                 tree.adsets.flatMap((node) =>
                   (node.units.length > 0 ? node.units : [null]).map((unit, adIndex) => (
                     <tr key={(unit ? (unit.kind === "corto" ? unit.ad.id : unit.copyId) : `${node.adset.id}-vacio`)}>
@@ -309,6 +400,7 @@ function AdRow({
   ad,
   record,
   images,
+  discarded,
   open,
   onToggle,
 }: {
@@ -317,6 +409,8 @@ function AdRow({
   record?: PerformanceRecord;
   /** Las creatividades ya generadas para este anuncio. */
   images: ProductImage[];
+  /** Las que se descartaron al rehacerlas, para el pie de la rejilla. */
+  discarded: ProductImage[];
   open: boolean;
   onToggle: () => void;
 }) {
@@ -367,8 +461,14 @@ function AdRow({
             ]}
           />
 
-          {/* Y las que ya se generaron, aquí mismo. */}
-          <ImageDownloads images={images} title="Imágenes de este anuncio" />
+          {/* Y las que ya se generaron, aquí mismo. `productId` es lo que hace
+              aparecer «Rehacer» sobre cada una. */}
+          <ImageDownloads
+            images={images}
+            discarded={discarded}
+            productId={productId}
+            title="Imágenes de este anuncio"
+          />
 
           <div className="grid gap-3 md:grid-cols-2">
             <CopyableBlock value={ad.content.headline} label="Titular" maxHeightClass="max-h-24">
@@ -456,6 +556,64 @@ function LongRow({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Mover de carpeta y archivar, en la cabecera de la campaña.
+ *
+ * Un desplegable y no arrastrar y soltar: con veinte campañas en una lista
+ * larga, arrastrar falla más de lo que acierta y hay que deshacerlo.
+ */
+function CampaignRowActions({
+  productId,
+  campaignId,
+  folderId,
+  folders,
+}: {
+  productId: string;
+  campaignId: string;
+  folderId?: string;
+  folders: CampaignFolder[];
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <select
+        value={folderId ?? ""}
+        disabled={isPending}
+        onChange={(event) =>
+          startTransition(async () => {
+            await moveCampaignAction(campaignId, event.target.value, productId);
+            router.refresh();
+          })
+        }
+        className="rounded-full border border-slate-200 px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+      >
+        <option value="">Sin carpeta</option>
+        {folders.map((folder) => (
+          <option key={folder.id} value={folder.id}>
+            {folder.name}
+          </option>
+        ))}
+      </select>
+
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(async () => {
+            await archiveCampaignAction(campaignId, true, productId);
+            router.refresh();
+          })
+        }
+        className="rounded-full border border-slate-200 px-3 py-1.5 text-xs transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+      >
+        Archivar
+      </button>
+    </span>
   );
 }
 
