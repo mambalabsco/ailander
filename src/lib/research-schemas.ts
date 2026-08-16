@@ -267,6 +267,87 @@ const DESIRE_VALIDATION_SCHEMA = object({
   top5: strList,
 });
 
+/* ------------------------- Los tres documentos de casino ------------------------ */
+
+const REGULATION_SCHEMA = {
+  type: "object",
+  properties: {
+    estado: { type: "string" },
+    regulador: { type: "string" },
+    edadMinima: { type: "string" },
+    prohibido: { type: "array", items: { type: "string" } },
+    avisosObligatorios: { type: "array", items: { type: "string" } },
+    requisitosDePlataforma: { type: "string" },
+  },
+  required: [
+    "estado",
+    "regulador",
+    "edadMinima",
+    "prohibido",
+    "avisosObligatorios",
+    "requisitosDePlataforma",
+  ],
+  additionalProperties: false,
+} as const;
+
+const PAYMENTS_SCHEMA = {
+  type: "object",
+  properties: {
+    metodosDeposito: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          nombre: { type: "string" },
+          cuotaDeUso: { type: "string" },
+          nota: { type: "string" },
+        },
+        required: ["nombre", "cuotaDeUso", "nota"],
+        additionalProperties: false,
+      },
+    },
+    metodosRetiro: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          nombre: { type: "string" },
+          plazo: { type: "string" },
+          nota: { type: "string" },
+        },
+        required: ["nombre", "plazo", "nota"],
+        additionalProperties: false,
+      },
+    },
+    objecionPrincipal: { type: "string" },
+  },
+  required: ["metodosDeposito", "metodosRetiro", "objecionPrincipal"],
+  additionalProperties: false,
+} as const;
+
+const CASINO_LANDSCAPE_SCHEMA = {
+  type: "object",
+  properties: {
+    casinos: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          nombre: { type: "string" },
+          posicionamiento: { type: "string" },
+          bonoDeBienvenida: { type: "string" },
+          brecha: { type: "string" },
+        },
+        required: ["nombre", "posicionamiento", "bonoDeBienvenida", "brecha"],
+        additionalProperties: false,
+      },
+    },
+    bonoEstandar: { type: "string" },
+  },
+  required: ["casinos", "bonoEstandar"],
+  additionalProperties: false,
+} as const;
+
 export const RESEARCH_SCHEMAS: Record<ResearchDocumentId, Record<string, unknown>> = {
   awareness: AWARENESS_SCHEMA,
   competitors: COMPETITORS_SCHEMA,
@@ -274,4 +355,7 @@ export const RESEARCH_SCHEMAS: Record<ResearchDocumentId, Record<string, unknown
   master: MASTER_SCHEMA,
   "desire-extraction": DESIRE_EXTRACTION_SCHEMA,
   "desire-validation": DESIRE_VALIDATION_SCHEMA,
+  regulation: REGULATION_SCHEMA,
+  payments: PAYMENTS_SCHEMA,
+  "casino-landscape": CASINO_LANDSCAPE_SCHEMA,
 };

@@ -27,6 +27,9 @@ const DOCUMENT_KEYS: ResearchDocumentId[] = [
   "master",
   "desire-extraction",
   "desire-validation",
+  "regulation",
+  "payments",
+  "casino-landscape",
 ];
 
 /**
@@ -42,6 +45,9 @@ const DATA_KEY: Record<ResearchDocumentId, keyof ProductResearch> = {
   master: "master",
   "desire-extraction": "desireExtraction",
   "desire-validation": "desireValidation",
+  regulation: "regulation",
+  payments: "payments",
+  "casino-landscape": "casinoLandscape",
 };
 
 export async function readProductResearch(

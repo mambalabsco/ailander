@@ -45,9 +45,60 @@ export const RESEARCH_DOCUMENT_IDS = [
   "master",
   "desire-extraction",
   "desire-validation",
+  // Solo existen en el vertical de casino. Quién los ve lo decide
+  // `documentsFor`, no esta lista.
+  "regulation",
+  "payments",
+  "casino-landscape",
 ] as const;
 
 export type ResearchDocumentId = (typeof RESEARCH_DOCUMENT_IDS)[number];
+
+/**
+ * En qué negocio está un producto.
+ *
+ * `ecommerce` es lo de siempre y el valor por defecto: todo lo que existía antes
+ * de agosto de 2026 es de aquí y no cambia de comportamiento.
+ */
+export type Vertical = "ecommerce" | "casino";
+
+/** Los seis de e-commerce, que son los que había cuando no había verticales. */
+const ECOMMERCE_DOCS: ResearchDocumentId[] = [
+  "awareness",
+  "competitors",
+  "avatars",
+  "master",
+  "desire-extraction",
+  "desire-validation",
+];
+
+/**
+ * Qué documentos tiene la investigación de un producto.
+ *
+ * **La lista dejó de ser una constante global** y este es el motivo: antes
+ * `researchWaves()` recorría todo `RESEARCH_DOCUMENT_META`, así que añadir los
+ * documentos de casino se los habría enseñado también a un producto de
+ * suplementos — que se pondría a pedir un informe de regulación del juego.
+ *
+ * Vive aquí y no en `research-prompts.ts` porque este archivo no tiene ni un
+ * import y por eso se puede cargar desde un test. Lo que hay que poder comprobar
+ * —que un vertical nunca ve los documentos del otro— tiene que estar donde se
+ * pueda probar.
+ */
+export function documentsFor(vertical: Vertical): ResearchDocumentId[] {
+  if (vertical === "casino") {
+    const todos: ResearchDocumentId[] = [
+      ...ECOMMERCE_DOCS,
+      "regulation",
+      "payments",
+      "casino-landscape",
+    ];
+
+    return todos.sort((a, b) => RESEARCH_DOCUMENT_META[a].order - RESEARCH_DOCUMENT_META[b].order);
+  }
+
+  return [...ECOMMERCE_DOCS];
+}
 
 export const RESEARCH_DOCUMENT_META: Record<
   ResearchDocumentId,
@@ -97,6 +148,28 @@ export const RESEARCH_DOCUMENT_META: Record<
     title: "Validación del deseo",
     description: "Deseos puntuados con evidencia real y ranking de los 5 más fuertes.",
     dependsOn: ["desire-extraction"],
+  },
+  regulation: {
+    order: 7,
+    title: "Regulación y legalidad",
+    description: "Qué se puede decir y qué no al anunciar juego en este país.",
+    /*
+     * Sin dependencias a propósito: es lo que **acota** lo que los demás pueden
+     * prometer, así que tiene que poder escribirse el primero.
+     */
+    dependsOn: [],
+  },
+  payments: {
+    order: 8,
+    title: "Pagos y retiros",
+    description: "Métodos locales para depositar y cobrar, y qué tarda cada uno.",
+    dependsOn: [],
+  },
+  "casino-landscape": {
+    order: 9,
+    title: "Panorama de casinos",
+    description: "Los casinos que ya operan en el país, sus bonos y su posicionamiento.",
+    dependsOn: [],
   },
 };
 
@@ -375,6 +448,42 @@ export interface ResearchDocumentState {
   error?: string;
 }
 
+export interface RegulationResearch {
+  /** Legal, tolerado o prohibido, dicho sin rodeos. */
+  estado: string;
+  /** Quién regula, si alguien. */
+  regulador: string;
+  /** Edad mínima para jugar. Entra en cada copy. */
+  edadMinima: string;
+  /** Lo que un anuncio **no** puede decir en este país. */
+  prohibido: string[];
+  /** Los avisos que hay que incluir, tal y como deben aparecer. */
+  avisosObligatorios: string[];
+  /** Qué pide Meta para anunciar juego aquí. */
+  requisitosDePlataforma: string;
+}
+
+export interface PaymentsResearch {
+  /** Cómo deposita la gente, de más usado a menos. */
+  metodosDeposito: { nombre: string; cuotaDeUso: string; nota: string }[];
+  /** Cómo cobra, que es donde está la desconfianza. */
+  metodosRetiro: { nombre: string; plazo: string; nota: string }[];
+  /** La objeción de dinero más repetida, en palabras del jugador. */
+  objecionPrincipal: string;
+}
+
+export interface CasinoLandscapeResearch {
+  casinos: {
+    nombre: string;
+    posicionamiento: string;
+    bonoDeBienvenida: string;
+    /** Por dónde es débil, que es por donde se entra. */
+    brecha: string;
+  }[];
+  /** Qué bono es el estándar del país: por debajo no se compite. */
+  bonoEstandar: string;
+}
+
 export interface ProductResearch {
   awareness: AwarenessResearch | null;
   competitors: CompetitorResearch | null;
@@ -382,6 +491,17 @@ export interface ProductResearch {
   master: MasterResearch | null;
   desireExtraction: DesireExtraction | null;
   desireValidation: DesireValidation | null;
+  /* Los tres de casino. En e-commerce se quedan a nulo y no los pide nadie. */
+  regulation: RegulationResearch | null;
+  payments: PaymentsResearch | null;
+  casinoLandscape: CasinoLandscapeResearch | null;
+  /*
+   * Las nueve claves siempre, también en e-commerce.
+   *
+   * Hacerlas opcionales obligaría a comprobar `undefined` en cada sitio que hoy
+   * lee `research.documents[id]`. Lo que decide qué se ve y qué se genera es
+   * `documentsFor(vertical)`, no si la clave está.
+   */
   documents: Record<ResearchDocumentId, ResearchDocumentState>;
 }
 
@@ -397,6 +517,9 @@ export function emptyProductResearch(): ProductResearch {
     master: null,
     desireExtraction: null,
     desireValidation: null,
+    regulation: null,
+    payments: null,
+    casinoLandscape: null,
     documents: {
       awareness: emptyDocumentState(),
       competitors: emptyDocumentState(),
@@ -404,6 +527,9 @@ export function emptyProductResearch(): ProductResearch {
       master: emptyDocumentState(),
       "desire-extraction": emptyDocumentState(),
       "desire-validation": emptyDocumentState(),
+      regulation: emptyDocumentState(),
+      payments: emptyDocumentState(),
+      "casino-landscape": emptyDocumentState(),
     },
   };
 }

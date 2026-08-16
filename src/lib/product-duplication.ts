@@ -106,6 +106,14 @@ export async function duplicateProductToMarket(options: {
     master: null,
     desireExtraction: sourceResearch.desireExtraction,
     desireValidation: sourceResearch.desireValidation,
+    /*
+     * Los de casino viajan enteros, como los del deseo: son del **país**, y
+     * duplicar un producto de casino es duplicar el mismo país. Rehacerlos sería
+     * pagar dos veces por el mismo informe.
+     */
+    regulation: sourceResearch.regulation,
+    payments: sourceResearch.payments,
+    casinoLandscape: sourceResearch.casinoLandscape,
     documents: {
       awareness: emptyDocumentState(),
       competitors: emptyDocumentState(),
@@ -113,6 +121,9 @@ export async function duplicateProductToMarket(options: {
       master: emptyDocumentState(),
       "desire-extraction": sourceResearch.documents["desire-extraction"],
       "desire-validation": sourceResearch.documents["desire-validation"],
+      regulation: sourceResearch.documents.regulation,
+      payments: sourceResearch.documents.payments,
+      "casino-landscape": sourceResearch.documents["casino-landscape"],
     },
   };
 

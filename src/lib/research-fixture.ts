@@ -727,6 +727,11 @@ export const researchFixture: ProductResearch = {
     ],
   },
 
+  // La maqueta es de e-commerce: los tres de casino no tienen datos.
+  regulation: null,
+  payments: null,
+  casinoLandscape: null,
+
   documents: {
     awareness: {
       status: "ready",
@@ -764,6 +769,10 @@ export const researchFixture: ProductResearch = {
       markdown:
         "# 6 · Validación del deseo masivo\n\nLos cinco deseos candidatos se han puntuado de 1 a 5 en urgencia, permanencia y alcance, con evidencia extraída de foros, reseñas y comentarios.\n\n## Ranking final\n\n1. Quiero dejar de notar la piel tirante todo el día — 15/15\n2. Quiero un producto que no me irrite — 13/15\n3. Quiero dejar de perder dinero en productos que no funcionan — 13/15\n4. Quiero verme descansada sin tener que maquillarme — 12/15\n5. Quiero simplificar mi rutina — 10/15\n\n## Implicación principal\n\nEl deseo más fuerte es el alivio físico, pero el que más diferencia frente a la competencia es el miedo a la irritación: nadie lo está trabajando y aparece en casi todas las conversaciones reales.",
     },
+    // La maqueta es de un producto de e-commerce: los de casino no se rellenan.
+    regulation: { status: "empty", generatedAt: null, markdown: "" },
+    payments: { status: "empty", generatedAt: null, markdown: "" },
+    "casino-landscape": { status: "empty", generatedAt: null, markdown: "" },
   },
 };
 

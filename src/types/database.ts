@@ -33,7 +33,11 @@ export type DbResearchDocumentId =
   | "avatars"
   | "master"
   | "desire-extraction"
-  | "desire-validation";
+  | "desire-validation"
+  // Solo del vertical de casino. Quién los ve lo decide `documentsFor`.
+  | "regulation"
+  | "payments"
+  | "casino-landscape";
 
 export type DbResearchDocumentStatus = "empty" | "queued" | "generating" | "ready" | "error";
 
@@ -141,6 +145,8 @@ type ProductRow = {
   target_genders: string[];
   /** Si los seis documentos valen para todos los mercados del producto. */
   research_shared: boolean;
+  /** 'ecommerce' | 'casino'. Ver `Vertical` en `types/research.ts`. */
+  vertical: string;
   created_at: string;
   updated_at: string;
 };

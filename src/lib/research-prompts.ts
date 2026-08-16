@@ -572,6 +572,16 @@ export function buildResearchPrompt(
       return buildDesireExtractionPrompt(product, store, extras);
     case "desire-validation":
       return buildDesireValidationPrompt(product, research, store, extras);
+    /*
+     * Solo existen en el vertical de casino, donde los escribe
+     * `buildCasinoResearchPrompt` antes de llegar aquí. El `case` está porque
+     * TypeScript exige el `switch` exhaustivo, y devolver cadena vacía es lo
+     * correcto: si alguien los pide en e-commerce, no hay encargo que escribir.
+     */
+    case "regulation":
+    case "payments":
+    case "casino-landscape":
+      return "";
   }
 }
 
