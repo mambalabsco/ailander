@@ -220,3 +220,40 @@ export async function reimportProductImagesAction(productId: unknown) {
     message: added > 0 ? `${added} imagen(es) importadas.` : "No había ninguna nueva.",
   };
 }
+
+/**
+ * Esconde una imagen, o la devuelve.
+ *
+ * Borrar de verdad ya existe y es otro botón: descartar es reversible a
+ * propósito, porque la imagen que rehaces puede acabar siendo la mejor de las
+ * dos y eso no se sabe hasta ver la nueva.
+ */
+export async function discardImageAction(
+  imageId: unknown,
+  productId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = typeof imageId === "string" ? imageId.trim() : "";
+  const product = typeof productId === "string" ? productId.trim() : "";
+  if (!id || !product) return { ok: false, message: "Falta la imagen." };
+
+  const { discardProductImage } = await import("@/lib/data/images");
+  await discardProductImage(id);
+  revalidatePath(`/products/${product}`);
+
+  return { ok: true, message: "Descartada. Está en el pie, por si la quieres de vuelta." };
+}
+
+export async function restoreImageAction(
+  imageId: unknown,
+  productId: unknown,
+): Promise<{ ok: boolean; message: string }> {
+  const id = typeof imageId === "string" ? imageId.trim() : "";
+  const product = typeof productId === "string" ? productId.trim() : "";
+  if (!id || !product) return { ok: false, message: "Falta la imagen." };
+
+  const { restoreProductImage } = await import("@/lib/data/images");
+  await restoreProductImage(id);
+  revalidatePath(`/products/${product}`);
+
+  return { ok: true, message: "Recuperada." };
+}
