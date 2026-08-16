@@ -194,6 +194,17 @@ type AppRow = {
   updated_at: string;
 };
 
+type CampaignFolderRow = {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  product_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type ProductOfferRow = {
   product_id: string;
   user_id: string;
@@ -309,6 +320,10 @@ type CampaignRow = {
   country_code: string;
   theme: string;
   focus: string;
+  /** En qué carpeta se ve. Nulo es «sin carpeta». */
+  folder_id: string | null;
+  /** Cuándo se archivó. Nulo es activa. */
+  archived_at: string | null;
   created_at: string;
 };
 
@@ -421,6 +436,8 @@ type ProductImageRow = {
   model_id: string;
   is_primary: boolean;
   source: DbImageSource;
+  /** Cuándo se descartó al rehacerla. Nulo es vigente. */
+  discarded_at: string | null;
   created_at: string;
 };
 

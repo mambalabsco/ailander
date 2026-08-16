@@ -99,11 +99,28 @@ async function readReferenceBytes(
   productId: string,
   appId?: string,
 ): Promise<{ filename: string; bytes: Uint8Array }[]> {
-  const primary = appId
-    ? ((await readProductImages(productId)).find(
-        (image) => image.appId === appId && image.pattern === "captura-app",
-      ) ?? (await readPrimaryImage(productId)))
-    : await readPrimaryImage(productId);
+  const todas = await readProductImages(productId);
+  const capturas = todas.filter((image) => image.pattern === "captura-app");
+
+  /*
+   * Con app elegida, la suya. Sin ella y con **una sola** captura, esa.
+   *
+   * Lo segundo no es un atajo: la pantalla de imágenes no pide la app, y un
+   * producto de casino con una sola app es el caso normal. Sin este apaño la
+   * referencia caía siempre a la imagen principal del producto —que en casino no
+   * es de ninguna app— y la creatividad salía con un teléfono enseñando otra
+   * cosa. No fallaba: salía la imagen, y era la equivocada.
+   *
+   * Con varias apps y sin elegir no se adivina: se usa la principal, como
+   * siempre, porque escoger una al azar sería peor que no escoger.
+   */
+  const deLaApp = appId
+    ? capturas.find((image) => image.appId === appId)
+    : capturas.length === 1
+      ? capturas[0]
+      : undefined;
+
+  const primary = deLaApp ?? (await readPrimaryImage(productId));
 
   if (!primary?.url) return [];
 
