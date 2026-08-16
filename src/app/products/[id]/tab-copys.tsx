@@ -13,6 +13,7 @@ import {
   methodsForFormat,
 } from "@/types/copy";
 import type { CopyDriver, CopyFormat, GeneratedCopy, MarketingAngle } from "@/types/copy";
+import { anglesForApp } from "@/lib/apps-alcance";
 import type { ProductHook } from "@/types/research";
 import type { AdVisualPrompt, ProductImage } from "@/types/visuals";
 import type { CopyCombination } from "@/lib/copy-coverage";
@@ -33,6 +34,8 @@ import { generateCopyAction } from "@/app/products/[id]/generate-actions";
 interface CopysTabProps {
   copies: GeneratedCopy[];
   angles: MarketingAngle[];
+  /** Las apps del producto. Vacío en todo lo que no es casino. */
+  apps: { id: string; name: string }[];
   hooks: ProductHook[];
   desires: string[];
   hasApiKey: boolean;
@@ -76,6 +79,7 @@ interface CopysTabProps {
 export function CopysTab({
   copies,
   angles,
+  apps,
   hooks,
   desires,
   hasApiKey,
@@ -99,6 +103,15 @@ export function CopysTab({
   const [methodId, setMethodId] = useState<string>("long-copy-discovery");
   const [driver, setDriver] = useState<CopyDriver>(angles.length > 0 ? "angle" : "desire");
   const [desire, setDesire] = useState(desires[0] ?? "");
+  const [appId, setAppId] = useState(apps[0]?.id ?? "");
+  /*
+   * Los ángulos se filtran por la app elegida.
+   *
+   * Un ángulo general —sin app— sale siempre; uno de otra app, nunca. Sin este
+   * filtro se podría escribir un copy de Monticello con el ángulo de otra, y no
+   * daría ningún error: saldría un texto coherente sobre la app equivocada.
+   */
+  const anglesVisibles = anglesForApp(angles, appId);
   const [angleId, setAngleId] = useState(angles[0]?.id ?? "");
   const [hookId, setHookId] = useState("");
   const [commentStyle, setCommentStyle] = useState<"facebook" | "testimonios">("facebook");
@@ -306,6 +319,28 @@ export function CopysTab({
               </p>
             </div>
 
+            {/*
+              La app va delante del ángulo, no detrás: elegirla **filtra** la
+              lista de ángulos, y un selector que cambia otro tiene que estar
+              antes o se elige dos veces.
+            */}
+            {apps.length > 0 ? (
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium">Para qué app</span>
+                <SelectField value={appId} onChange={(event) => setAppId(event.target.value)}>
+                  {apps.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </SelectField>
+                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Su nombre y su enfoque entran en el texto. Los ángulos de abajo son los generales
+                  más los suyos.
+                </span>
+              </label>
+            ) : null}
+
             <div className="grid gap-4 md:grid-cols-3">
               {driver === "desire" ? (
                 <label className="block">
@@ -323,7 +358,7 @@ export function CopysTab({
                 <label className="block">
                   <span className="mb-2 block text-sm font-medium">Ángulo</span>
                   <SelectField value={angleId} onChange={(event) => setAngleId(event.target.value)}>
-                    {angles.map((item) => (
+                    {anglesVisibles.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name}
                         {optionMark("angle", item.id)}
@@ -497,6 +532,7 @@ export function CopysTab({
                       productId,
                       methodId,
                       angleId: driver === "angle" ? angleId : "",
+                      appId,
                       commentStyle,
                       referenceId: landingReferenceId,
                       fidelity: landingFidelity,

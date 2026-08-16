@@ -412,6 +412,8 @@ export function buildLongCopyPrompt(options: {
   notes?: ProductNote[];
   /** Copys ya probados, como referencia de patrón. */
   swipe?: string;
+  /** La app de la que habla el texto, en casino. */
+  app?: { name: string; focus: string; downloadUrl: string } | null;
   method: CopyMethod;
   awarenessLevel: AwarenessLevel;
   desire: string;
@@ -446,6 +448,7 @@ No hay ángulo definido: esta pieza es la línea base con la que se compararán 
     offers: options.offers,
     notes: options.notes,
     swipe: options.swipe,
+    app: options.app,
   })}
 
 ${source}
@@ -596,6 +599,8 @@ const ADVERTORIAL_FRAMEWORKS: Record<string, string> = {
 };
 
 export function buildAdvertorialPrompt(options: {
+  /** La app de la que habla el texto, en casino. */
+  app?: { name: string; focus: string; downloadUrl: string } | null;
   product: Product;
   research: ProductResearch;
   store?: Store | null;
@@ -638,6 +643,7 @@ No hay ángulo definido. Deduce el mecanismo único del problema y el de la solu
     offers: options.offers,
     notes: options.notes,
     swipe: options.swipe,
+    app: options.app,
   })}
 
 ${source}

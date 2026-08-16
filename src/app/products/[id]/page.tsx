@@ -583,6 +583,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           marketNames={marketNames}
           copies={copies}
           angles={angles}
+          apps={apps.map((item) => ({ id: item.id, name: item.name }))}
           hooks={hooks}
           desires={desires}
           hasApiKey={hasApiKey}

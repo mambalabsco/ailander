@@ -501,6 +501,22 @@ export async function generateCopyAction(input: unknown): Promise<LaunchResult> 
     chosenHook = (await readProductHooks(ctx.id)).find((item) => item.id === hookId) ?? null;
   }
 
+  /*
+   * La app, cuando el producto es de casino.
+   *
+   * Se lee aquí y no dentro del trabajo porque si no existe conviene fallar
+   * antes de cobrar el contexto entero. Nula en e-commerce, donde no hay apps.
+   */
+  const appId = readText(raw.appId);
+  let chosenApp: { name: string; focus: string; downloadUrl: string } | null = null;
+
+  if (appId && ctx.product.vertical === "casino") {
+    const { listApps } = await import("@/lib/data/apps");
+    const found = (await listApps(ctx.id)).find((item) => item.id === appId);
+    if (!found) throw new Error("Esa app ya no existe.");
+    chosenApp = { name: found.name, focus: found.focus, downloadUrl: found.downloadUrl };
+  }
+
   const shared = {
     product: ctx.product,
     research: ctx.research,
@@ -509,6 +525,7 @@ export async function generateCopyAction(input: unknown): Promise<LaunchResult> 
     offers: ctx.offers,
     notes: ctx.notes,
     swipe: ctx.swipe,
+    app: chosenApp,
     method,
     awarenessLevel,
     desire: desire || angle?.desire || "",
@@ -559,6 +576,7 @@ Ningún prompt de este documento los genera, pero el gestor de anuncios los exig
     driver,
     driverLabel: driver === "angle" ? (angle?.name ?? "") : desire,
     angleId: angle?.id,
+    appId: appId || undefined,
     awarenessLevel,
     content: {
       primaryText: data.primaryText,

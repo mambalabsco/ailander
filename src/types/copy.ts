@@ -22,6 +22,14 @@ import type { Intensity, StoryBeat } from "@/lib/story-beats";
 
 /** Prompt 9: cinco historias distintas para el mismo deseo masivo. */
 export interface MarketingAngle {
+  /**
+   * De qué app es, en casino. **Ausente es general**: vale para todas.
+   *
+   * Es el mismo significado que `marketId` en esta misma pieza, y por el mismo
+   * motivo: una historia sirve para varias apps, y obligar a elegir una
+   * duplicaría el trabajo por app desde el primer día.
+   */
+  appId?: string;
   id: string;
   productId: string;
   /** La anatomía de la que salió, si no salió de la investigación. */
@@ -107,6 +115,8 @@ export interface GeneratedCopy {
   driverLabel: string;
   angleId?: string;
   hookId?: string;
+  /** De qué app habla, en casino. Nulo en todo lo demás. */
+  appId?: string;
   awarenessLevel: AwarenessLevel;
   content: FacebookAdCopy;
   wordCount: number;

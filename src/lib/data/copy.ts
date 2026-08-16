@@ -23,6 +23,7 @@ function toAngle(row: Tables<"angles">): MarketingAngle {
     id: row.id,
     productId: row.product_id,
     marketId: row.market_id ?? undefined,
+    appId: row.app_id ?? undefined,
     sourceAnalysisId: row.source_analysis_id ?? undefined,
     promiseToValidate: row.promise_to_validate || undefined,
     desire: row.desire,
@@ -127,6 +128,7 @@ function toCopy(row: Tables<"copies">): GeneratedCopy {
     driverLabel: row.driver_label,
     angleId: row.angle_id ?? undefined,
     hookId: row.hook_id ?? undefined,
+    appId: row.app_id ?? undefined,
     awarenessLevel: row.awareness_level,
     content: {
       primaryText: row.primary_text,
@@ -207,6 +209,7 @@ export async function addCopies(
         market_id: marketId ?? null,
         angle_id: copy.angleId ?? null,
         hook_id: copy.hookId ?? null,
+        app_id: copy.appId ?? null,
         adset_id: copy.adsetId ?? null,
         ad_number: copy.adNumber ?? null,
         ad_name: copy.adName ?? "",
