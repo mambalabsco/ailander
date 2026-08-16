@@ -14,6 +14,7 @@ import {
   buildAnatomiaPrompt,
   buildAngulosPrompt,
   describeVideoAnalyses,
+  normalizeAnatomia,
 } from "@/lib/anatomia";
 import { matchByPosition } from "@/lib/angulos-vuelta";
 import { stampFor } from "@/lib/market-selection";
@@ -84,7 +85,7 @@ export async function analyzeMaterialAction(form: FormData): Promise<LaunchResul
         })),
       );
 
-      const outcome = await generateStructured<Omit<Anatomia, "swipeId">>({
+      const outcome = await generateStructured<Omit<Anatomia, "swipeId" | "ownership">>({
         /*
          * El contexto del producto va aparte y no pegado dentro del prompt: se
          * reutiliza igual al sacar los ángulos, y es el prefijo que la caché
@@ -108,7 +109,9 @@ export async function analyzeMaterialAction(form: FormData): Promise<LaunchResul
       await saveAnatomia({
         productId,
         title: `Anatomía · ${copy.slice(0, 60)}`,
-        anatomia: { ...outcome.data, swipeId },
+        // `ownership` lo dice quien sube el material, no el modelo: por eso no
+        // está en `ANATOMIA_SCHEMA` y se pega aquí.
+        anatomia: { ...outcome.data, swipeId, ownership },
       });
 
       revalidatePath(`/products/${productId}`);
@@ -137,8 +140,17 @@ export async function saveAnatomiaAction(
   const product = readText(productId);
   if (!anatomiaId || !product) return { ok: false, message: "Falta la anatomía o el producto." };
 
-  const data = anatomia as Anatomia;
-  if (!data?.promesa) {
+  /*
+   * Normalizada y no casteada a pelo.
+   *
+   * Lo que llega es lo que tenga el navegador en estado, y si por lo que sea
+   * viniera sin `ownership`, un cast lo dejaría `undefined`: la anatomía se
+   * guardaría sin él y la siguiente tanda la trataría como ajena. Un material
+   * propio degradado a ajeno al corregirle una coma no da ningún error, solo
+   * anuncios más flojos de lo que podían ser.
+   */
+  const data = normalizeAnatomia(anatomia);
+  if (!data.promesa) {
     return { ok: false, message: "La anatomía necesita al menos su promesa." };
   }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { describeVideoAnalyses } from "./anatomia.ts";
+import { describeVideoAnalyses, normalizeAnatomia } from "./anatomia.ts";
 
 const analysis = {
   hook: "Empieza con la factura de la luz",
@@ -32,4 +32,31 @@ test("varios vídeos van numerados, para poder citarlos", () => {
 
   assert.match(text, /Vídeo 1/);
   assert.match(text, /Vídeo 2/);
+});
+
+test("una anatomía vieja, sin ownership, se lee como ajena", () => {
+  // Las que ya están guardadas se escribieron antes de que este campo existiera.
+  // 'ajeno' es el lado seguro: como mucho prohíbe heredar algo que sí se podía.
+  // Al revés, un `propio` supuesto deja pasar la cifra de otra marca.
+  const leida = normalizeAnatomia({ promesa: "Bajarla a la mitad", entrada: "La factura" });
+
+  assert.equal(leida.ownership, "ajeno");
+  assert.equal(leida.promesa, "Bajarla a la mitad");
+});
+
+test("un ownership que no es ninguno de los dos también cae en ajeno", () => {
+  assert.equal(normalizeAnatomia({ ownership: "cualquier cosa" }).ownership, "ajeno");
+});
+
+test("el ownership guardado se respeta", () => {
+  assert.equal(normalizeAnatomia({ ownership: "propio" }).ownership, "propio");
+});
+
+test("las listas ausentes salen vacías y no como undefined", () => {
+  // `estructura.map(...)` sobre undefined revienta el encargo entero, y el
+  // payload es JSON: puede venir sin ellas.
+  const leida = normalizeAnatomia({});
+
+  assert.deepEqual(leida.estructura, []);
+  assert.deepEqual(leida.objeciones, []);
 });

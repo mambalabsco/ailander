@@ -1,6 +1,7 @@
 import "server-only";
 
 import { requireContext } from "@/lib/supabase/session";
+import { normalizeAnatomia } from "@/lib/anatomia";
 import type { Anatomia } from "@/lib/anatomia";
 import type { Json } from "@/types/database";
 
@@ -63,7 +64,10 @@ export async function readAnatomia(id: string): Promise<Anatomia | null> {
     .eq("kind", "anatomia")
     .maybeSingle();
 
-  return (data?.payload as unknown as Anatomia) ?? null;
+  // Normalizada y no casteada a pelo: las anatomías escritas antes de que
+  // existiera `ownership` no lo traen, y sin valor el cruce con el nivel de
+  // copia decidiría con `undefined`.
+  return data ? normalizeAnatomia(data.payload) : null;
 }
 
 export async function listAnatomias(productId: string): Promise<AnatomiaGuardada[]> {
@@ -80,6 +84,6 @@ export async function listAnatomias(productId: string): Promise<AnatomiaGuardada
     id: row.id,
     title: row.title,
     summary: row.summary,
-    anatomia: row.payload as unknown as Anatomia,
+    anatomia: normalizeAnatomia(row.payload),
   }));
 }

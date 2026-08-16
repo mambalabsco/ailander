@@ -23,6 +23,16 @@ import { inheritanceRule } from "./material-herencia.ts";
 export interface Anatomia {
   /** El material del archivo del que salió. */
   swipeId: string;
+  /**
+   * De quién era el material.
+   *
+   * Se guarda **dentro de la anatomía** y no solo en `swipe_copies` porque es
+   * aquí donde hace falta: al sacar una tanda de anuncios meses después, lo
+   * único que se elige es la anatomía, y sin este campo no hay forma de saber si
+   * sus cifras se pueden repetir. Un material pegado desde Ads además no deja
+   * fila en `swipe_copies`, así que ahí no habría dónde mirarlo.
+   */
+  ownership: "propio" | "ajeno";
   /** Cómo entra: la primera frase y por qué para el scroll. */
   entrada: string;
   /** Qué promete, dicho como lo diría el anuncio. */
@@ -72,6 +82,37 @@ export function describeVideoAnalyses(analyses: VideoAnalysis[]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+/**
+ * Una anatomía leída de `payload`, con los huecos rellenos.
+ *
+ * `payload` es JSON: puede traer cualquier cosa, y las anatomías escritas antes
+ * de que existiera `ownership` no lo llevan. Se normaliza **al leer** y no al
+ * escribir porque lo que ya está guardado no se puede cambiar hacia atrás.
+ *
+ * `ajeno` por defecto es el lado seguro: como mucho prohíbe heredar algo que sí
+ * se podía. Al revés, un `propio` supuesto deja salir la cifra de otra marca
+ * dicha como nuestra, y eso no da ningún error.
+ */
+export function normalizeAnatomia(payload: unknown): Anatomia {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
+  return {
+    swipeId: text(raw.swipeId),
+    ownership: raw.ownership === "propio" ? "propio" : "ajeno",
+    entrada: text(raw.entrada),
+    promesa: text(raw.promesa),
+    publico: text(raw.publico),
+    deseo: text(raw.deseo),
+    estructura: Array.isArray(raw.estructura) ? (raw.estructura as Anatomia["estructura"]) : [],
+    ritmo: text(raw.ritmo),
+    queEnsena: text(raw.queEnsena),
+    objeciones: Array.isArray(raw.objeciones) ? (raw.objeciones as Anatomia["objeciones"]) : [],
+    cierre: text(raw.cierre),
+    porQueFunciona: text(raw.porQueFunciona),
+  };
 }
 
 export const ANATOMIA_SCHEMA = {
