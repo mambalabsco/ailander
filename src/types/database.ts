@@ -1350,9 +1350,27 @@ export type Database = {
         AngleRow,
         Insertable<AngleRow, Exclude<keyof AngleRow, "user_id" | "product_id" | "name">>
       >;
+      campaign_folders: Table<
+        CampaignFolderRow,
+        Insertable<
+          CampaignFolderRow,
+          Exclude<keyof CampaignFolderRow, "user_id" | "product_id" | "name">
+        >
+      >;
       campaigns: Table<
         CampaignRow,
-        Insertable<CampaignRow, "market_id" | "stage" | "country_code" | "theme" | "focus">
+        Insertable<
+          CampaignRow,
+          // Las tres últimas nacen vacías: una campaña se crea sin carpeta y sin
+          // archivar, y ninguna se escribe en el alta.
+          | "market_id"
+          | "stage"
+          | "country_code"
+          | "theme"
+          | "focus"
+          | "folder_id"
+          | "archived_at"
+        >
       >;
       prelandings: Table<PrelandingRow, Insertable<PrelandingRow, "market_id" | "url" | "description">>;
       adsets: Table<
@@ -1425,6 +1443,7 @@ export type Database = {
           | "shopify_url"
           | "concept"
           | "origin_label"
+          | "discarded_at"
         >
       >;
       ad_creatives: Table<
