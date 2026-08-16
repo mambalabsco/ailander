@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
+import { AdVisualSender } from "@/components/ad-visual-sender";
+import { restoreImageAction } from "@/app/products/[id]/image-actions";
 import type { ProductImage } from "@/types/visuals";
 
 /**
@@ -67,14 +70,25 @@ export function useImageDownload() {
 export function ImageDownloads({
   images,
   title = "Imágenes generadas",
+  productId,
+  discarded = [],
 }: {
   images: ProductImage[];
   title?: string;
+  /**
+   * Sin él no salen «Rehacer» ni el pie de descartadas.
+   *
+   * Es opcional para no romper las llamadas que ya existían, pero pasarlo es lo
+   * que hace que rehacer exista: es el error fácil al añadir una rejilla nueva.
+   */
+  productId?: string;
+  /** Las descartadas de este mismo grupo, para el pie. */
+  discarded?: ProductImage[];
 }) {
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const { download, downloadMany, busy } = useImageDownload();
 
-  if (images.length === 0) return null;
+  if (images.length === 0 && discarded.length === 0) return null;
 
   const toggle = (id: string) =>
     setChosen((current) => {
@@ -88,19 +102,23 @@ export function ImageDownloads({
 
   return (
     <div className="mt-4">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <p className="text-sm font-medium">
-          {title} ({images.length})
-        </p>
-        <Button variant="secondary" disabled={busy} onClick={() => downloadMany(images)}>
-          {busy ? "Descargando..." : "Descargar todas"}
-        </Button>
-        {selected.length > 0 ? (
-          <Button variant="secondary" disabled={busy} onClick={() => downloadMany(selected)}>
-            Descargar {selected.length} marcada(s)
+      {/* Con todo descartado no hay nada que descargar: la cabecera diría «(0)»
+          y ofrecería bajar una lista vacía. */}
+      {images.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <p className="text-sm font-medium">
+            {title} ({images.length})
+          </p>
+          <Button variant="secondary" disabled={busy} onClick={() => downloadMany(images)}>
+            {busy ? "Descargando..." : "Descargar todas"}
           </Button>
-        ) : null}
-      </div>
+          {selected.length > 0 ? (
+            <Button variant="secondary" disabled={busy} onClick={() => downloadMany(selected)}>
+              Descargar {selected.length} marcada(s)
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {images.map((image) => (
@@ -147,10 +165,90 @@ export function ImageDownloads({
               >
                 Descargar
               </button>
+
+              {/*
+                Rehacer, sobre la propia imagen.
+
+                Es donde se toma la decisión —mirándola— y antes había que subir
+                al panel del anuncio y relanzar la tanda entera, pagándola
+                entera. Sin `prompt` no aparece: las subidas no las hizo ningún
+                modelo y no hay nada que repetir.
+              */}
+              {productId && image.prompt ? (
+                <div className="mt-1">
+                  <AdVisualSender
+                    productId={productId}
+                    adId={image.adId}
+                    copyId={image.copyId}
+                    landingId={image.landingId}
+                    visuals={[
+                      {
+                        title: image.name,
+                        prompt: image.prompt,
+                        aspectRatio: "1:1",
+                        concept: image.concept,
+                        origin: image.originLabel ?? image.name,
+                        // La vieja se esconde sola cuando ésta se guarde.
+                        replacesImageId: image.id,
+                      },
+                    ]}
+                    label="Rehacer"
+                    compact
+                  />
+                </div>
+              ) : null}
             </figcaption>
           </figure>
         ))}
       </div>
+
+      {productId && discarded.length > 0 ? (
+        <details className="mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+          <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">
+            {discarded.length} descartada{discarded.length === 1 ? "" : "s"}
+          </summary>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {discarded.map((image) => (
+              <figure
+                key={image.id}
+                className="overflow-hidden rounded-xl border border-slate-200 opacity-60 dark:border-slate-800"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={image.url}
+                  alt={image.name}
+                  className="aspect-square w-full bg-slate-100 object-cover dark:bg-slate-900"
+                />
+                <figcaption className="p-1.5">
+                  <RecoverButton imageId={image.id} productId={productId} />
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
+  );
+}
+
+/** Devuelve una descartada a la vista. */
+function RecoverButton({ imageId, productId }: { imageId: string; productId: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={() =>
+        startTransition(async () => {
+          await restoreImageAction(imageId, productId);
+          router.refresh();
+        })
+      }
+      className="text-xs text-violet-700 underline-offset-2 hover:underline dark:text-violet-300"
+    >
+      {isPending ? "…" : "Recuperar"}
+    </button>
   );
 }

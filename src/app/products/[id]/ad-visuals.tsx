@@ -137,8 +137,13 @@ export function AdVisuals({
       </ul>
 
       {/* Las ya generadas, aquí mismo. Antes había que ir a la galería del
-          producto y adivinar cuál salió de este anuncio. */}
-      <ImageDownloads images={generated} title="Creatividades de este anuncio" />
+          producto y adivinar cuál salió de este anuncio.
+          `productId` es lo que hace aparecer «Rehacer» en cada una. */}
+      <ImageDownloads
+        images={generated}
+        productId={productId}
+        title="Creatividades de este anuncio"
+      />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
