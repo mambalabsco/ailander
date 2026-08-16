@@ -52,7 +52,8 @@ import { emptyOffers } from "@/types/offer";
 import { estimateCost } from "@/lib/claude";
 import { runInBackground, type JobOutcome } from "@/lib/background";
 import { recordRun } from "@/lib/data/runs";
-import { readAnatomia } from "@/lib/data/anatomias";
+import { readAnatomia, listAnatomias } from "@/lib/data/anatomias";
+import { PLAN_SCHEMA, buildPlanPrompt, validarPlan } from "@/lib/plan-automatico";
 import type { NivelDeCopia } from "@/lib/nivel-de-copia";
 import type { JobKind, LaunchResult } from "@/types/jobs";
 
@@ -1183,5 +1184,113 @@ export async function adaptCopyAction(input: unknown): Promise<LaunchResult> {
         { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
     },
+  });
+}
+
+/**
+ * Una tanda sin preguntar nada.
+ *
+ * Elige y después genera, en dos llamadas. La elección se valida contra lo que
+ * existe de verdad y **falla si el modelo se la inventa**: es preferible un
+ * error a una tanda cobrada que crees que salió de tu material y no salió.
+ *
+ * Corre fuera de `runInBackground` a propósito: la llamada del plan es corta y
+ * la de verdad ya abre su trabajo. Poner otro por encima daría dos filas en el
+ * panel para un solo botón, y la primera no diría nada útil.
+ */
+export async function generateAdsAutoAction(input: unknown): Promise<LaunchResult> {
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const ctx = await context(raw.productId);
+
+  const [angles, anatomias, trees] = await Promise.all([
+    readAngles(ctx.id),
+    listAnatomias(ctx.id),
+    readCampaignTrees(ctx.id),
+  ]);
+
+  if (angles.length === 0 && anatomias.length === 0) {
+    throw new Error(
+      "No hay ángulos ni material analizado con los que decidir. Saca ángulos o analiza un anuncio primero.",
+    );
+  }
+
+  /*
+   * El presupuesto se comprueba **aquí también**.
+   *
+   * `runInBackground` lo comprueba, pero esta llamada ocurre antes de llegar a
+   * él: sin esto, quien tenga el límite pasado no podría generar la tanda y aun
+   * así habría pagado el plan. Poco dinero, pero pagado por algo que no se llegó
+   * a usar, que es la peor clase de gasto.
+   */
+  const { requireBudget } = await import("@/lib/permissions");
+  await requireBudget();
+
+  const { buildProductContext } = await import("@/lib/copy-prompts");
+
+  const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } =
+    await generateStructured<unknown>({
+      context: buildProductContext(ctx.product, ctx.research, ctx.store, ctx.marketContext),
+      prompt: buildPlanPrompt({
+      angulos: angles.map((item) => ({
+        id: item.id,
+        name: item.name,
+        targetAudience: item.targetAudience,
+      })),
+      anatomias: anatomias.map((item) => ({
+        id: item.id,
+        promesa: item.anatomia.promesa,
+        deseo: item.anatomia.deseo,
+      })),
+      /*
+       * Los nombres de los conjuntos ya llevan dentro su enfoque: es lo más
+       * barato que describe qué se ha cubierto ya. Sin esto el automático
+       * converge en la misma tanda y deja de aportar a la tercera vuelta.
+       */
+      ultimasTandas: trees
+        .flatMap((tree) => tree.adsets.map((node) => node.adset.name))
+        .slice(0, 12),
+    }),
+    schema: PLAN_SCHEMA,
+    role: "copy",
+    maxTokens: 1_500,
+  });
+
+  /*
+   * El plan se anota en el registro de gasto **antes** de validarlo.
+   *
+   * Se paga aunque la validación lo tumbe, y una llamada pagada que no aparece
+   * en el panel es dinero gastado sin poder verlo. Y es justo cuando falla
+   * cuando hace falta verlo: si el modelo se inventa identificadores a menudo,
+   * lo que se ve en Gasto es una fila de plan sin su tanda detrás.
+   */
+  const { copyModel } = await import("@/lib/claude");
+  await recordRun({
+    productId: ctx.id,
+    productName: ctx.product.name,
+    kind: "copy",
+    detail: "Plan de la tanda automática",
+    model: await copyModel(),
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+  });
+
+  const plan = validarPlan(data, {
+    angulos: angles.map((item) => item.id),
+    anatomias: anatomias.map((item) => item.id),
+  });
+
+  return generateShortAdsAction({
+    productId: ctx.id,
+    count: plan.cuantos,
+    stage: plan.etapa,
+    angleId: plan.fuente === "angulo" ? plan.id : "",
+    anatomiaId: plan.fuente === "material" ? plan.id : "",
+    nivel: plan.nivel,
+    destination: "producto",
+    // El motivo viaja para que el resumen lo pueda decir. Sin esto el botón es
+    // una caja negra que cobra.
+    motivo: plan.porQue,
   });
 }

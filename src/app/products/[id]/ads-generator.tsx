@@ -19,7 +19,10 @@ import type { Anatomia } from "@/lib/anatomia";
 import type { Product } from "@/types";
 import type { MarketingAngle } from "@/types/copy";
 import { GenerateButton } from "@/components/generate-button";
-import { generateShortAdsAction } from "@/app/products/[id]/generate-actions";
+import {
+  generateAdsAutoAction,
+  generateShortAdsAction,
+} from "@/app/products/[id]/generate-actions";
 import { generateAdsFromNewMaterialAction } from "@/app/products/[id]/material-actions";
 
 /**
@@ -578,6 +581,33 @@ export function AdsGenerator({
                 Sin clave de API configurada no se genera nada.
               </p>
             ) : null}
+          </div>
+
+          {/*
+            El que no pregunta nada.
+            Va al final y con otro aspecto: es un atajo, no la forma normal de
+            trabajar, y ponerlo arriba invitaría a no mirar nunca lo de encima.
+          */}
+          <div className="rounded-2xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
+            <p className="text-sm font-medium">O que decida él</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Mira la investigación, los ángulos y el material analizado, elige con qué vale la pena
+              tirar y arma la tanda. El resumen dice qué eligió y por qué.
+            </p>
+            <div className="mt-3">
+              <GenerateButton
+                action={() => generateAdsAutoAction({ productId: product.id })}
+                label="Generar y ya"
+                variant="secondary"
+                disabled={!hasApiKey || (angles.length === 0 && anatomias.length === 0)}
+                disabledReason={
+                  angles.length === 0 && anatomias.length === 0
+                    ? "No hay ángulos ni material con los que pueda decidir"
+                    : "Configura tu clave de API en Configuración"
+                }
+                hint="Dos llamadas: una corta para elegir y la normal para escribir. Entre 0,20 y 0,60 USD."
+              />
+            </div>
           </div>
 
           {fuente === "nuevo" ? (
