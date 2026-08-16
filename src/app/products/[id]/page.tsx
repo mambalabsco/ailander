@@ -609,6 +609,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           trees={trees}
           prelandings={prelandings}
           angles={angles}
+          anatomias={anatomias}
           desires={desires}
           libraryAds={productAds}
           nextNumbers={counters}

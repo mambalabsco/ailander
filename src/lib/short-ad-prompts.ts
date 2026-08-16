@@ -11,6 +11,9 @@ import {
   formatsForStage,
 } from "@/types/campaign";
 import { buildProductContext } from "@/lib/copy-prompts";
+import { copyLevelRule } from "@/lib/nivel-de-copia";
+import type { NivelDeCopia } from "@/lib/nivel-de-copia";
+import type { Anatomia } from "@/lib/anatomia";
 import type { Store } from "@/types/store";
 
 /**
@@ -60,6 +63,13 @@ export function buildShortAdBatchPrompt(options: {
   adset: AdSet;
   prelandings: Prelanding[];
   angle?: MarketingAngle;
+  /**
+   * El material del que sale la tanda, cuando no sale de un ángulo.
+   *
+   * **Sustituye** al bloque del ángulo, no se suma: dos orígenes a la vez son
+   * dos instrucciones que se pisan, y el modelo acaba obedeciendo a la última.
+   */
+  origen?: { anatomia: Anatomia; nivel: NivelDeCopia };
   count?: number;
   /** Formatos concretos; si no se indican, se reparten los de la etapa. */
   formats?: ShortAdFormat[];
@@ -99,6 +109,37 @@ export function buildShortAdBatchPrompt(options: {
     })
     .join("\n\n");
 
+  /*
+   * El material va donde iba el ángulo, y con la misma forma.
+   *
+   * El resto del encargo —formatos, estructura de campaña, reglas— no distingue
+   * de dónde salió la idea, y esa es justo la razón de que esto no sea una
+   * segunda ruta de generación que se desincronice de la primera.
+   */
+  const { origen } = options;
+  const origenBloque = origen
+    ? `### El anuncio que ya funcionó
+
+- Cómo entra: ${origen.anatomia.entrada}
+- Qué promete: ${origen.anatomia.promesa}
+- A quién le habla: ${origen.anatomia.publico}
+- El deseo que explota: ${origen.anatomia.deseo}
+- Ritmo y tono: ${origen.anatomia.ritmo}
+- Qué enseña: ${origen.anatomia.queEnsena}
+- Cómo cierra: ${origen.anatomia.cierre}
+- Por qué funciona: ${origen.anatomia.porQueFunciona}
+
+Estructura:
+${origen.anatomia.estructura.map((item) => `- ${item.parte}: ${item.papel}`).join("\n")}
+
+Objeciones que toca:
+${origen.anatomia.objeciones.map((item) => `- ${item.objecion} → ${item.comoLaResuelve}`).join("\n")}
+
+### Con qué cercanía copiarlo
+
+${copyLevelRule(origen.nivel, origen.anatomia.ownership)}`
+    : "";
+
   return `${buildProductContext(product, research, options.store, options.marketContext)}
 
 ## Conjunto de anuncios
@@ -123,9 +164,10 @@ ${
 }
 
 ${
-  angle
+  origenBloque ||
+  (angle
     ? `### Ángulo de la tanda\n\n**${angle.name}** — ${angle.targetAudience}\n\n- Mecanismo del problema: ${angle.problemMechanism}\n- Mecanismo de la solución: ${angle.solutionMechanism}\n- Momento emotivo: ${angle.emotionalMoment}`
-    : ""
+    : "")
 }
 
 ## Tarea

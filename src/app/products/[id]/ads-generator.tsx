@@ -12,6 +12,9 @@ import {
 } from "@/types/campaign";
 import type { AdDestinationType, FunnelStage, Prelanding } from "@/types/campaign";
 import { DEFAULT_BATCH_SIZE } from "@/lib/short-ad-prompts";
+import { NIVELES } from "@/lib/nivel-de-copia";
+import type { NivelDeCopia } from "@/lib/nivel-de-copia";
+import type { Anatomia } from "@/lib/anatomia";
 import type { Product } from "@/types";
 import type { MarketingAngle } from "@/types/copy";
 import { GenerateButton } from "@/components/generate-button";
@@ -29,6 +32,7 @@ export function AdsGenerator({
   product,
   prelandings,
   angles,
+  anatomias,
   desires,
   nextNumbers,
   hasApiKey,
@@ -37,12 +41,24 @@ export function AdsGenerator({
   product: Product;
   prelandings: Prelanding[];
   angles: MarketingAngle[];
+  /** Anuncios que ya funcionaron, analizados en la pestaña de Ángulos. */
+  anatomias: { id: string; title: string; summary: string; anatomia: Anatomia }[];
   /** Deseos validados del documento 6, para cuando no se elige ángulo. */
   desires: string[];
   nextNumbers: { adset: number; ad: number };
   hasApiKey: boolean;
   hasResearch: boolean;
 }) {
+  const [fuente, setFuente] = useState<"angulo" | "material">("angulo");
+  const [anatomiaId, setAnatomiaId] = useState(anatomias[0]?.id ?? "");
+  /*
+   * «Parecido, con más ideas» por defecto y no «mismo enfoque».
+   *
+   * Es el que aporta algo sin alejarse. El pegado sirve para escalar un ganador,
+   * pero como valor inicial haría que la primera tanda de cualquiera fuese la
+   * más parecida a lo que ya tiene, que es la menos útil.
+   */
+  const [nivel, setNivel] = useState<NivelDeCopia>("ampliado");
   const [stage, setStage] = useState<FunnelStage>("BOFU");
   const [count, setCount] = useState(DEFAULT_BATCH_SIZE);
   const [destinationType, setDestinationType] = useState<AdDestinationType>("producto");
@@ -56,6 +72,8 @@ export function AdsGenerator({
 
   const countryCode = product.country.slice(0, 2).toUpperCase();
   const selectedAngle = angles.find((angle) => angle.id === angleId);
+  const selectedAnatomia = anatomias.find((item) => item.id === anatomiaId);
+  const desdeMaterial = fuente === "material" && Boolean(selectedAnatomia);
 
   /**
    * El tema y el enfoque no se piden: se deducen.
@@ -67,14 +85,26 @@ export function AdsGenerator({
    * puerta a que dos campañas del mismo ángulo acabaran con nombres distintos.
    */
   const derivedTheme = product.researchInputs?.niche || product.category;
-  const derivedFocus = selectedAngle?.name || desire || "General";
+  /*
+   * Desde material, el enfoque sale del deseo que explota el anuncio.
+   *
+   * Sin esto la campaña se llamaría «General» y dos tandas de dos materiales
+   * distintos quedarían con el mismo nombre, que es como se pierde de vista qué
+   * se probó ya.
+   */
+  const derivedFocus = desdeMaterial
+    ? selectedAnatomia!.anatomia.deseo || selectedAnatomia!.anatomia.promesa || "Material"
+    : selectedAngle?.name || desire || "General";
 
   const theme = overrideNames && customTheme ? customTheme : derivedTheme;
   const focus = overrideNames && customFocus ? customFocus : derivedFocus;
 
-  // La audiencia también sale del ángulo: es su público objetivo.
-  const derivedAudience =
-    selectedAngle?.targetAudience || product.targetAudience || "Público objetivo del producto";
+  // La audiencia sale del ángulo o, desde material, de a quién le hablaba él.
+  const derivedAudience = desdeMaterial
+    ? selectedAnatomia!.anatomia.publico ||
+      product.targetAudience ||
+      "Público objetivo del producto"
+    : selectedAngle?.targetAudience || product.targetAudience || "Público objetivo del producto";
 
   /*
    * Los nombres se calculan en vivo para que se vean antes de generar.
@@ -100,6 +130,42 @@ export function AdsGenerator({
         />
       ) : (
         <div className="space-y-5">
+          {/*
+            De dónde sale la idea. Lo demás —destino, cuántos, numeración— es
+            común a las dos: un anuncio nacido de un material se numera y se sube
+            igual que cualquier otro.
+          */}
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["angulo", "Desde un ángulo"],
+                ["material", "Desde un anuncio que funcionó"],
+              ] as const
+            ).map(([value, label]) => {
+              const disabled = value === "material" && anatomias.length === 0;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => !disabled && setFuente(value)}
+                  disabled={disabled}
+                  title={
+                    disabled
+                      ? "Analiza un anuncio en la pestaña Ángulos para tener material"
+                      : undefined
+                  }
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    fuente === value
+                      ? "border-violet-600 bg-violet-600 text-white"
+                      : "border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Etapa del embudo">
               <SelectField
@@ -114,7 +180,20 @@ export function AdsGenerator({
               </SelectField>
             </Field>
 
-            {angles.length > 0 ? (
+            {fuente === "material" ? (
+              <Field label="Qué anuncio copiar">
+                <SelectField
+                  value={anatomiaId}
+                  onChange={(event) => setAnatomiaId(event.target.value)}
+                >
+                  {anatomias.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.summary || item.title}
+                    </option>
+                  ))}
+                </SelectField>
+              </Field>
+            ) : angles.length > 0 ? (
               <Field label="Ángulo">
                 <SelectField value={angleId} onChange={(event) => setAngleId(event.target.value)}>
                   {angles.map((item) => (
@@ -136,6 +215,41 @@ export function AdsGenerator({
               </Field>
             )}
           </div>
+
+          {fuente === "material" ? (
+            <div>
+              <span className="mb-2 block text-sm font-medium">Con qué cercanía</span>
+              <div className="space-y-2">
+                {NIVELES.map((item) => (
+                  <label
+                    key={item.id}
+                    className="flex cursor-pointer items-start gap-2 rounded-2xl border border-slate-200 p-3 text-sm dark:border-slate-800"
+                  >
+                    <input
+                      type="radio"
+                      name="nivel"
+                      checked={nivel === item.id}
+                      onChange={() => setNivel(item.id)}
+                      className="mt-1 size-4 accent-violet-600"
+                    />
+                    <span>
+                      {item.nombre}
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">
+                        {item.explicacion}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {selectedAnatomia?.anatomia.ownership === "ajeno" ? (
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Este material es de otra marca: se copia cómo está construido, pero ninguna de sus
+                  cifras se va a decir como nuestra.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <p className="text-sm text-slate-600 dark:text-slate-300">
             {FUNNEL_STAGE_META[stage].approach}
@@ -159,7 +273,12 @@ export function AdsGenerator({
                 <dt className="inline text-slate-500 dark:text-slate-400">Audiencia: </dt>
                 <dd className="inline">{derivedAudience}</dd>
               </div>
-              {selectedAngle ? (
+              {desdeMaterial ? (
+                <div className="sm:col-span-2">
+                  <dt className="inline text-slate-500 dark:text-slate-400">Por qué funciona: </dt>
+                  <dd className="inline">{selectedAnatomia!.anatomia.porQueFunciona}</dd>
+                </div>
+              ) : selectedAngle ? (
                 <div className="sm:col-span-2">
                   <dt className="inline text-slate-500 dark:text-slate-400">Mecanismo: </dt>
                   <dd className="inline">{selectedAngle.problemMechanism}</dd>
@@ -322,7 +441,10 @@ export function AdsGenerator({
                   productId: product.id,
                   count,
                   stage,
-                  angleId,
+                  // Uno de los dos, nunca los dos: el material sustituye al
+                  // ángulo en el encargo, no se suma.
+                  angleId: desdeMaterial ? "" : angleId,
+                  ...(desdeMaterial ? { anatomiaId, nivel } : {}),
                   theme,
                   focus,
                   audience: derivedAudience,

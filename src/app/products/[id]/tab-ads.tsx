@@ -10,6 +10,7 @@ import { AdsGenerator } from "@/app/products/[id]/ads-generator";
 import { SHORT_AD_FORMAT_META } from "@/types/campaign";
 import type { CampaignTree, Prelanding } from "@/types/campaign";
 import type { AdCampaign, Product } from "@/types";
+import type { Anatomia } from "@/lib/anatomia";
 import type { MarketingAngle } from "@/types/copy";
 import type { PerformanceRecord } from "@/types/performance";
 import type { ProductImage } from "@/types/visuals";
@@ -19,6 +20,8 @@ interface AdsTabProps {
   trees: CampaignTree[];
   prelandings: Prelanding[];
   angles: MarketingAngle[];
+  /** Anuncios que ya funcionaron, analizados en la pestaña de Ángulos. */
+  anatomias: { id: string; title: string; summary: string; anatomia: Anatomia }[];
   /** Deseos validados del documento 6, para cuando no se elige ángulo. */
   desires: string[];
   /** Creatividades subidas a la biblioteca y asociadas al producto. */
@@ -45,6 +48,7 @@ export function AdsTab({
   trees,
   prelandings,
   angles,
+  anatomias,
   desires,
   libraryAds,
   nextNumbers,
@@ -58,6 +62,7 @@ export function AdsTab({
         product={product}
         prelandings={prelandings}
         angles={angles}
+        anatomias={anatomias}
         desires={desires}
         nextNumbers={nextNumbers}
         hasApiKey={hasApiKey}

@@ -52,6 +52,8 @@ import { emptyOffers } from "@/types/offer";
 import { estimateCost } from "@/lib/claude";
 import { runInBackground, type JobOutcome } from "@/lib/background";
 import { recordRun } from "@/lib/data/runs";
+import { readAnatomia } from "@/lib/data/anatomias";
+import type { NivelDeCopia } from "@/lib/nivel-de-copia";
 import type { JobKind, LaunchResult } from "@/types/jobs";
 
 /**
@@ -607,6 +609,9 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
   const audience = readText(raw.audience);
   const destinationType = readText(raw.destination, "producto");
   const prelandingId = readText(raw.prelandingId);
+  const anatomiaId = readText(raw.anatomiaId);
+  const nivel = readText(raw.nivel) as NivelDeCopia | "";
+  const motivo = readText(raw.motivo);
 
   const [angles, prelandings, numbers] = await Promise.all([
     readAngles(ctx.id),
@@ -615,6 +620,17 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
   ]);
   const angle = angles.find((item) => item.id === angleId);
   const countryCode = (ctx.product.country || "ES").slice(0, 2).toUpperCase();
+
+  /*
+   * El material manda sobre el ángulo cuando viene.
+   *
+   * Se lee **antes** de lanzar el trabajo y no dentro: si la anatomía ya no
+   * existe, mejor un error inmediato que un trabajo de fondo que arranca, cobra
+   * el contexto y termina diciendo que no encontró nada.
+   */
+  const anatomia = anatomiaId ? await readAnatomia(anatomiaId) : null;
+  if (anatomiaId && !anatomia) throw new Error("Esa anatomía ya no existe.");
+  if (anatomia && !nivel) throw new Error("Falta con qué cercanía copiar el material.");
 
   /*
    * El prompt necesita el conjunto para saber a dónde va el tráfico y con qué
@@ -649,6 +665,7 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
     adset: draftAdset,
     prelandings,
     angle,
+    origen: anatomia && nivel ? { anatomia, nivel } : undefined,
     count,
     startNumber: numbers.ad,
   })}
@@ -660,7 +677,11 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
   return runInBackground({
     productId: ctx.id,
     kind: "anuncios",
-    label: `Anuncios · ${theme || ctx.product.name}`,
+    // El panel de trabajos dice de dónde sale la tanda: con dos corriendo a la
+    // vez, «Anuncios · Producto» dos veces no distingue una de otra.
+    label: anatomia
+      ? `Anuncios desde material · ${anatomia.promesa.slice(0, 40)}`
+      : `Anuncios · ${theme || ctx.product.name}`,
     work: async () => {
   const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         campaign: { name: string; theme: string; focus: string };
@@ -731,6 +752,8 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
             prelandingId: prelandingId || undefined,
           },
           angleId: angle?.id,
+          sourceAnalysisId: anatomia ? anatomiaId : undefined,
+          sourceLevel: anatomia && nivel ? nivel : undefined,
           audience: group.audience || audience,
           objective: group.objective,
           offerStack: group.offerStack,
@@ -770,7 +793,9 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
         "copy",
         "anuncios",
         ctx,
-        `${totalAds} anuncios en ${created.length} conjunto(s) de «${savedCampaign.name}».`,
+        `${totalAds} anuncios en ${created.length} conjunto(s) de «${savedCampaign.name}».${
+          motivo ? ` Se eligió esto porque: ${motivo}` : ""
+        }`,
         { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
       );
     },
