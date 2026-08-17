@@ -98,6 +98,14 @@ export const SHORT_AD_FORMATS = [
   "mecanismo-explicado",
   "packshot-oferta",
   "pregunta-directa",
+  // Los cinco de las creatividades que ya funcionaron. Cada uno tiene un
+  // **dispositivo de confrontación** —un rayo, una cara partida, un eslabón
+  // roto—, que es lo que separa un anuncio de una diapositiva.
+  "rayo-de-negacion",
+  "comparativa-dividida",
+  "lo-que-probaste",
+  "cadena-rota",
+  "dos-vias",
 ] as const;
 
 /**
@@ -209,6 +217,46 @@ export const SHORT_AD_FORMAT_META: Record<KnownShortAdFormat, ShortAdFormatMeta>
     role: "Una sola pregunta que cualifica: quien se reconoce, se para.",
     origin: "propio",
     stages: ["TOFU"],
+    hasText: true,
+  },
+  "rayo-de-negacion": {
+    id: "rayo-de-negacion",
+    name: "Rayo de negación",
+    role: "Enfrenta la creencia falsa con la causa real: el mito a un lado, lo que de verdad pasa al otro.",
+    origin: "propio",
+    stages: ["TOFU", "MOFU"],
+    hasText: true,
+  },
+  "comparativa-dividida": {
+    id: "comparativa-dividida",
+    name: "Comparativa dividida",
+    role: "Una cara partida en dos: cómo se vive cuando funciona y cómo se vive ahora.",
+    origin: "propio",
+    stages: ["MOFU", "BOFU"],
+    hasText: true,
+  },
+  "lo-que-probaste": {
+    id: "lo-que-probaste",
+    name: "Lo que probaste",
+    role: "Nombra tachado todo lo que ya intentó y dice por qué ninguno llegó donde tenía que llegar.",
+    origin: "propio",
+    stages: ["MOFU"],
+    hasText: true,
+  },
+  "cadena-rota": {
+    id: "cadena-rota",
+    name: "Cadena rota",
+    role: "Enseña la cadena entera y señala el eslabón exacto que está roto.",
+    origin: "propio",
+    stages: ["MOFU", "BOFU"],
+    hasText: true,
+  },
+  "dos-vias": {
+    id: "dos-vias",
+    name: "Dos vías",
+    role: "El camino de siempre contra el del producto, paso a paso y en paralelo.",
+    origin: "propio",
+    stages: ["BOFU"],
     hasText: true,
   },
 };
