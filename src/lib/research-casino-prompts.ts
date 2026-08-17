@@ -20,6 +20,25 @@ import { describeNotes, type ProductNote } from "@/types/note";
  * `switch` de `research-prompts.ts`.
  */
 
+/**
+ * Un documento ya escrito, pegado entero en el encargo del siguiente.
+ *
+ * **Este era el fallo del 16 de agosto.** Los encargos decían «usa el documento
+ * 1» y «puntúa los deseos del documento anterior» sin pegarlos: el modelo
+ * respondía «no encuentro ningún archivo adjunto, súbelo» y ese texto se
+ * guardaba como el informe. Salía `ready`, con mil caracteres de disculpa
+ * dentro, y nadie veía un error.
+ *
+ * Se pega el markdown y no el JSON: es lo que leería una persona, y es lo que
+ * los encargos de e-commerce llevan haciendo desde el principio.
+ */
+function previo(research: ProductResearch, id: ResearchDocumentId, titulo: string): string {
+  const texto = research.documents[id]?.markdown ?? "";
+  if (!texto) return "";
+
+  return `\n\n## ${titulo}\n\n${texto}`;
+}
+
 function paisLine(product: Product): string {
   return `**País:** ${product.country} · **Idioma:** ${product.language}`;
 }
@@ -151,9 +170,10 @@ De cada uno: **qué juega** —tragamonedas, ruleta, apuestas deportivas, en viv
 intentó retirar**. Eso último es donde está la confianza o su ausencia, y es lo
 que decide si prueba otro casino.
 
-Citas reales, de foros y reseñas, no inventadas.${
-        research.awareness ? "\n\nUsa el reparto por edad y género del documento 1." : ""
-      }${extra}`;
+Citas reales, de foros y reseñas, no inventadas.
+
+Trabaja con lo que hay abajo: **no pidas ningún archivo adjunto**, aquí está todo
+lo que necesitas.${previo(research, "awareness", "Lo que ya se sabe del mercado (documento 1)")}${extra}`;
 
     case "master":
       return `${paisLine(product)}
@@ -165,7 +185,9 @@ jugador, qué sabe, qué desea, qué le frena, y con qué lenguaje habla.
 
 Añade lo que digan **contexto legal** y **pagos**: son las dos fuentes de las
 objeciones que más veces hay que resolver —el miedo a que no le paguen y el ruido
-sobre si esto es legal—.${extra}`;
+sobre si esto es legal—.
+
+Todo lo que necesitas está abajo. **No pidas ningún archivo adjunto.**${previo(research, "awareness", "Documento 1 · el mercado")}${previo(research, "competitors", "Documento 2 · los casinos")}${previo(research, "avatars", "Documento 3 · los avatares")}${previo(research, "regulation", "Contexto legal")}${previo(research, "payments", "Pagos y retiros")}${extra}`;
 
     case "desire-extraction":
       return `${paisLine(product)}
@@ -174,19 +196,23 @@ sobre si esto es legal—.${extra}`;
 
 Mapea lo que el casino **hace por el jugador** contra los deseos masivos.
 
-Las «actuaciones» aquí no son beneficios de un producto: son pagar rápido, un
-bono que de verdad se puede liberar, un juego que entiende, poder depositar con
-lo que ya usa, y que nadie de su casa se entere.${extra}`;
+Las «actuaciones» aquí no son beneficios de un producto: son pagar rápido y sin
+excusas, un bono que de verdad se puede liberar, un catálogo que entiende, poder
+depositar con el método que ya usa, y una plataforma que no le hace sentir tonto.
+
+Sale de la investigación de arriba, no de suposiciones.${previo(research, "master", "El documento maestro")}${extra}`;
 
     case "desire-validation":
       return `${paisLine(product)}
 
 ## Qué tienes que hacer
 
-Puntúa los deseos del documento anterior con **evidencia real** —lo que dicen los
-jugadores, no lo que suena bien— y ordena los cinco más fuertes.
+Puntúa los deseos de abajo con **evidencia real** —lo que dicen los jugadores, no
+lo que suena bien— y ordena los cinco más fuertes.
 
-Un deseo sin evidencia se puntúa bajo aunque parezca obvio.${extra}`;
+Un deseo sin evidencia se puntúa bajo aunque parezca obvio.
+
+**No pidas ningún archivo adjunto**: los deseos están aquí.${previo(research, "desire-extraction", "Los deseos que hay que puntuar")}${extra}`;
 
     default:
       return null;
