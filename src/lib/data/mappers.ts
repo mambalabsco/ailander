@@ -195,6 +195,7 @@ export function toProductImage(row: Tables<"product_images">, signedUrl: string)
     concept: row.concept ?? undefined,
     originLabel: row.origin_label ?? undefined,
     discardedAt: row.discarded_at ?? undefined,
+    adSequence: row.ad_sequence ?? undefined,
     createdAt: row.created_at,
   };
 }

@@ -402,6 +402,13 @@ export interface ProductImage {
    * sale peor, y se recupera desde el pie de su rejilla.
    */
   discardedAt?: string;
+  /**
+   * Qué lugar ocupa dentro de su anuncio, empezando en 1.
+   *
+   * Es lo que va al final del nombre del archivo, y por tanto lo que distingue
+   * un anuncio de Facebook de otro cuando salen del mismo anuncio de aquí.
+   */
+  adSequence?: number;
   createdAt: string;
 }
 

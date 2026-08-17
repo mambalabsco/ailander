@@ -438,6 +438,8 @@ type ProductImageRow = {
   source: DbImageSource;
   /** Cuándo se descartó al rehacerla. Nulo es vigente. */
   discarded_at: string | null;
+  /** Qué lugar ocupa dentro de su anuncio. Nulo si no es de un anuncio. */
+  ad_sequence: number | null;
   created_at: string;
 };
 
@@ -1444,6 +1446,7 @@ export type Database = {
           | "concept"
           | "origin_label"
           | "discarded_at"
+          | "ad_sequence"
         >
       >;
       ad_creatives: Table<
