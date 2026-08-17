@@ -37,17 +37,27 @@ test("los ganadores entran con su nombre, su comuna y su monto", () => {
   assert.match(brief, /42\.640\.550/);
 });
 
-test("se prohíbe inventar ganadores, que es el fallo caro", () => {
-  // Un nombre y una comuna inventados en un anuncio que afirma un premio real no
-  // es una licencia creativa: es un testimonio falso con nombre y apellido.
-  assert.match(buildCasinoAdBrief(LLENO), /no te inventes/i);
+test("con ganadores reales se usan esos y no otros", () => {
+  // No por escrúpulo: los reales ya están comprobados, y mezclarlos con
+  // inventados hace que nadie sepa cuáles se pueden defender.
+  assert.match(buildCasinoAdBrief(LLENO), /no inventes otros/i);
 });
 
-test("sin ganadores no se pide el formato nominal", () => {
+test("sin ganadores el nombre se inventa, pero el bono no", () => {
   const brief = buildCasinoAdBrief({ ...LLENO, ganadores: "" });
 
-  assert.ok(!/Evaristo/.test(brief));
-  assert.match(brief, /sin ganadores/i);
+  assert.ok(!/Evaristo/.test(brief), "no debe arrastrar el ejemplo de otra pieza");
+  assert.match(brief, /inventa el nombre/i);
+  // Sin la bandera `s`, que el tsconfig no admite: dos comprobaciones sueltas
+  // dicen lo mismo y no atan el test a cómo caiga el salto de línea.
+  assert.match(brief, /El \*\*bono\*\* no se inventa/);
+});
+
+test("se pide variar el nombre entre anuncios", () => {
+  // El mismo nombre en las cinco piezas de una tanda delata que son de molde.
+  // `\s+` y no un espacio: el texto va justificado y el salto de línea cae justo
+  // ahí. Un test que se rompe por dónde parte la línea no prueba nada.
+  assert.match(buildCasinoAdBrief({ ...LLENO, ganadores: "" }), /var[íi]a el\s+nombre/i);
 });
 
 test("la jerga del dinero se dice para que el titular suene local", () => {

@@ -106,6 +106,14 @@ export const SHORT_AD_FORMATS = [
   "lo-que-probaste",
   "cadena-rota",
   "dos-vias",
+  // Los seis del vertical de casino, sacados de diez creatividades reales. Los
+  // dos de `app-en-mano` usan la captura de la app como imagen de referencia.
+  "ganador-nominal",
+  "testimonio-cambio-vida",
+  "bono-de-bienvenida",
+  "ahora-online",
+  "app-en-mano-casino",
+  "app-en-mano-calle",
 ] as const;
 
 /**
@@ -139,6 +147,54 @@ export interface ShortAdFormatMeta {
 }
 
 export const SHORT_AD_FORMAT_META: Record<KnownShortAdFormat, ShortAdFormatMeta> = {
+  "ganador-nominal": {
+    id: "ganador-nominal",
+    name: "Ganador con nombre y comuna",
+    role: "Convierte una promesa en una noticia: alguien concreto, de un barrio concreto, ganó una cifra exacta.",
+    origin: "propio",
+    stages: ["TOFU", "MOFU"],
+    hasText: true,
+  },
+  "testimonio-cambio-vida": {
+    id: "testimonio-cambio-vida",
+    name: "Esto me cambió la vida",
+    role: "El mismo montaje sin nombrar a nadie: la frase partida en dos colores invita a proyectarse.",
+    origin: "propio",
+    stages: ["TOFU", "MOFU"],
+    hasText: true,
+  },
+  "bono-de-bienvenida": {
+    id: "bono-de-bienvenida",
+    name: "El bono, en grande",
+    role: "La cifra que se regala domina la pieza. Es la entrada más directa y la de BOFU.",
+    origin: "propio",
+    stages: ["BOFU"],
+    hasText: true,
+  },
+  "ahora-online": {
+    id: "ahora-online",
+    name: "El casino de siempre, ahora online",
+    role: "Apoya en el reconocimiento de la sala física para presentar la app. Sirve donde la marca ya se conoce.",
+    origin: "propio",
+    stages: ["TOFU"],
+    hasText: true,
+  },
+  "app-en-mano-casino": {
+    id: "app-en-mano-casino",
+    name: "La app en la mano, con la sala detrás",
+    role: "Enseña la pantalla real con el casino desenfocado detrás: dice «esto que conoces, desde aquí».",
+    origin: "propio",
+    stages: ["MOFU", "BOFU"],
+    hasText: false,
+  },
+  "app-en-mano-calle": {
+    id: "app-en-mano-calle",
+    name: "La app en la mano, en la calle",
+    role: "Foto de móvil sin producción en un sitio cotidiano. Baja la guardia antes de pedir nada.",
+    origin: "propio",
+    stages: ["TOFU", "MOFU"],
+    hasText: false,
+  },
   "cuaderno-manuscrito": {
     id: "cuaderno-manuscrito",
     name: "Cuaderno manuscrito",
@@ -262,9 +318,32 @@ export const SHORT_AD_FORMAT_META: Record<KnownShortAdFormat, ShortAdFormatMeta>
 };
 
 /** Formatos que rinden en una etapa concreta del embudo. */
-export function formatsForStage(stage: FunnelStage): ShortAdFormatMeta[] {
-  return SHORT_AD_FORMATS.map((id) => SHORT_AD_FORMAT_META[id]).filter((meta) =>
-    meta.stages.includes(stage),
+/** Los seis que solo tienen sentido con una app detrás. */
+const FORMATOS_DE_CASINO = new Set<string>([
+  "ganador-nominal",
+  "testimonio-cambio-vida",
+  "bono-de-bienvenida",
+  "ahora-online",
+  "app-en-mano-casino",
+  "app-en-mano-calle",
+]);
+
+/**
+ * Formatos que rinden en una etapa, y en el vertical del producto.
+ *
+ * El vertical no es opcional en la práctica aunque tenga valor por defecto: sin
+ * él, un producto de suplementos ofrecería «el bono en grande» y un casino
+ * ofrecería un packshot del frasco. Ninguna de las dos cosas falla — se generan
+ * y se pagan.
+ */
+export function formatsForStage(
+  stage: FunnelStage,
+  vertical: "ecommerce" | "casino" = "ecommerce",
+): ShortAdFormatMeta[] {
+  return SHORT_AD_FORMATS.map((id) => SHORT_AD_FORMAT_META[id]).filter(
+    (meta) =>
+      meta.stages.includes(stage) &&
+      (vertical === "casino" ? FORMATOS_DE_CASINO.has(meta.id) : !FORMATOS_DE_CASINO.has(meta.id)),
   );
 }
 

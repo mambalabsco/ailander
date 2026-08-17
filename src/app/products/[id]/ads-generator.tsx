@@ -162,7 +162,7 @@ export function AdsGenerator({
   const campaignName = buildCampaignName({ countryCode, theme, focus });
   const adsetName = buildAdsetName({ number: nextNumbers.adset, stage, focus });
 
-  const stageFormats = formatsForStage(stage);
+  const stageFormats = formatsForStage(stage, product.vertical);
 
   return (
     <SectionCard

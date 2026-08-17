@@ -13,10 +13,14 @@
  *
  * ## Por qué se piden y no se deducen
  *
- * Porque un modelo que no los tiene **se los inventa**, y aquí lo inventado es
- * un nombre propio con su comuna y una cifra de premio. Eso no es una licencia
- * creativa: es un testimonio falso con nombre y apellido. Un bono redondeado a
- * «$100.000» cuando eran 150 lucas es publicidad engañosa por descuido.
+ * El **bono** y la **escalera de premios** son promesas comerciales: si el modelo
+ * no los tiene, se los inventa, y un bono redondeado a «$100.000» cuando eran 150
+ * lucas es publicidad engañosa por descuido.
+ *
+ * El **nombre del ganador** es otra cosa y va al revés: si hay ganadores reales
+ * se usan esos, y si no, el modelo inventa uno —así lo pidió quien usa esto—. Lo
+ * que sí se le exige es que varíe entre anuncios y que la comuna exista, porque
+ * el mismo nombre repetido cinco veces delata la tanda entera.
  */
 
 export interface CasinoAdBrief {
@@ -70,9 +74,13 @@ Y dos familias de mensaje, no más:
   ONLINE». Nombre, **comuna** y monto exacto. Lo hiperlocal es el motor: una
   comuna concreta convierte una promesa en una noticia.
 
-  Los corchetes se rellenan **solo con los ganadores reales de abajo**. Van así y
-  no con un ejemplo escrito porque un ejemplo se copia: un nombre de muestra
-  acaba publicado como si fuera alguien.
+  Si abajo hay ganadores reales, **usa esos y no otros**. Si no los hay, **puedes
+  inventar el nombre y la comuna**: que suenen del país y de una comuna que
+  exista, no de la capital siempre. Lo que no se inventa nunca es el **bono**, que
+  es una promesa comercial y sale de los datos de abajo.
+
+  Van entre corchetes y no con un ejemplo escrito porque un ejemplo se copia: el
+  mismo nombre acabaría en las cinco piezas de la tanda.
 
 El monto nunca va redondeado. Una cifra con sus últimos dígitos se lee como real;
 «más de 40 millones» se lee como publicidad.`;
@@ -99,13 +107,16 @@ export function buildCasinoAdBrief(brief: CasinoAdBrief): string {
 ${ganadores}
 
 Úsalos **tal cual** para el formato nominal: el nombre, la comuna y el monto
-exacto. **No te inventes ninguno**, ni cambies la comuna por otra que suene
-mejor: un testimonio falso con nombre y apellido no es una licencia creativa.`
-    : `### Sin ganadores
+exacto, sin redondear. Habiendo reales, no inventes otros: estos ya están
+comprobados y los inventados solo restan.`
+    : `### Sin ganadores declarados
 
-No hay ninguno confirmado, así que **no escribas el formato nominal**: no
-inventes nombres, comunas ni montos. Usa el del testimonio en primera persona sin
-identificar a nadie, o el de la oferta.`;
+No hay ninguno confirmado. Para el formato nominal **inventa el nombre y la
+comuna**: que suenen del país y que la comuna exista y no sea siempre la capital
+—lo que hace creíble la pieza es que parezca del barrio de al lado—. Varía el
+nombre en cada anuncio de la tanda.
+
+El **bono** no se inventa: sale de los datos de arriba o no se menciona.`;
 
   return `${ANATOMIA}
 

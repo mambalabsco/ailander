@@ -65,6 +65,20 @@ instrucción y una regla se contradicen, **gana la regla**.
  * se queda sin ella: aquel importa con alias y no se puede cargar desde un test.
  */
 export const INSTRUCCIONES_VISUALES: Record<string, string> = {
+  /* ----------------------------- Casino online ------------------------------ */
+
+  "ganador-nominal": `Foto real de entrega de premio: una persona común —45 a 65 años, nada de modelos— sosteniendo un cheque gigante o una placa, con **confeti en el aire** y el salón del casino detrás, desenfocado. Cara de sorpresa contenida, no de euforia. Icono de la app arriba a la izquierda. Arriba a la derecha, una **burbuja de borde irregular** morada muy oscura con la marca en blanco fino y debajo el reclamo en magenta pesado. Banda inferior morada con el titular en **condensada muy pesada** y **el nombre y el monto resaltados sobre un rectángulo verde lima**. Badge de la tienda abajo al centro. El dispositivo es el resalte: cae sobre la cifra, nunca sobre el verbo.`,
+
+  "testimonio-cambio-vida": `La misma foto de entrega con confeti, pero el titular no nombra a nadie: va en primera persona y **la segunda mitad va resaltada sobre magenta**, con puntos suspensivos al final. La banda inferior ocupa un tercio de la pieza. Fajos de billetes locales compuestos en el borde de abajo, entrando en la foto. El dispositivo es la frase partida en dos colores: la primera mitad afirma y la segunda invita.`,
+
+  "bono-de-bienvenida": `Foto de ganador con confeti al fondo, pero **el protagonista es la cifra**: banda inferior con «TE REGALAMOS» en blanco y el **monto gigante resaltado sobre verde lima**, ocupando más que ninguna otra cosa de la pieza. Icono de la app arriba a la izquierda y badge de la tienda abajo. Billetes locales en el borde inferior. El dispositivo es el tamaño: la cifra dobla a todo lo demás.`,
+
+  "ahora-online": `Foto de sala de casino real con gente celebrando. Arriba a la derecha, la burbuja irregular con el nombre del casino en blanco y **«¡AHORA ONLINE!» en magenta pesado**, que es el mensaje entero. Abajo, banda con la oferta de entrada y el badge de la tienda. El dispositivo es el contraste entre la sala física reconocible y la palabra «online».`,
+
+  "app-en-mano-casino": `**Un teléfono sostenido en primer plano con la app de la imagen de referencia en pantalla, reproducida tal cual.** La mano ocupa el tercio inferior y el teléfono está ligeramente inclinado, con reflejo real de pantalla. Detrás, desenfocada, la sala del casino con luces y confeti. Icono de la app arriba a la izquierda y banda inferior corta con el reclamo. El dispositivo es la profundidad: la pantalla nítida y el mundo detrás borroso, que es lo que dice «esto se juega desde aquí».`,
+
+  "app-en-mano-calle": `**Teléfono en la mano con la app de la imagen de referencia en pantalla, reproducida tal cual**, sostenido por alguien del público en un sitio cotidiano del país: un colectivo, una cocina, la vereda. Luz natural, foto de móvil sin producción, ligeramente descentrada. Sin sala de casino ni confeti. El dispositivo es lo mundano: parece una foto que alguien mandó, no una campaña.`,
+
   "cuaderno-manuscrito": `Cuaderno de espiral sobre mesa de madera, luz cálida. En la hoja, **una sola frase manuscrita enorme** ocupando media página y subrayada a marcador; el resto de la nota, mucho más pequeño y a boli. El producto apoyado encima. El dispositivo es el salto de tamaño entre esa frase y todo lo demás: nada de párrafos parejos.`,
 
   "beneficios-flotantes": `Persona real del público sosteniendo el producto, **iluminada** contra un fondo del color de marca que se apaga hacia los bordes. Solo **tres** etiquetas flotantes en píldora, grandes y legibles. Encima, el antetítulo pequeño y la palabra gigante. El dispositivo es la luz: ella brilla y el fondo no.`,

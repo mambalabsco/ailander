@@ -104,7 +104,7 @@ export function buildShortAdBatchPrompt(options: {
       ? prelandings.find((item) => item.id === adset.destination.prelandingId)?.url
       : adset.destination.url || product.landingUrl;
 
-  const formats = resolveFormats(adset.stage, count, options.formats);
+  const formats = resolveFormats(adset.stage, count, options.formats, product.vertical);
 
   const openInvitation = `
 
@@ -240,12 +240,13 @@ export function resolveFormats(
   stage: FunnelStage,
   count: number,
   explicit?: ShortAdFormat[],
+  vertical: "ecommerce" | "casino" = "ecommerce",
 ): ShortAdFormat[] {
   if (explicit && explicit.length > 0) {
     return Array.from({ length: count }, (_, index) => explicit[index % explicit.length]);
   }
 
-  const stageFormats = formatsForStage(stage).map((meta) => meta.id);
+  const stageFormats = formatsForStage(stage, vertical).map((meta) => meta.id);
   const pool = stageFormats.length > 0 ? stageFormats : [...SHORT_AD_FORMATS];
 
   return Array.from({ length: count }, (_, index) => pool[index % pool.length]);
