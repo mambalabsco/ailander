@@ -634,6 +634,26 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
   // Sin alcance, embudo: es lo que hacía siempre antes de que se pudiera elegir.
   const alcance = readText(raw.alcance) === "etapa" ? "etapa" : "embudo";
 
+  /*
+   * Los datos de la creatividad de casino.
+   *
+   * Solo en ese vertical: en e-commerce no hay bono ni escalera de premios, y el
+   * bloque entero se queda vacío.
+   */
+  const { buildCasinoAdBrief } = await import("@/lib/casino-ad-brief");
+  const casino =
+    ctx.product.vertical === "casino"
+      ? buildCasinoAdBrief({
+          appName: readText(raw.appName),
+          bono: readText(raw.bono),
+          premios: readText(raw.premios),
+          ganadores: readText(raw.ganadores),
+          tienda: readText(raw.tienda),
+          jerga: readText(raw.jerga),
+          notas: readText(raw.notasCasino),
+        })
+      : "";
+
   const [angles, prelandings, numbers] = await Promise.all([
     readAngles(ctx.id),
     readPrelandings(ctx.id),
@@ -688,6 +708,7 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
     angle,
     origen: anatomia && nivel ? { anatomia, nivel } : undefined,
     alcance,
+    casino,
     count,
     startNumber: numbers.ad,
   })}

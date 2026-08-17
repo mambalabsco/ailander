@@ -72,6 +72,14 @@ export function buildShortAdBatchPrompt(options: {
    * cosa, aunque la pantalla dijera «Etapa del embudo» como si se pudiera.
    */
   alcance?: AlcanceDeTanda;
+  /**
+   * Los datos de la creatividad de casino: bono, premios, ganadores.
+   *
+   * Van aparte del resto porque **ningún documento los puede saber** —cuánto
+   * regala el bono esta semana, quién ganó y en qué comuna— y sin ellos el
+   * modelo se los inventa: un nombre propio con su comuna y una cifra de premio.
+   */
+  casino?: string;
   count?: number;
   /** Formatos concretos; si no se indican, se reparten los de la etapa. */
   formats?: ShortAdFormat[];
@@ -176,6 +184,7 @@ ${
 
 ## Tarea
 
+${options.casino ? `${options.casino}\n` : ""}
 ${batchScopeRule({ alcance, stage: adset.stage, count })}
 ${
   origen

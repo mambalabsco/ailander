@@ -72,6 +72,22 @@ export function AdsGenerator({
   const router = useRouter();
   const [guardandoDuenio, setGuardandoDuenio] = useState(false);
   const [alcance, setAlcance] = useState<AlcanceDeTanda>("embudo");
+  /*
+   * Lo que ninguna investigación puede saber, y por eso se pregunta.
+   *
+   * Cuánto regala el bono esta semana, qué hay en la escalera de premios y quién
+   * ganó de verdad. Sin estos datos el modelo **se los inventa**, y aquí lo
+   * inventado es un nombre propio con su comuna y una cifra de premio: eso no es
+   * una licencia creativa, es un testimonio falso con nombre y apellido.
+   */
+  const [casino, setCasino] = useState({
+    bono: "",
+    premios: "",
+    ganadores: "",
+    tienda: "Google Play",
+    jerga: "",
+    notas: "",
+  });
   const embudoCompleto = alcance === "embudo";
   const [fuente, setFuente] = useState<"angulo" | "material" | "nuevo">("angulo");
   const [copyNuevo, setCopyNuevo] = useState("");
@@ -103,6 +119,7 @@ export function AdsGenerator({
   const selectedAnatomia = anatomias.find((item) => item.id === anatomiaId);
   const desdeMaterial = fuente === "material" && Boolean(selectedAnatomia);
   const copyCorto = copyNuevo.trim().length < 200;
+  const esCasino = product.vertical === "casino";
 
   /**
    * El tema y el enfoque no se piden: se deducen.
@@ -663,6 +680,7 @@ export function AdsGenerator({
                   audience: derivedAudience,
                   destination: destinationType,
                   prelandingId,
+                  ...(esCasino ? { ...casino, notasCasino: casino.notas } : {}),
                 });
               }}
               label={
@@ -688,6 +706,72 @@ export function AdsGenerator({
               </p>
             ) : null}
           </div>
+
+          {esCasino ? (
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-sm font-medium">Los datos de la promoción</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Nada de esto sale de la investigación: cambia cada semana. Si lo dejas vacío, el
+                modelo se lo inventa — y aquí lo inventado es un nombre propio con su comuna y una
+                cifra de premio.
+              </p>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <Field label="Lo que se regala">
+                  <TextField
+                    value={casino.bono}
+                    onChange={(event) => setCasino({ ...casino, bono: event.target.value })}
+                    placeholder="$100.000 para jugar · +150 lucas"
+                  />
+                </Field>
+                <Field label="Cómo se llama al dinero ahí">
+                  <TextField
+                    value={casino.jerga}
+                    onChange={(event) => setCasino({ ...casino, jerga: event.target.value })}
+                    placeholder="lucas, soles, zł"
+                  />
+                </Field>
+                <Field label="Dónde se descarga">
+                  <TextField
+                    value={casino.tienda}
+                    onChange={(event) => setCasino({ ...casino, tienda: event.target.value })}
+                    placeholder="Google Play"
+                  />
+                </Field>
+                <Field label="La escalera de premios">
+                  <TextField
+                    value={casino.premios}
+                    onChange={(event) => setCasino({ ...casino, premios: event.target.value })}
+                    placeholder="1 casa, 1 SUV, sueldo mensual, 1 viaje"
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                <Field label="Ganadores reales (uno por línea: nombre, comuna, monto)">
+                  <TextAreaField
+                    rows={3}
+                    value={casino.ganadores}
+                    onChange={(event) => setCasino({ ...casino, ganadores: event.target.value })}
+                    placeholder={"Evaristo Castillo, Maipú, $42.640.550"}
+                  />
+                </Field>
+                <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Solo los de verdad. Sin ninguno, el encargo prohíbe el formato nominal y escribe el
+                  testimonio sin identificar a nadie.
+                </p>
+
+                <Field label="Cualquier otra cosa que haga falta">
+                  <TextAreaField
+                    rows={3}
+                    value={casino.notas}
+                    onChange={(event) => setCasino({ ...casino, notas: event.target.value })}
+                    placeholder="Fechas de sorteo, condiciones del bono, lo que sea. Entra tal cual en el encargo."
+                  />
+                </Field>
+              </div>
+            </div>
+          ) : null}
 
           {/*
             El que no pregunta nada.
