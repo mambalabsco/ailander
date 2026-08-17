@@ -3,6 +3,8 @@ import { PRODUCT_IMAGE_PATTERN_META, type ProductImagePattern } from "@/types/vi
 
 import { requireContext } from "@/lib/supabase/session";
 import { toProductImage } from "@/lib/data/mappers";
+import { buildAdImageName, siguienteSecuencia } from "@/lib/nombre-de-creatividad";
+import type { Tables } from "@/types/database";
 import type { ProductImage } from "@/types/visuals";
 
 /**
@@ -242,6 +244,40 @@ function imageMarket(pattern: string, marketId: string | null | undefined): stri
   return (meta?.hasText ?? true) ? (marketId ?? null) : null;
 }
 
+/**
+ * Cómo se llamará la creatividad de un anuncio, y qué lugar ocupa.
+ *
+ * Dos consultas y no una: el nombre del anuncio vive en `short_ads` y el máximo
+ * en `product_images`. El máximo se pide con `order` + `limit 1`, que es como lo
+ * pide el resto del proyecto (`nextNumbers`, en `campaigns.ts`).
+ *
+ * **Se cuentan también las descartadas**: un número entregado no vuelve a salir
+ * aunque su imagen se haya escondido. Y hace falta el `not is null` porque en
+ * Postgres los nulos van primero en un orden descendente.
+ */
+async function nombreParaAnuncio(
+  supabase: Awaited<ReturnType<typeof requireContext>>["supabase"],
+  adId: string,
+): Promise<{ name: string; sequence: number } | null> {
+  const [ad, ultima] = await Promise.all([
+    supabase.from("short_ads").select("name").eq("id", adId).maybeSingle(),
+    supabase
+      .from("product_images")
+      .select("ad_sequence")
+      .eq("ad_id", adId)
+      .not("ad_sequence", "is", null)
+      .order("ad_sequence", { ascending: false })
+      .limit(1),
+  ]);
+
+  // Sin anuncio no hay nombre que heredar. Puede pasar: `ad_id` es
+  // `on delete set null`, así que una imagen sobrevive a su anuncio.
+  if (!ad.data?.name) return null;
+
+  const sequence = siguienteSecuencia(ultima.data?.[0]?.ad_sequence ?? null);
+  return { name: buildAdImageName({ adName: ad.data.name, sequence }), sequence };
+}
+
 export async function uploadGeneratedImage(input: {
   /**
    * El mercado en el que se generó. Nulo es general.
@@ -318,37 +354,74 @@ export async function uploadGeneratedImage(input: {
 
   if (uploadError) throw new Error(`No se pudo guardar la imagen: ${uploadError.message}`);
 
-  const { data, error } = await supabase
-    .from("product_images")
-    .insert({
-      user_id: userId,
-      product_id: input.productId,
-      market_id: imageMarket(input.pattern, input.marketId),
-      pattern: input.pattern,
-      name: input.name,
-      storage_path: path,
-      storage_bucket: BUCKET,
-      mime_type: contentType,
-      size_bytes: bytes.byteLength,
-      // Vacío, no nulo: las columnas son NOT NULL y una imagen subida
-      // sencillamente no tiene prompt ni modelo.
-      prompt: input.prompt ?? "",
-      model_id: input.modelId ?? "",
-      is_primary: input.isPrimary ?? false,
-      source: input.source ?? "generada",
-      copy_id: input.copyId ?? null,
-      ad_id: input.adId ?? null,
-      landing_id: input.landingId ?? null,
-      concept: input.concept ?? null,
-      origin_label: input.originLabel ?? null,
-    })
-    .select("*")
-    .single();
+  /*
+   * El nombre de una creatividad de anuncio no es negociable desde fuera: es lo
+   * que se escribe en el gestor de anuncios. El `name` que llegue por parámetro
+   * se ignora cuando hay `adId`.
+   */
+  let bautizo = input.adId ? await nombreParaAnuncio(supabase, input.adId) : null;
 
-  if (error) {
+  /*
+   * Dos intentos como mucho.
+   *
+   * El índice único `(ad_id, ad_sequence)` hace fallar con 23505 si otra pestaña
+   * se llevó el mismo número entre la consulta del máximo y la inserción;
+   * entonces se recalcula y se vuelve a probar. Sin el índice no fallaría nada:
+   * se guardarían dos imágenes con el mismo nombre, que es el fallo que esto
+   * viene a cerrar.
+   */
+  let data: Tables<"product_images"> | null = null;
+  let error: { code?: string; message: string } | null = null;
+
+  for (let intento = 0; intento < 2; intento += 1) {
+    const respuesta = await supabase
+      .from("product_images")
+      .insert({
+        user_id: userId,
+        product_id: input.productId,
+        market_id: imageMarket(input.pattern, input.marketId),
+        pattern: input.pattern,
+        name: bautizo?.name ?? input.name,
+        ad_sequence: bautizo?.sequence ?? null,
+        storage_path: path,
+        storage_bucket: BUCKET,
+        mime_type: contentType,
+        size_bytes: bytes.byteLength,
+        // Vacío, no nulo: las columnas son NOT NULL y una imagen subida
+        // sencillamente no tiene prompt ni modelo.
+        prompt: input.prompt ?? "",
+        model_id: input.modelId ?? "",
+        is_primary: input.isPrimary ?? false,
+        source: input.source ?? "generada",
+        copy_id: input.copyId ?? null,
+        ad_id: input.adId ?? null,
+        landing_id: input.landingId ?? null,
+        concept: input.concept ?? null,
+        origin_label: input.originLabel ?? null,
+      })
+      .select("*")
+      .single();
+
+    if (!respuesta.error) {
+      data = respuesta.data;
+      error = null;
+      break;
+    }
+
+    error = respuesta.error;
+
+    // Solo se reintenta el choque de correlativo. Cualquier otro error se
+    // propaga tal cual: reintentarlo sería esconderlo.
+    const chocoElCorrelativo = respuesta.error.code === "23505" && Boolean(input.adId);
+    if (!chocoElCorrelativo || intento === 1) break;
+
+    bautizo = await nombreParaAnuncio(supabase, input.adId as string);
+  }
+
+  if (error || !data) {
     // Sin fila, el archivo sería basura que nadie puede ver ni borrar.
     await supabase.storage.from(BUCKET).remove([path]);
-    throw new Error(`No se pudo registrar la imagen: ${error.message}`);
+    throw new Error(`No se pudo registrar la imagen: ${error?.message ?? "sin fila"}`);
   }
 
   /*
