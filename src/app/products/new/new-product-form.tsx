@@ -244,27 +244,71 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
 
       {esCasino ? (
         <section>
-          <h3 className="text-sm font-semibold">De qué país</h3>
+          <h3 className="text-sm font-semibold">El país</h3>
           <p className="mt-1 mb-4 text-sm text-slate-500 dark:text-slate-400">
-            Un casino no tiene tienda ni mercado: el producto <strong>es</strong> el país, y de él
-            cuelgan las apps. País e idioma se escriben aquí.
+            Un casino no tiene tienda, ni precio, ni envío: el producto <strong>es</strong> el país,
+            y de él cuelgan las apps. Esto es todo lo que hace falta.
           </p>
+
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="País">
+            <Field label="Cómo lo llamas">
+              <TextField
+                required
+                value={form.name}
+                onChange={(event) => update("name", event.target.value)}
+                placeholder="Casino online Chile"
+              />
+            </Field>
+            <Field label="País donde se juega">
               <TextField
                 value={form.country}
                 onChange={(event) => update("country", event.target.value)}
                 placeholder="Chile"
               />
             </Field>
-            <Field label="Idioma">
+            <Field label="Idioma y forma de hablar">
               <TextField
                 value={form.language}
                 onChange={(event) => update("language", event.target.value)}
-                placeholder="Español"
+                placeholder="Español de Chile"
+              />
+            </Field>
+            <Field label="Edad del jugador (opcional)">
+              <TextField
+                value={form.targetAgeRange}
+                onChange={(event) => update("targetAgeRange", event.target.value)}
+                placeholder="25-45"
               />
             </Field>
           </div>
+
+          <div className="mt-4 space-y-4">
+            <Field label="Quién juega ahí (opcional)">
+              <TextField
+                value={form.targetAudience}
+                onChange={(event) => update("targetAudience", event.target.value)}
+                placeholder="Solo si ya lo sabes. Si no, lo averigua la investigación."
+              />
+            </Field>
+
+            {/*
+              Los competidores son casinos, no marcas de suplementos: es lo que
+              alimenta el documento de panorama, así que la etiqueta lo dice.
+            */}
+            <Field label="Casinos que ya operan ahí (una URL por línea, opcional)">
+              <TextAreaField
+                rows={3}
+                value={form.competitorUrls}
+                onChange={(event) => update("competitorUrls", event.target.value)}
+                placeholder={"https://…\nhttps://…"}
+              />
+            </Field>
+          </div>
+
+          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+            Lo demás lo averigua la investigación: quién juega, qué teme, cómo paga y contra quién
+            compites. Las apps se dan de alta después, en su pestaña, pegando su dirección.
+          </p>
         </section>
       ) : (
       <section>
@@ -315,6 +359,7 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
       </section>
       )}
 
+      {esCasino ? null : (
       <section>
         <h3 className="text-sm font-semibold">Ficha del producto</h3>
         <p className="mt-1 mb-4 text-sm text-slate-500 dark:text-slate-400">
@@ -385,6 +430,9 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
         </div>
       </section>
 
+      )}
+
+      {esCasino ? null : (
       <section className="rounded-3xl border border-violet-200 bg-violet-50/50 p-5 dark:border-violet-900 dark:bg-violet-950/20">
         <h3 className="text-sm font-semibold">Datos para la investigación</h3>
         <p className="mt-1 mb-4 text-sm text-slate-600 dark:text-slate-300">
@@ -495,6 +543,7 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
           </div>
         </fieldset>
       </section>
+      )}
 
       {error ? (
         <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-200">

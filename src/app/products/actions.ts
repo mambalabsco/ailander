@@ -95,6 +95,23 @@ export async function createProductFromForm(input: unknown) {
    */
   const esCasino = draft.vertical === "casino";
 
+  /*
+   * Lo que el formulario de casino ya no pregunta, puesto aquí.
+   *
+   * Marca, categoría y nicho no se le piden a nadie que da de alta un país —no
+   * significan nada ahí— pero `buildProductContext` los pega en el encargo de
+   * cada copy. Sin valor salían vacíos, y un contexto con «Categoría: » en
+   * blanco no falla: le dice al modelo que la categoría es irrelevante.
+   */
+  if (esCasino) {
+    draft.brand = draft.brand || draft.name;
+    draft.category = draft.category || "Casino online";
+    draft.research.niche = draft.research.niche || "casino online";
+    draft.description =
+      draft.description ||
+      `Casino online para jugadores de ${draft.country}. Las apps concretas cuelgan de este producto.`;
+  }
+
   // Todo producto de e-commerce cuelga de una tienda y un mercado: si el
   // formulario no los trae, se usan los principales en vez de dejarlo huérfano.
   if (!esCasino && (!draft.storeId || !draft.marketId)) {
