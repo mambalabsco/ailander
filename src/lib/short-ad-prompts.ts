@@ -11,6 +11,8 @@ import {
   formatsForStage,
 } from "@/types/campaign";
 import { buildProductContext } from "@/lib/copy-prompts";
+import { reglaDeMedidas } from "@/lib/medidas-de-anuncio";
+import { FACEBOOK_LIMITS } from "@/types/copy";
 import { copyLevelRule } from "@/lib/nivel-de-copia";
 import { batchScopeRule } from "@/lib/alcance-de-tanda";
 import type { AlcanceDeTanda } from "@/lib/alcance-de-tanda";
@@ -28,8 +30,11 @@ import type { Store } from "@/types/store";
  * Diferencias con el long copy que conviene no perder de vista:
  * - El texto es corto y escaneable, de una o dos líneas por párrafo, con emojis
  *   como viñetas y la escalera de precios visible.
- * - La descripción sigue un patrón fijo separado por puntos medios:
- *   `Marca · Oferta · Envío · Garantía · Zona`.
+ * - El titular y la descripción llevan sus medidas dentro del encargo
+ *   (`reglaDeMedidas`), y eso **no es cosmético**: antes se pedían «una o dos
+ *   frases» y una descripción de cinco campos, y el servidor recortaba a 40 y 30
+ *   sin decírselo al modelo. Salían titulares a media frase y la misma
+ *   descripción en todos los anuncios.
  * - La URL va en el texto pero **nunca dentro de la imagen**.
  */
 
@@ -209,12 +214,11 @@ ${openInvitation}
 - **los textos exactos que van incrustados**, indicando color, tamaño relativo y qué va resaltado,
 - referencia de estilo y una línea final: \`NO URL on image\`.
 
-**HEADLINE:** una o dos frases con gancho. Puede empezar con un emoji.
+**HEADLINE:** una frase con gancho. Puede empezar con un emoji.
 
 **TEXTO:** el cuerpo del anuncio. Párrafos de una o dos líneas con saltos entre medias. Emojis como viñetas. Escaneable en el feed sin ampliar. Entre 150 y 350 palabras: esto es un anuncio corto, no un publirreportaje. Incluye la escalera de precios cuando la etapa sea BOFU, con el precio anterior tachado. Termina con la llamada a la acción y la URL de destino.
 
-**DESCRIPCIÓN:** una sola línea con elementos separados por punto medio, siguiendo este patrón:
-\`Marca · Oferta · Envío · Garantía · Zona\`
+${reglaDeMedidas(FACEBOOK_LIMITS)}
 
 ## Reglas
 
