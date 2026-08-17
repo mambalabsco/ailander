@@ -12,6 +12,7 @@ import {
 } from "@/types/campaign";
 import { buildProductContext } from "@/lib/copy-prompts";
 import { reglaDeMedidas } from "@/lib/medidas-de-anuncio";
+import { INSTRUCCIONES_VISUALES, reglasVisuales } from "@/lib/gramatica-visual";
 import { FACEBOOK_LIMITS } from "@/types/copy";
 import { copyLevelRule } from "@/lib/nivel-de-copia";
 import { batchScopeRule } from "@/lib/alcance-de-tanda";
@@ -41,19 +42,6 @@ import type { Store } from "@/types/store";
 /** Cuántos anuncios pide una tanda por defecto. */
 export const DEFAULT_BATCH_SIZE = 10;
 
-/** Instrucción visual de cada formato, con el nivel de detalle de `short.md`. */
-const FORMAT_IMAGE_BRIEFS: Record<string, string> = {
-  "cuaderno-manuscrito": `Cuaderno de espiral realista sobre mesa de madera, luz cálida, aire hecho a mano y auténtico. En la hoja, texto **manuscrito** en varios colores (boli azul, rojo, verde) con frases clave resaltadas en subrayador amarillo, rosa y verde. El producto apoyado sobre el cuaderno o al lado, foto real compuesta. El bloque final en rojo grande con la oferta. Estilo personal, nada corporativo.`,
-  "beneficios-flotantes": `Fondo degradado limpio en el color de marca. Persona real del público objetivo, sonriendo con naturalidad y sosteniendo el producto a la altura del pecho, mirando a cámara. Alrededor de la cara y el cuerpo, **etiquetas flotantes en forma de píldora blanca con texto oscuro**, cada una nombrando un resultado concreto. Arriba, el precio en blanco muy grande. Abajo, barra redondeada oscura con la llamada a la acción.`,
-  "urgencia-countdown": `Escena exterior luminosa acorde a la temporada. A un lado, un reloj despertador grande como icono; al otro, el producto de pie en la escena. Detrás, un cartel de colores con el descuento en cifras grandes. Texto superpuesto en blanco con sombra marcada: la tensión temporal arriba y el plazo restante en amarillo. Alta energía y contraste.`,
-  "comparativa-precio": `Infografía limpia de comparación de precio sobre fondo oscuro de marca. Cuatro cajas en fila: tres alternativas cotidianas en gris apagado con su coste diario y una X roja, y la cuarta caja destacada con borde de color como ganadora, con el coste diario del producto y un check verde. Debajo, una línea en negrita con el coste por día y otra con lo que se obtiene por ese precio.`,
-  "testimonios-grid": `Fondo claro con acentos de marca. Tres tarjetas de testimonio en rejilla, cada una con foto circular de perfil realista, cinco estrellas, una cita corta y creíble, y nombre con ciudad. Debajo, caja de oferta en color oscuro con el pack recomendado y sus ventajas con checks. A un lado, el producto destacado. Abajo, barra con la valoración media y el número de reseñas.`,
-  "antes-despues": `Dos encuadres idénticos lado a lado, misma luz y mismo ángulo, separados por una línea fina y etiquetados "Antes" y "Después" en tipografía clara. La diferencia debe verse pero mantenerse creíble. Producto pequeño en una esquina. Fondo neutro.`,
-  "ugc-selfie": `Foto tipo móvil, sin producción: alguien del público objetivo sosteniendo el producto en su casa, luz de ventana, encuadre ligeramente descentrado e imperfecto. Debe parecer una foto enviada a una amiga, no una campaña. Sin texto incrustado.`,
-  "mecanismo-explicado": `Diagrama simple y limpio sobre fondo claro que explica en tres pasos por qué ocurre el problema, con iconos sencillos y flechas. Tipografía grande y legible, nada de jerga. El producto aparece al final del recorrido como el punto que rompe la cadena.`,
-  "packshot-oferta": `Producto sobre fondo limpio y sin distracciones, con el precio y el ahorro dominando la composición en tipografía muy grande. Precio anterior tachado y precio nuevo destacado. Sellos de envío y garantía en pequeño. Mucho aire.`,
-  "pregunta-directa": `Fondo de color plano y saturado con una única pregunta en tipografía muy grande que ocupa casi todo el encuadre. El producto pequeño en una esquina inferior. Sin más elementos: la pregunta es la creatividad.`,
-};
 
 /**
  * Prompt para generar una tanda de anuncios cortos.
@@ -119,7 +107,8 @@ export function buildShortAdBatchPrompt(options: {
       const meta = formatMeta(format);
       // Un formato inventado no tiene instrucción visual escrita; se dice en vez
       // de dejar «undefined» dentro del prompt.
-      const brief = FORMAT_IMAGE_BRIEFS[format] ?? "Decide tú el tratamiento visual y descríbelo.";
+      const brief =
+        INSTRUCCIONES_VISUALES[format] ?? "Decide tú el tratamiento visual y descríbelo.";
       return `${startNumber + index}. **${meta.name}** — ${meta.role}\n   Instrucción visual: ${brief}`;
     })
     .join("\n\n");
@@ -198,6 +187,8 @@ Eso vale también para los conjuntos de TOFU y MOFU: entran por el problema y po
     : ""
 }
 En el campo \`name\` de cada anuncio escribe **solo el gancho en pocas palabras**, sin prefijos ni numeración: el nombre completo lo monta la plataforma.
+
+${reglasVisuales({ total: count })}
 
 ### Formatos de esta tanda
 
