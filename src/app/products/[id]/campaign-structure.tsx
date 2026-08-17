@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EmptyState, Tag } from "@/components/ui";
 import { CampaignBatch } from "@/app/products/[id]/campaign-batch";
+import { CampaignDownload } from "@/app/products/[id]/campaign-download";
 import {
   archiveCampaignAction,
   moveCampaignAction,
@@ -199,6 +200,11 @@ export function CampaignStructure({
                   images={images}
                   label="esta campaña"
                 />
+                <CampaignDownload
+                  ads={adsDeLaCampana}
+                  images={images}
+                  label="la campaña entera"
+                />
                 <CampaignRowActions
                   productId={productId}
                   campaignId={tree.campaign.id}
@@ -254,12 +260,17 @@ export function CampaignStructure({
                       {/* El conjunto es la unidad real de trabajo —mismo
                           destino, misma audiencia—, así que lleva su propio
                           botón además del de la campaña. */}
-                      <div className="mt-3">
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
                         <CampaignBatch
                           productId={productId}
                           ads={node.ads}
                           images={images}
                           label="este conjunto"
+                        />
+                        <CampaignDownload
+                          ads={node.ads}
+                          images={images}
+                          label="el conjunto"
                         />
                       </div>
 
