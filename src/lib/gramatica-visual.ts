@@ -77,6 +77,22 @@ export const INSTRUCCIONES_VISUALES: Record<string, string> = {
 
   "app-en-mano-casino": `**Un teléfono sostenido en primer plano con la app de la imagen de referencia en pantalla, reproducida tal cual.** La mano ocupa el tercio inferior y el teléfono está ligeramente inclinado, con reflejo real de pantalla. Detrás, desenfocada, la sala del casino con luces y confeti. Icono de la app arriba a la izquierda y banda inferior corta con el reclamo. El dispositivo es la profundidad: la pantalla nítida y el mundo detrás borroso, que es lo que dice «esto se juega desde aquí».`,
 
+  "comprobante-de-retiro": `Primer plano de un teléfono con **la notificación del banco en pantalla** —el aviso de transferencia recibida, con el monto—, y detrás, desenfocada, la app abierta en otro dispositivo o la persona en su cocina. La prueba la da **la interfaz del banco, no la del casino**: ese es el dispositivo entero. Banda inferior corta con las horas que tardó. Nada de confeti aquí: esto no celebra, demuestra.`,
+
+  "donde-ya-pagas": `Fondo limpio del color de marca. En el centro, **los logotipos de los métodos de pago locales** en fila, grandes y reconocibles, como los que aparecen en la tienda de la esquina. Encima, una línea corta: depositar con lo que ya usas. El teléfono con la app pequeño a un lado. El dispositivo es la familiaridad: no hay nada nuevo que aprender, y por eso no hay nada que temer.`,
+
+  "cuanto-es-eso": `Composición en **dos mitades**: arriba la cifra del premio, gigante; abajo, esa misma cifra traducida a cosas de la vida en tres iconos con su número —meses de arriendo, sueldos, años de colegio—. El dispositivo es la conversión: un número grande no se siente, una cuenta sí. Tipografía condensada, fondo oscuro de marca, nada de fotos de lujo.`,
+
+  "sueldo-de-por-vida": `Un **calendario o una libreta de banco** con la misma cantidad repitiéndose mes tras mes, en filas, hasta salirse del encuadre. Una persona común mirándolo con calma, no con euforia. El dispositivo es la repetición: lo que se vende no es un golpe de suerte, es que no se acabe. Banda inferior sobria.`,
+
+  "la-mesa-en-vivo": `**Una crupier real mirando a cámara** desde dentro de la pantalla de un teléfono sostenido en primer plano, con la mesa y las cartas alrededor. Iluminación cálida de sala. El dispositivo es la mirada: alguien te está mirando de vuelta, y eso rompe la idea de estar solo frente a una máquina. Sin texto incrustado.`,
+
+  "antes-de-dormir": `Luz de lámpara, de noche. Alguien en el sillón o en la cama, en pijama, con el teléfono y **la cara iluminada por la pantalla**. La casa a oscuras alrededor. Sin confeti, sin dinero, sin nadie más. El dispositivo es la hora: dice cuándo se juega de verdad y da permiso sin pedirlo.`,
+
+  "reaccion-de-los-otros": `El ganador está **de espaldas o desenfocado**, y quien ocupa el foco es su familia mirándolo: la cara de la hija, la de la señora, las manos en la boca. El dispositivo es el reflejo: la emoción se cuenta por lo que le pasa a los demás, que es más creíble que la del propio protagonista. Banda inferior con la frase corta.`,
+
+  "sala-o-sillon": `**Dos columnas separadas por una línea fina.** A la izquierda, el viaje al casino: el auto, la carretera, la fila de entrada, en gris apagado. A la derecha, el sillón de casa con el teléfono, a todo color. Dos o tres palabras bajo cada columna. El dispositivo es la comparación de esfuerzo, y por eso el lado izquierdo tiene que verse cansado.`,
+
   "app-en-mano-calle": `**Teléfono en la mano con la app de la imagen de referencia en pantalla, reproducida tal cual**, sostenido por alguien del público en un sitio cotidiano del país: un colectivo, una cocina, la vereda. Luz natural, foto de móvil sin producción, ligeramente descentrada. Sin sala de casino ni confeti. El dispositivo es lo mundano: parece una foto que alguien mandó, no una campaña.`,
 
   "cuaderno-manuscrito": `Cuaderno de espiral sobre mesa de madera, luz cálida. En la hoja, **una sola frase manuscrita enorme** ocupando media página y subrayada a marcador; el resto de la nota, mucho más pequeño y a boli. El producto apoyado encima. El dispositivo es el salto de tamaño entre esa frase y todo lo demás: nada de párrafos parejos.`,
