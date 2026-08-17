@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { useHiggsfieldModels } from "@/components/model-picker";
+import { ModelPicker, useHiggsfieldModels } from "@/components/model-picker";
 import { generateAdVisualsAction } from "@/app/products/[id]/image-generate-actions";
 import { tandaDeImagenes } from "@/lib/tanda-de-imagenes";
 import type { ShortAd } from "@/types/campaign";
@@ -86,40 +86,68 @@ export function CampaignBatch({
   if (faltan.length === 0 && yaEstan.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button
-        variant="secondary"
-        onClick={run}
-        disabled={isPending || aGenerar.length === 0 || !catalog.slug}
-        title={
-          aGenerar.length === 0
-            ? `Todos los anuncios de ${label} tienen ya su imagen.`
-            : undefined
-        }
-      >
-        {isPending
-          ? "Lanzando…"
-          : aGenerar.length === 0
-            ? "No falta ninguna"
-            : aGenerar.length === 1
-              ? "Generar la que falta"
-              : `Generar las ${aGenerar.length} que faltan`}
-      </Button>
+    <div>
+      {/*
+        El selector, con el coste de la tanda entera.
 
-      {yaEstan.length > 0 ? (
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={incluirHechas}
-            onChange={(event) => setIncluirHechas(event.target.checked)}
-            className="size-3.5 accent-violet-600"
-          />
-          rehacer también {yaEstan.length === 1 ? "la que ya está" : `las ${yaEstan.length} que ya están`}
-        </label>
+        Sin él la tanda salía con **el primer modelo del catálogo** y no lo decía:
+        se pagaba una tanda de siete con un modelo que no habías elegido. Y como
+        `ModelPicker` multiplica los créditos por el número de imágenes, aquí es
+        donde más sirve: en un lote, la diferencia entre dos modelos es siete
+        veces la de una imagen suelta.
+      */}
+      {aGenerar.length > 0 ? (
+        <ModelPicker
+          label="Modelo"
+          models={catalog.models}
+          warnings={catalog.warnings}
+          slug={catalog.slug}
+          onChange={catalog.setSlug}
+          selected={catalog.selected}
+          count={aGenerar.length}
+        />
       ) : null}
 
-      {notice ? <p className="text-xs text-slate-600 dark:text-slate-300">{notice}</p> : null}
-      {error ? <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p> : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
+          onClick={run}
+          disabled={isPending || aGenerar.length === 0 || !catalog.slug}
+          title={
+            aGenerar.length === 0
+              ? `Todos los anuncios de ${label} tienen ya su imagen.`
+              : undefined
+          }
+        >
+          {isPending
+            ? "Lanzando…"
+            : aGenerar.length === 0
+              ? "No falta ninguna"
+              : aGenerar.length === 1
+                ? "Generar la que falta"
+                : `Generar las ${aGenerar.length} que faltan`}
+        </Button>
+
+        {yaEstan.length > 0 ? (
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={incluirHechas}
+              onChange={(event) => setIncluirHechas(event.target.checked)}
+              className="size-3.5 accent-violet-600"
+            />
+            rehacer también{" "}
+            {yaEstan.length === 1 ? "la que ya está" : `las ${yaEstan.length} que ya están`}
+          </label>
+        ) : null}
+
+        {notice ? <p className="text-xs text-slate-600 dark:text-slate-300">{notice}</p> : null}
+        {error || catalog.loadError ? (
+          <p className="text-xs text-rose-600 dark:text-rose-400">
+            {error ?? catalog.loadError}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
