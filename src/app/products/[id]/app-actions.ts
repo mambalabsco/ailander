@@ -109,7 +109,7 @@ export async function importAppFromUrlAction(
     return { ok: false, message: "Pega la dirección completa, con https://" };
   }
 
-  const { manifestUrlFrom, readAppManifest } = await import("@/lib/app-manifest");
+  const { imagesFrom, manifestUrlFrom, readAppManifest } = await import("@/lib/app-manifest");
 
   /*
    * El manifiesto primero, y si falla se sigue.
@@ -119,9 +119,21 @@ export async function importAppFromUrlAction(
    * tiene una app que no declara manifiesto.
    */
   let datos = { name: "", description: "", iconUrl: "", themeColor: "" };
+  let pantallas: string[] = [];
   try {
     const pagina = await fetch(direccion, { redirect: "follow" });
     const html = await pagina.text();
+
+    /*
+     * Las pantallas promocionales, de la propia página.
+     *
+     * Comprobado en `dreamsenmonticell.bar`: la ficha lleva dentro las imágenes
+     * de la tienda —el bono, los juegos y los **métodos de pago locales**, que
+     * según el documento de pagos son la primera objeción—. Son mejor referencia
+     * que ninguna otra cosa, y no cuestan una llamada aparte.
+     */
+    pantallas = imagesFrom(html, direccion).slice(0, 6);
+
     const manifiesto = await fetch(manifestUrlFrom(html, direccion));
     datos = readAppManifest(await manifiesto.json());
   } catch {
@@ -155,6 +167,29 @@ export async function importAppFromUrlAction(
     avisos.push("no declara icono en su manifiesto");
   }
 
+  /*
+   * Las pantallas van con el patrón `captura-app`, igual que la captura.
+   *
+   * Son lo que viaja de referencia, y las promocionales suelen servir mejor que
+   * la captura de la ficha: enseñan la app, no la página que lleva a ella.
+   */
+  let guardadas = 0;
+  for (const [indice, url] of pantallas.entries()) {
+    try {
+      await uploadGeneratedImage({
+        productId: product,
+        appId: app.id,
+        sourceUrl: url,
+        name: `Pantalla ${indice + 1} · ${app.name}`,
+        pattern: "captura-app",
+        source: "subida",
+      });
+      guardadas += 1;
+    } catch {
+      // Una imagen que no se pueda bajar no tumba las demás.
+    }
+  }
+
   let capturaOk = false;
   try {
     const { captureMobile } = await import("@/lib/app-screenshot");
@@ -182,7 +217,9 @@ export async function importAppFromUrlAction(
     ok: true,
     // Se dice lo que **no** salió, y no en letra pequeña: un alta que parece
     // completa y llega sin captura deja las creatividades enseñando otra app.
-    message: `«${app.name}» dada de alta${capturaOk ? " con su captura móvil" : ""}.${
+    message: `«${app.name}» dada de alta${
+      guardadas > 0 ? ` con ${guardadas} pantalla(s) de la app` : ""
+    }${capturaOk ? " y su captura móvil" : ""}.${
       avisos.length > 0 ? ` Ojo: ${avisos.join("; ")}.` : ""
     }`,
   };

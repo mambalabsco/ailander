@@ -26,6 +26,7 @@ const initialState = {
   targetAgeRange: "",
   targetGenders: [] as string[],
   vertical: "ecommerce" as "ecommerce" | "casino",
+  appUrl: "",
   storeId: "",
   marketId: "",
   handle: "",
@@ -295,6 +296,25 @@ export function NewProductForm({ stores }: { stores: Store[] }) {
               Los competidores son casinos, no marcas de suplementos: es lo que
               alimenta el documento de panorama, así que la etiqueta lo dice.
             */}
+            {/*
+              La primera app, aquí mismo.
+              Se puede añadir después en su pestaña, pero nadie crea un país sin
+              tener ya una app en la cabeza: pedirla aquí ahorra el viaje y trae
+              su nombre, su icono y sus pantallas de una vez.
+            */}
+            <Field label="Dirección de la primera app (opcional)">
+              <TextField
+                type="url"
+                value={form.appUrl}
+                onChange={(event) => update("appUrl", event.target.value)}
+                placeholder="https://dreamsenmonticell.bar/"
+              />
+            </Field>
+            <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+              De ahí se sacan solos su nombre, su icono, sus pantallas promocionales y una captura
+              móvil. Puedes añadir más apps después, en la pestaña Apps.
+            </p>
+
             <Field label="Casinos que ya operan ahí (una URL por línea, opcional)">
               <TextAreaField
                 rows={3}

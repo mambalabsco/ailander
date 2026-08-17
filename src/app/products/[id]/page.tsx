@@ -652,6 +652,7 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
           productId={product.id}
           images={images}
           patternModels={patternModels}
+          vertical={product.vertical}
           performance={performance}
           hasHiggsfieldKey={hasHiggsfieldKey}
         />

@@ -7,6 +7,7 @@ import { SectionCard } from "@/components/section-card";
 import { useImageDownload } from "@/components/image-downloads";
 import { ReimportButton } from "@/components/reimport-images";
 import { Button, EmptyState, Field, TextAreaField, TextField } from "@/components/ui";
+import { patternsFor } from "@/lib/apps-alcance";
 import {
   PRODUCT_IMAGE_PATTERNS,
   PRODUCT_IMAGE_PATTERN_META,
@@ -28,6 +29,8 @@ interface ImagesTabProps {
   images: ProductImage[];
   /** Modelo recomendado por patrón, calculado en el servidor. */
   patternModels: Record<string, { modelId: string; reason: string }>;
+  /** De qué vertical es el producto: decide qué patrones se ofrecen. */
+  vertical: "ecommerce" | "casino";
   performance: Map<string, PerformanceRecord>;
   hasHiggsfieldKey: boolean;
 }
@@ -43,6 +46,7 @@ export function ImagesTab({
   productId,
   images,
   patternModels,
+  vertical,
   performance,
   hasHiggsfieldKey,
 }: ImagesTabProps) {
@@ -53,12 +57,18 @@ export function ImagesTab({
   const [isPending, startTransition] = useTransition();
   const { download, downloadMany, busy: downloading } = useImageDownload();
 
-  const [selected, setSelected] = useState<ProductImagePattern[]>([...PRODUCT_IMAGE_PATTERNS]);
+  // Arranca con los del vertical, no con todos: si no, un producto de casino
+  // nace con seis patrones de frasco marcados y se generan sin querer.
+  const [selected, setSelected] = useState<ProductImagePattern[]>(
+    () => patternsFor(vertical, [...PRODUCT_IMAGE_PATTERNS]) as ProductImagePattern[],
+  );
   const [instructions, setInstructions] = useState("");
   const [background, setBackground] = useState("Fondo neutro y luz suave de estudio");
   const [palette, setPalette] = useState("");
 
   const primary = images.find((image) => image.isPrimary) ?? null;
+
+  const patronesVisibles = patternsFor(vertical, [...PRODUCT_IMAGE_PATTERNS]) as ProductImagePattern[];
 
   const togglePattern = (pattern: ProductImagePattern) =>
     setSelected((current) =>
@@ -260,12 +270,15 @@ export function ImagesTab({
 
             <div className="grid gap-3 md:grid-cols-2">
               {/*
-                `captura-app` no está: **no se genera, se sube**.
-                Una pantalla inventada se parece a la app y no es la app, que es
-                justo lo que rompe el anuncio. Se trae con la dirección en la
-                pestaña de Apps.
+                Los patrones del vertical, no todos.
+
+                Los de siempre son de un producto físico —el frasco recortado, la
+                textura, los ingredientes— y en un casino no hay envase que
+                fotografiar: ofrecerlos no da error, el modelo se inventa un
+                frasco y se paga por él. Y `captura-app` no está en ninguno: se
+                sube desde la pestaña de Apps, no se genera.
               */}
-              {PRODUCT_IMAGE_PATTERNS.filter((pattern) => pattern !== "captura-app").map((pattern) => {
+              {patronesVisibles.map((pattern) => {
                 const meta = PRODUCT_IMAGE_PATTERN_META[pattern];
                 const active = selected.includes(pattern);
                 const recommended = patternModels[pattern];

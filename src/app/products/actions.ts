@@ -147,6 +147,24 @@ export async function createProductFromForm(input: unknown) {
    */
   if (product.marketId) await addProductMarket(product.id, product.marketId);
 
+  /*
+   * La primera app, si la dieron al crear.
+   *
+   * Va **después** de guardar el producto porque la app cuelga de él. Y si falla
+   * —la dirección no responde, no hay navegador— **no se tumba el alta**: el
+   * producto ya está bien creado y la app se puede añadir después desde su
+   * pestaña. Perder el producto por una URL mal pegada sería absurdo.
+   */
+  const appUrl = readText((input as Record<string, unknown>)?.appUrl);
+  if (esCasino && appUrl) {
+    try {
+      const { importAppFromUrlAction } = await import("@/app/products/[id]/app-actions");
+      await importAppFromUrlAction(appUrl, product.id);
+    } catch {
+      // Se ignora a propósito: el alta del producto ya está hecha.
+    }
+  }
+
   revalidatePath("/products");
   revalidatePath("/");
 
