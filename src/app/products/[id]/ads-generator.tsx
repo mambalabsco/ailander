@@ -89,7 +89,7 @@ export function AdsGenerator({
     notas: "",
   });
   const embudoCompleto = alcance === "embudo";
-  const [fuente, setFuente] = useState<"angulo" | "material" | "nuevo">("angulo");
+  const [fuente, setFuente] = useState<"angulo" | "material" | "nuevo" | "libre">("angulo");
   const [copyNuevo, setCopyNuevo] = useState("");
   const [propio, setPropio] = useState(false);
   const [videosElegidos, setVideosElegidos] = useState<string[]>([]);
@@ -120,6 +120,7 @@ export function AdsGenerator({
   const desdeMaterial = fuente === "material" && Boolean(selectedAnatomia);
   const copyCorto = copyNuevo.trim().length < 200;
   const esCasino = product.vertical === "casino";
+  const deCero = fuente === "libre";
 
   /**
    * El tema y el enfoque no se piden: se deducen.
@@ -138,9 +139,16 @@ export function AdsGenerator({
    * distintos quedarían con el mismo nombre, que es como se pierde de vista qué
    * se probó ya.
    */
-  const derivedFocus = desdeMaterial
-    ? selectedAnatomia!.anatomia.deseo || selectedAnatomia!.anatomia.promesa || "Material"
-    : selectedAngle?.name || desire || "General";
+  const derivedFocus = deCero
+    ? /*
+       * De cero el enfoque lo pone el modelo, porque es lo único que lo sabe:
+       * la campaña se nombra con lo que él acabe inventando. Vacío no rompe el
+       * nombre — `joinName` se salta las piezas que no hay.
+       */
+      ""
+    : desdeMaterial
+      ? selectedAnatomia!.anatomia.deseo || selectedAnatomia!.anatomia.promesa || "Material"
+      : selectedAngle?.name || desire || "General";
 
   const theme = overrideNames && customTheme ? customTheme : derivedTheme;
   const focus = overrideNames && customFocus ? customFocus : derivedFocus;
@@ -217,6 +225,9 @@ export function AdsGenerator({
                 ["angulo", "Desde un ángulo"],
                 ["material", "Desde un anuncio ya analizado"],
                 ["nuevo", "Pegar un anuncio"],
+                // De cero solo en casino: es donde hay país, bono y app de los
+                // que tirar sin molde. En e-commerce los formatos hacen falta.
+                ...(esCasino ? ([["libre", "De cero, sin formatos"]] as const) : []),
               ] as const
             ).map(([value, label]) => {
               const disabled = value === "material" && anatomias.length === 0;
@@ -243,6 +254,18 @@ export function AdsGenerator({
             })}
           </div>
 
+          {deCero ? (
+            <p className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              Sin ángulo, sin material y{" "}
+              <span className="font-medium">sin la lista de formatos</span>: solo la investigación
+              del país y lo que rellenes abajo. Cada pieza la inventa entera —de qué entra, cómo se
+              ve, cómo se llama— y se le exige variedad medible: tres emociones distintas, tres
+              tipos de imagen, una sin nadie celebrando y una que no hable de dinero. Se le pasan
+              los conjuntos ya generados para que no vuelva sobre ellos. El enfoque de la campaña lo
+              pone él.
+            </p>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={embudoCompleto ? "Por dónde entra el embudo" : "La etapa de la tanda"}>
               <SelectField
@@ -257,7 +280,7 @@ export function AdsGenerator({
               </SelectField>
             </Field>
 
-            {fuente === "nuevo" ? null : fuente === "material" ? (
+            {fuente === "nuevo" || deCero ? null : fuente === "material" ? (
               <Field label="Qué anuncio copiar">
                 <SelectField
                   value={anatomiaId}
@@ -639,8 +662,11 @@ export function AdsGenerator({
               ))}
             </div>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Se reparten entre los {stageFormats.length} formatos que rinden en {stage}:{" "}
-              {stageFormats.map((meta) => meta.name).join(", ")}.
+              {deCero
+                ? `Ninguno sale de un formato: son ${count} ideas distintas, y cuantas más pidas más difícil le resulta que no se repitan entre sí.`
+                : `Se reparten entre los ${stageFormats.length} formatos que rinden en ${stage}: ${stageFormats
+                    .map((meta) => meta.name)
+                    .join(", ")}.`}
             </p>
           </div>
 
@@ -672,9 +698,10 @@ export function AdsGenerator({
                   stage,
                   alcance,
                   // Uno de los dos, nunca los dos: el material sustituye al
-                  // ángulo en el encargo, no se suma.
-                  angleId: desdeMaterial ? "" : angleId,
+                  // ángulo en el encargo, no se suma. Y de cero, ninguno.
+                  angleId: desdeMaterial || deCero ? "" : angleId,
                   ...(desdeMaterial ? { anatomiaId, nivel } : {}),
+                  ...(deCero ? { libre: true } : {}),
                   theme,
                   focus,
                   audience: derivedAudience,
@@ -686,7 +713,9 @@ export function AdsGenerator({
               label={
                 fuente === "nuevo"
                   ? `Analizar y generar ${count} anuncios`
-                  : `Generar ${count} anuncios y armar la campaña`
+                  : deCero
+                    ? `Inventar ${count} anuncios de cero`
+                    : `Generar ${count} anuncios y armar la campaña`
               }
               disabled={!hasApiKey || (fuente === "nuevo" && copyCorto)}
               disabledReason={

@@ -635,6 +635,18 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
   const alcance = readText(raw.alcance) === "etapa" ? "etapa" : "embudo";
 
   /*
+   * La tanda de cero, solo en casino.
+   *
+   * Se comprueba el vertical y se **corta**, en vez de caer al modo normal: si
+   * llega aquí desde otro sitio es que hay un fallo, y una tanda con molde
+   * cobrada como si no lo tuviera no se distingue mirando el resultado.
+   */
+  const libre = raw.libre === true || readText(raw.libre) === "true";
+  if (libre && ctx.product.vertical !== "casino") {
+    throw new Error("La tanda de cero es del vertical casino. Este producto no lo es.");
+  }
+
+  /*
    * Los datos de la creatividad de casino.
    *
    * Solo en ese vertical: en e-commerce no hay bono ni escalera de premios, y el
@@ -654,10 +666,13 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
         })
       : "";
 
-  const [angles, prelandings, numbers] = await Promise.all([
+  const [angles, prelandings, numbers, trees] = await Promise.all([
     readAngles(ctx.id),
     readPrelandings(ctx.id),
     nextNumbers(ctx.id),
+    // Solo hace falta de cero, y para lo demás es una consulta de más en cada
+    // tanda: los nombres de conjunto son lo que le dice qué se ha cubierto ya.
+    libre ? readCampaignTrees(ctx.id) : Promise.resolve([]),
   ]);
   const angle = angles.find((item) => item.id === angleId);
   const countryCode = (ctx.product.country || "ES").slice(0, 2).toUpperCase();
@@ -707,6 +722,13 @@ export async function generateShortAdsAction(input: unknown): Promise<LaunchResu
     prelandings,
     angle,
     origen: anatomia && nivel ? { anatomia, nivel } : undefined,
+    libre: libre
+      ? {
+          ultimasTandas: trees
+            .flatMap((tree) => tree.adsets.map((node) => node.adset.name))
+            .slice(0, 12),
+        }
+      : undefined,
     alcance,
     casino,
     count,
@@ -722,9 +744,11 @@ Devuelve también el nombre de la campaña y del conjunto, su audiencia, su obje
     kind: "anuncios",
     // El panel de trabajos dice de dónde sale la tanda: con dos corriendo a la
     // vez, «Anuncios · Producto» dos veces no distingue una de otra.
-    label: anatomia
-      ? `Anuncios desde material · ${anatomia.promesa.slice(0, 40)}`
-      : `Anuncios · ${theme || ctx.product.name}`,
+    label: libre
+      ? `Anuncios de cero · ${ctx.product.name}`
+      : anatomia
+        ? `Anuncios desde material · ${anatomia.promesa.slice(0, 40)}`
+        : `Anuncios · ${theme || ctx.product.name}`,
     work: async () => {
   const { data, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = await generateStructured<{
         campaign: { name: string; theme: string; focus: string };

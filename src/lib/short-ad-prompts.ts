@@ -13,6 +13,7 @@ import {
 import { buildProductContext } from "@/lib/copy-prompts";
 import { reglaDeMedidas } from "@/lib/medidas-de-anuncio";
 import { INSTRUCCIONES_VISUALES, reglasVisuales } from "@/lib/gramatica-visual";
+import { bloqueLibre } from "@/lib/tanda-libre";
 import { FACEBOOK_LIMITS } from "@/types/copy";
 import { copyLevelRule } from "@/lib/nivel-de-copia";
 import { batchScopeRule } from "@/lib/alcance-de-tanda";
@@ -66,6 +67,14 @@ export function buildShortAdBatchPrompt(options: {
    */
   origen?: { anatomia: Anatomia; nivel: NivelDeCopia };
   /**
+   * La tanda sin molde: sin lista de formatos y sin la plantilla tipográfica.
+   *
+   * **Excluye al ángulo y al material igual que ellos se excluyen entre sí**:
+   * de cero significa de cero, y un ángulo colgando arriba lo convierte en el
+   * modo de siempre con menos reglas.
+   */
+  libre?: { ultimasTandas: string[] };
+  /**
    * Si la tanda monta el embudo entero o un solo conjunto de su etapa.
    *
    * Hasta el 16 de agosto siempre montaba el embudo y no se podía pedir otra
@@ -104,7 +113,8 @@ export function buildShortAdBatchPrompt(options: {
       ? prelandings.find((item) => item.id === adset.destination.prelandingId)?.url
       : adset.destination.url || product.landingUrl;
 
-  const formats = resolveFormats(adset.stage, count, options.formats, product.vertical);
+  const { libre } = options;
+  const formats = libre ? [] : resolveFormats(adset.stage, count, options.formats, product.vertical);
 
   const openInvitation = `
 
@@ -128,7 +138,11 @@ export function buildShortAdBatchPrompt(options: {
    * de dónde salió la idea, y esa es justo la razón de que esto no sea una
    * segunda ruta de generación que se desincronice de la primera.
    */
-  const { origen } = options;
+  // De cero se impone sobre las dos fuentes, y aquí y no solo en quien llama:
+  // un ángulo colgando arriba convierte este modo en el de siempre con menos
+  // reglas, y eso no fallaría — saldría una tanda normal y cobrada.
+  const origen = libre ? undefined : options.origen;
+  const angleUsado = libre ? undefined : angle;
   const origenBloque = origen
     ? `### El anuncio que ya funcionó
 
@@ -177,8 +191,8 @@ ${
 
 ${
   origenBloque ||
-  (angle
-    ? `### Ángulo de la tanda\n\n**${angle.name}** — ${angle.targetAudience}\n\n- Mecanismo del problema: ${angle.problemMechanism}\n- Mecanismo de la solución: ${angle.solutionMechanism}\n- Momento emotivo: ${angle.emotionalMoment}`
+  (angleUsado
+    ? `### Ángulo de la tanda\n\n**${angleUsado.name}** — ${angleUsado.targetAudience}\n\n- Mecanismo del problema: ${angleUsado.problemMechanism}\n- Mecanismo de la solución: ${angleUsado.solutionMechanism}\n- Momento emotivo: ${angleUsado.emotionalMoment}`
     : "")
 }
 
@@ -197,12 +211,16 @@ Eso vale también para los conjuntos de TOFU y MOFU: entran por el problema y po
 }
 En el campo \`name\` de cada anuncio escribe **solo el gancho en pocas palabras**, sin prefijos ni numeración: el nombre completo lo monta la plataforma.
 
-${reglasVisuales({ total: count })}
+${
+  libre
+    ? bloqueLibre({ total: count, ultimasTandas: libre.ultimasTandas })
+    : `${reglasVisuales({ total: count })}
 
 ### Formatos de esta tanda
 
 ${formatList}
-${openInvitation}
+${openInvitation}`
+}
 
 ## Formato de salida, por cada anuncio
 
