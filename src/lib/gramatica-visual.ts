@@ -1,0 +1,97 @@
+/**
+ * Cómo se ve una creatividad, y no solo qué lleva dentro.
+ *
+ * **Existe porque los prompts no eran cortos: eran planos.** El encargo generaba
+ * mil caracteres bien escritos que describían *muebles colocados* —«cuatro cajas
+ * iguales en fila», «tres tarjetas en rejilla»—, y eso es una diapositiva. Las
+ * creatividades que de verdad funcionan tienen otra cosa: **un dispositivo de
+ * confrontación** —un rayo que parte el lienzo, una cara dividida por la mitad,
+ * una cadena con un eslabón roto— y una jerarquía tipográfica que no admite
+ * lectura tibia.
+ *
+ * Y un síntoma medido, que era el más visible: tres anuncios seguidos del mismo
+ * producto pidieron «fondo verde oscuro», «fondo claro» y «degradado a verde
+ * menta». Tres marcas distintas. De ahí la regla de la paleta.
+ *
+ * Puro y sin imports de valor, para poder cargarlo desde `node --test`.
+ */
+
+/**
+ * Las reglas que mandan sobre la instrucción visual de cada formato.
+ *
+ * Van **una sola vez** en el encargo y no repetidas dentro de cada formato:
+ * repetirlas diez veces gasta contexto y mueve el punto de corte de la caché de
+ * prefijo, que es lo que hace que una tanda no se pague entera diez veces.
+ */
+export function reglasVisuales(opciones: { total: number }): string {
+  return `## Cómo se ve una creatividad de esta marca
+
+Estas siete reglas mandan sobre la instrucción visual de cada formato. Si una
+instrucción y una regla se contradicen, **gana la regla**.
+
+1. **Un dispositivo, siempre.** Cada imagen se organiza alrededor de UNA tensión
+   visual: un rayo que parte el lienzo en dos, una cara dividida por la mitad,
+   una cadena con un eslabón roto, dos paneles enfrentados, una lista tachada.
+   **Nada de rejillas neutras** de tarjetas o cajas repartidas por igual: eso es
+   una diapositiva, no un anuncio.
+
+2. **Tres alturas de texto, y solo tres.** Un antetítulo de dos a cuatro
+   palabras; debajo **una sola palabra** en mayúsculas que ocupe **un cuarto del
+   alto del lienzo**; debajo un subtitular de una línea en el color de acento.
+   Escribe esa medida dentro del prompt —«occupying one quarter of the canvas
+   height»—, nunca «large» a secas: «grande» es relativo y sale grandecito.
+
+3. **Tres viñetas. Nunca cinco.** Con casilla marcada, de cuatro a seis palabras
+   cada una.
+
+4. **Una sola paleta en los ${opciones.total}.** El primer anuncio fija fondo,
+   color de acento y color de texto, y los demás los repiten **con las mismas
+   palabras**. El rojo se reserva para el lado equivocado —el mito, lo que falló,
+   el eslabón roto— y no se usa para nada más.
+
+5. **La misma barra inferior en los ${opciones.total}**, con la forma
+   \`Marca · Oferta · Garantía\`, escrita igual en todos.
+
+6. **Nada de letra pequeña.** Lo que no se lea en una miniatura no entra: pedir
+   «fine print» produce manchas grises ilegibles.
+
+7. **El envase abajo y centrado**, descrito con las mismas palabras en todos.`;
+}
+
+/**
+ * La instrucción visual de cada formato.
+ *
+ * Vive aquí y no en `short-ad-prompts.ts` para poder probar que ningún formato
+ * se queda sin ella: aquel importa con alias y no se puede cargar desde un test.
+ */
+export const INSTRUCCIONES_VISUALES: Record<string, string> = {
+  "cuaderno-manuscrito": `Cuaderno de espiral sobre mesa de madera, luz cálida. En la hoja, **una sola frase manuscrita enorme** ocupando media página y subrayada a marcador; el resto de la nota, mucho más pequeño y a boli. El producto apoyado encima. El dispositivo es el salto de tamaño entre esa frase y todo lo demás: nada de párrafos parejos.`,
+
+  "beneficios-flotantes": `Persona real del público sosteniendo el producto, **iluminada** contra un fondo del color de marca que se apaga hacia los bordes. Solo **tres** etiquetas flotantes en píldora, grandes y legibles. Encima, el antetítulo pequeño y la palabra gigante. El dispositivo es la luz: ella brilla y el fondo no.`,
+
+  "urgencia-countdown": `Un reloj enorme ocupando un tercio del lienzo, con la aguja en rojo, enfrentado al producto al otro lado. Entre los dos, el plazo como palabra gigante. Nada de escena de temporada con muchos elementos: el reloj contra el producto y ya.`,
+
+  "comparativa-precio": `Tres gastos cotidianos **tachados**, en gris y pequeños a un lado, contra el producto al otro ocupando el doble de espacio. Entre ambos, el coste diario del producto como titular a un cuarto del alto. Tres viñetas debajo. Nada más.`,
+
+  "testimonios-grid": `**Un solo** testimonio grande —foto circular, cinco estrellas y la cita como titular a un cuarto del alto— con dos más pequeños debajo a modo de refuerzo. El dispositivo es la jerarquía: uno manda y dos acompañan. Nada de tres tarjetas iguales en fila.`,
+
+  "antes-despues": `Dos encuadres de la misma persona separados por una **línea diagonal marcada**, no por un borde fino: el izquierdo desaturado y apagado, el derecho con color y luz. Un rótulo corto sobre cada lado. La diferencia se ve y sigue siendo creíble.`,
+
+  "ugc-selfie": `Foto de móvil sin producción: alguien del público sosteniendo el producto en su casa, luz de ventana, encuadre descentrado e imperfecto. **Es el único formato sin texto incrustado y sin dispositivo**: su fuerza es parecer una foto enviada a una amiga, así que las reglas 1, 2 y 3 no se le aplican. Las demás sí.`,
+
+  "mecanismo-explicado": `Tres pasos encadenados de izquierda a derecha con flechas, y el **tercero roto y en rojo**, marcado con una equis. El producto debajo, con una flecha gruesa señalando justo ese paso. Arriba, el titular de negación.`,
+
+  "packshot-oferta": `El producto centrado y grande sobre fondo liso del color de marca, con el precio como **la palabra gigante** —un cuarto del alto— y el precio anterior tachado al lado, mucho más pequeño. Tres sellos en píldora debajo. Mucho aire alrededor.`,
+
+  "pregunta-directa": `Fondo liso y saturado con una sola pregunta ocupando casi todo el lienzo, **la última palabra en el color de acento** y el resto en blanco. El producto pequeño abajo, centrado. La pregunta es la creatividad.`,
+
+  "rayo-de-negacion": `A la izquierda, la silueta de una persona apagada, en gris y hundida. A la derecha, la misma silueta **iluminada** con el color de acento, de pie y con los brazos arriba. Entre las dos, **un rayo que parte el lienzo de arriba abajo**. Sobre la izquierda, una insignia roja redondeada con el mito y una equis; sobre la derecha, una verde con la causa real y un check. En el centro, el antetítulo pequeño y debajo la palabra gigante con lo que se niega, y bajo ella el subtitular en el color de acento con la causa real. Tres viñetas. Envase abajo centrado.`,
+
+  "comparativa-dividida": `El primer plano de una persona **partido justo por la mitad**: la mitad izquierda con color y sonriendo, la derecha en gris y agotada. Sobre cada mitad, un rótulo en píldora: a la izquierda cómo se vive cuando funciona, a la derecha «la tuya». A cada lado, cinco filas cortas en píldora, con check verde a la izquierda y equis roja a la derecha. El producto centrado sobre la línea de corte. Arriba, el titular de negación en dos líneas, la segunda con la parte clave en el color de acento.`,
+
+  "lo-que-probaste": `Dos columnas. A la izquierda, bajo el rótulo «lo que probaste», siete u ocho soluciones **tachadas con una línea**, en gris. A la derecha, bajo «por qué no funcionó», una frase corta en el color de acento y debajo la explicación en dos líneas. Entre las columnas, un rayo vertical. Abajo, cruzando el ancho, la palabra gigante con lo que de verdad falló. Envase abajo centrado.`,
+
+  "cadena-rota": `Una cadena de cinco eslabones redondeados en fila, unidos por flechas. Los dos primeros en verde con check; **el tercero en rojo, roto y con una equis**; los dos últimos apagados en gris. Dentro del roto, en mayúsculas, lo que le falta. Desde el producto, abajo, una flecha gruesa del color de acento apuntando justo a ese eslabón. Arriba, el titular. Fondo claro para que la cadena se lea.`,
+
+  "dos-vias": `Dos paneles verticales enfrentados con borde redondeado: el izquierdo con borde rojo y el rótulo del camino de siempre, el derecho con borde del color de acento y el del camino del producto. Dentro de cada uno, cinco pasos en vertical unidos por flechas hacia abajo, con equis roja a la izquierda y check verde a la derecha, y un dibujo sencillo encima de cada columna. El producto entre los dos paneles. Abajo, dos líneas grandes con la conclusión.`,
+};
