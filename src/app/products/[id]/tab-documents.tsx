@@ -171,6 +171,36 @@ export function DocumentsTab({
     return status !== "ready" && status !== "generating";
   });
 
+  /*
+   * Los elegidos a mano, para rehacer solo esos.
+   *
+   * Hasta ahora un documento que salía mal pero terminaba `ready` no tenía
+   * ningún botón: `GenerateOne` solo se pintaba cuando no existía. Lo único que
+   * quedaba era «Regenerar» de arriba, que rehace **todos** y los cobra todos.
+   * Con tres documentos malos de nueve, eso son seis pagados por nada.
+   */
+  const [elegidos, setElegidos] = useState<Set<string>>(new Set());
+
+  const alternar = (id: string) =>
+    setElegidos((actual) => {
+      const siguiente = new Set(actual);
+      if (siguiente.has(id)) siguiente.delete(id);
+      else siguiente.add(id);
+      return siguiente;
+    });
+
+  const rehacerElegidos = () =>
+    startTransition(async () => {
+      try {
+        const result = await generateResearchAction(productId, [...elegidos]);
+        setSummary(result);
+        setElegidos(new Set());
+        router.refresh();
+      } catch (launchError) {
+        setError(launchError instanceof Error ? launchError.message : "No se pudo generar.");
+      }
+    });
+
   const money = (value: number) =>
     new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD" }).format(value);
 
@@ -262,13 +292,20 @@ export function DocumentsTab({
         title="Base de datos del producto"
         description="Los 6 documentos de investigación. Son la fuente que alimenta el panel, los ganchos y la creación de copy."
         action={
-          <Button variant="primary" onClick={() => setShowPlan((value) => !value)}>
-            {showPlan
-              ? "Ocultar el plan"
-              : readyCount === 0
-                ? "Generar investigación"
-                : "Regenerar"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {elegidos.size > 0 ? (
+              <Button variant="primary" onClick={rehacerElegidos} disabled={isPending}>
+                {isPending ? "Lanzando…" : `Rehacer los ${elegidos.size} elegidos`}
+              </Button>
+            ) : null}
+            <Button variant="primary" onClick={() => setShowPlan((value) => !value)}>
+              {showPlan
+                ? "Ocultar el plan"
+                : readyCount === 0
+                  ? "Generar investigación"
+                  : "Regenerar todos"}
+            </Button>
+          </div>
         }
       >
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -443,6 +480,23 @@ export function DocumentsTab({
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{meta.description}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {/*
+                      La casilla va en la cabecera y para el clic.
+                      Sin `stopPropagation` marcarla abre o cierra el desplegable,
+                      que es lo que hace que nadie la use.
+                    */}
+                    <label
+                      className="flex cursor-pointer items-center gap-1 text-xs text-slate-500 dark:text-slate-400"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={elegidos.has(id)}
+                        onChange={() => alternar(id)}
+                        className="size-4 accent-violet-600"
+                      />
+                      rehacer
+                    </label>
                     {dependencyNames.length > 0 ? (
                       <span className="text-xs text-slate-500 dark:text-slate-400">
                         Depende de {joinSpanish(dependencyNames)}
@@ -459,9 +513,19 @@ export function DocumentsTab({
                 <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
                   {state.status === "ready" && state.markdown ? (
                     <>
-                      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                        Generado el {new Date(state.generatedAt ?? "").toLocaleDateString("es-ES")}
-                      </p>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Generado el {new Date(state.generatedAt ?? "").toLocaleDateString("es-ES")}
+                        </p>
+                        {/*
+                          Rehacer **este**, sin tocar los demás.
+                          Un documento puede terminar `ready` y estar mal —una
+                          disculpa del modelo se guarda igual de bien que un
+                          informe— y hasta ahora la única salida era regenerar los
+                          nueve.
+                        */}
+                        <GenerateOne productId={productId} documentId={id} label={meta.title} />
+                      </div>
 
                       {/*
                         Las objeciones del documento 4, editables.
